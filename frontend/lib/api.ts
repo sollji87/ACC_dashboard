@@ -2,13 +2,32 @@
  * 백엔드 API 호출 함수
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// 환경 변수 확인 및 설정
+const getApiBaseUrl = () => {
+  // 클라이언트 사이드에서 환경 변수 확인
+  if (typeof window !== 'undefined') {
+    // 런타임에 환경 변수 확인 (빌드 후에도 변경 가능)
+    const runtimeUrl = (window as any).__NEXT_PUBLIC_API_URL__ || process.env.NEXT_PUBLIC_API_URL;
+    if (runtimeUrl) {
+      console.log('✅ API URL (런타임):', runtimeUrl);
+      return runtimeUrl;
+    }
+  }
+  
+  // 빌드 타임 환경 변수
+  const buildTimeUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (buildTimeUrl) {
+    console.log('✅ API URL (빌드타임):', buildTimeUrl);
+    return buildTimeUrl;
+  }
+  
+  // 기본값 (개발 환경)
+  const defaultUrl = 'http://localhost:3000';
+  console.warn('⚠️ NEXT_PUBLIC_API_URL이 설정되지 않았습니다. 기본값 사용:', defaultUrl);
+  return defaultUrl;
+};
 
-// 환경 변수 확인 (디버깅용)
-if (typeof window !== 'undefined') {
-  console.log('🔧 API_BASE_URL:', API_BASE_URL);
-  console.log('🔧 NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
-}
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiInventoryData {
   brandCode: string;
