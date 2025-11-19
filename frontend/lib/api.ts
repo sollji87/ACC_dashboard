@@ -27,7 +27,11 @@ const getApiBaseUrl = () => {
   return defaultUrl;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+// 임시: Vercel 배포용 하드코딩 (환경 변수 문제 해결 전까지)
+const API_BASE_URL = 
+  typeof window !== 'undefined' && window.location.hostname.includes('vercel.app')
+    ? 'https://web-production-01345.up.railway.app'
+    : getApiBaseUrl();
 
 export interface ApiInventoryData {
   brandCode: string;
