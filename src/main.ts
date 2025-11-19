@@ -8,9 +8,9 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // CORS 설정
-  const frontendUrl = configService.get<string>('FRONTEND_URL') || 'http://localhost:3001';
+  const frontendUrl = configService.get<string>('FRONTEND_URL');
   app.enableCors({
-    origin: frontendUrl,
+    origin: frontendUrl ? [frontendUrl, 'http://localhost:3001'] : true, // 모든 origin 허용 (프로덕션에서는 특정 도메인만 허용 권장)
     credentials: true,
   });
 
