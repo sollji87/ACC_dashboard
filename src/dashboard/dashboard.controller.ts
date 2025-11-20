@@ -57,17 +57,24 @@ export class DashboardController {
       const results = await Promise.all(
         brandCodes.map(async (brandCode) => {
           try {
-            return await this.dashboardService.getInventoryWeeks(brandCode, yyyymm);
+            this.logger.log(`브랜드 ${brandCode} 조회 시작 (${yyyymm})`);
+            const data = await this.dashboardService.getInventoryWeeks(brandCode, yyyymm);
+            this.logger.log(`브랜드 ${brandCode} 조회 성공`);
+            return data;
           } catch (error) {
-            console.error(`브랜드 ${brandCode} 조회 실패:`, error.message);
+            this.logger.error(`브랜드 ${brandCode} 조회 실패:`, error.message);
+            this.logger.error(`에러 상세:`, error);
             return null;
           }
         }),
       );
 
+      const validResults = results.filter(r => r !== null);
+      this.logger.log(`총 ${validResults.length}개 브랜드 데이터 조회 성공`);
+
       return {
         success: true,
-        data: results.filter(r => r !== null),
+        data: validResults,
       };
     } catch (error) {
       return {

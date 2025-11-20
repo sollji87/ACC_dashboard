@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { SnowflakeService } from '../snowflake/snowflake.service';
+/**
+ * 대시보드 데이터 처리 로직
+ */
 
 interface InventoryWeeksData {
   ITEM_STD: string;
@@ -12,27 +13,24 @@ interface InventoryWeeksData {
   SEQ: number;
 }
 
-@Injectable()
-export class DashboardService {
-  private readonly logger = new Logger(DashboardService.name);
+/**
+ * 전년 월 계산
+ */
+function getPreviousYearMonth(yyyymm: string): string {
+  const year = parseInt(yyyymm.substring(0, 4));
+  const month = parseInt(yyyymm.substring(4, 6));
+  
+  const prevYear = year - 1;
+  return `${prevYear}${String(month).padStart(2, '0')}`;
+}
 
-  constructor(private readonly snowflakeService: SnowflakeService) {}
+/**
+ * 재고주수 쿼리 생성
+ */
+export function buildInventoryQuery(brandCode: string, yyyymm: string): string {
+  const pyYyyymm = getPreviousYearMonth(yyyymm);
 
-  /**
-   * 브랜드별 악세사리 재고주수 조회
-   * @param brandCode 브랜드 코드 (M, MK, DX, DV, ST)
-   * @param yyyymm 조회 월 (예: 202510)
-   */
-  async getInventoryWeeks(brandCode: string, yyyymm: string): Promise<any> {
-    try {
-      this.logger.log(`Snowflake 연결 시작 (브랜드: ${brandCode}, 월: ${yyyymm})`);
-      await this.snowflakeService.connect();
-      this.logger.log(`Snowflake 연결 성공`);
-
-      // 전년 월 계산 (1년 전)
-      const pyYyyymm = this.getPreviousYearMonth(yyyymm);
-
-      const query = `
+  return `
 -- item: item 기준
 with item as (
     select prdt_cd
@@ -190,86 +188,65 @@ join item_seq c
   on a.item_std = c.item_nm
 group by a.item_std, c.seq
 order by seq
-      `;
+  `;
+}
 
-      this.logger.log(`쿼리 실행 시작`);
-      const rows = await this.snowflakeService.executeQuery<InventoryWeeksData>(query);
-      this.logger.log(`쿼리 실행 완료: ${rows.length}개 행 반환`);
-      
-      await this.snowflakeService.disconnect();
-      this.logger.log(`Snowflake 연결 종료`);
+/**
+ * 데이터 포맷팅
+ */
+export function formatInventoryData(
+  rows: InventoryWeeksData[],
+  brandCode: string,
+  yyyymm: string
+): any {
+  const totalRow = rows.find((r) => r.ITEM_STD === '전체');
+  const itemRows = rows.filter((r) => r.ITEM_STD !== '전체');
 
-      const formattedData = this.formatInventoryData(rows, brandCode, yyyymm);
-      this.logger.log(`데이터 포맷팅 완료`);
-      return formattedData;
-    } catch (error) {
-      this.logger.error('재고주수 조회 실패:', error);
-      throw error;
-    }
-  }
+  const accInventoryDetail: any = {};
 
-  /**
-   * 전년 월 계산 (1년 전)
-   */
-  private getPreviousYearMonth(yyyymm: string): string {
-    const year = parseInt(yyyymm.substring(0, 4));
-    const month = yyyymm.substring(4, 6);
-    return `${year - 1}${month}`;
-  }
-
-  /**
-   * Snowflake 데이터를 프론트엔드 형식으로 변환
-   */
-  private formatInventoryData(rows: InventoryWeeksData[], brandCode: string, yyyymm: string) {
-    const totalRow = rows.find(r => r.ITEM_STD === '전체');
-    const itemRows = rows.filter(r => r.ITEM_STD !== '전체');
-
-    const accInventoryDetail: any = {};
-    
-    itemRows.forEach(row => {
-      const itemKey = this.getItemKey(row.ITEM_STD);
-      accInventoryDetail[itemKey] = {
-        current: Math.round(row.CY_END_STOCK_TAG_AMT / 1000000), // 백만원 단위
-        previous: Math.round(row.PY_END_STOCK_TAG_AMT / 1000000),
-        weeks: row.CY_STOCK_WEEK_CNT || 0,
-        previousWeeks: row.PY_STOCK_WEEK_CNT || 0,
-      };
-    });
-
-    // 매출액 YOY 계산 (실판매출 기준)
-    const totalCySale = itemRows.reduce((sum, row) => sum + (row.CY_ACT_SALE_AMT || 0), 0);
-    const totalPySale = itemRows.reduce((sum, row) => sum + (row.PY_ACT_SALE_AMT || 0), 0);
-    const salesYOY = totalPySale > 0 ? Math.round((totalCySale / totalPySale) * 100) : 0;
-
-    // 기말재고 YOY 계산
-    const totalCyStock = itemRows.reduce((sum, row) => sum + (row.CY_END_STOCK_TAG_AMT || 0), 0);
-    const totalPyStock = itemRows.reduce((sum, row) => sum + (row.PY_END_STOCK_TAG_AMT || 0), 0);
-    const inventoryYOY = totalPyStock > 0 ? Math.round((totalCyStock / totalPyStock) * 100) : 0;
-
-    return {
-      brandCode,
-      month: yyyymm,
-      salesYOY,
-      inventoryYOY,
-      accEndingInventory: Math.round(totalCyStock / 1000000), // 백만원
-      accSalesAmount: Math.round(totalCySale / 1000000), // 백만원
-      totalWeeks: totalRow?.CY_STOCK_WEEK_CNT || 0, // 전체 재고주수 (당년)
-      totalPreviousWeeks: totalRow?.PY_STOCK_WEEK_CNT || 0, // 전체 재고주수 (전년)
-      accInventoryDetail,
+  itemRows.forEach((row) => {
+    const itemKey = getItemKey(row.ITEM_STD);
+    accInventoryDetail[itemKey] = {
+      current: Math.round(row.CY_END_STOCK_TAG_AMT / 1000000), // 백만원 단위
+      previous: Math.round(row.PY_END_STOCK_TAG_AMT / 1000000),
+      weeks: row.CY_STOCK_WEEK_CNT || 0,
+      previousWeeks: row.PY_STOCK_WEEK_CNT || 0,
     };
-  }
+  });
 
-  /**
-   * 아이템명을 키로 변환
-   */
-  private getItemKey(itemStd: string): string {
-    const mapping: { [key: string]: string } = {
-      '신발': 'shoes',
-      '모자': 'hat',
-      '가방': 'bag',
-      '기타ACC': 'other',
-    };
-    return mapping[itemStd] || 'other';
-  }
+  // 매출액 YOY 계산 (실판매출 기준)
+  const totalCySale = itemRows.reduce((sum, row) => sum + (row.CY_ACT_SALE_AMT || 0), 0);
+  const totalPySale = itemRows.reduce((sum, row) => sum + (row.PY_ACT_SALE_AMT || 0), 0);
+  const salesYOY = totalPySale > 0 ? Math.round((totalCySale / totalPySale) * 100) : 0;
+
+  // 기말재고 YOY 계산
+  const totalCyStock = itemRows.reduce((sum, row) => sum + (row.CY_END_STOCK_TAG_AMT || 0), 0);
+  const totalPyStock = itemRows.reduce((sum, row) => sum + (row.PY_END_STOCK_TAG_AMT || 0), 0);
+  const inventoryYOY = totalPyStock > 0 ? Math.round((totalCyStock / totalPyStock) * 100) : 0;
+
+  return {
+    brandCode,
+    month: yyyymm,
+    salesYOY,
+    inventoryYOY,
+    accEndingInventory: Math.round(totalCyStock / 1000000), // 백만원
+    accSalesAmount: Math.round(totalCySale / 1000000), // 백만원
+    totalWeeks: totalRow?.CY_STOCK_WEEK_CNT || 0, // 전체 재고주수 (당년)
+    totalPreviousWeeks: totalRow?.PY_STOCK_WEEK_CNT || 0, // 전체 재고주수 (전년)
+    accInventoryDetail,
+  };
+}
+
+/**
+ * 아이템명을 키로 변환
+ */
+export function getItemKey(itemStd: string): string {
+  const mapping: { [key: string]: string } = {
+    신발: 'shoes',
+    모자: 'hat',
+    가방: 'bag',
+    기타ACC: 'other',
+  };
+  return mapping[itemStd] || itemStd;
 }
 
