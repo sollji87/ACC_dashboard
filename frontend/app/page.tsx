@@ -249,7 +249,7 @@ export default function Home() {
                         <div className="text-xs text-center font-bold text-blue-900">
                           <div>{formatNumber(data.accEndingInventory)}</div>
                           <div className="text-blue-700">
-                            {data.totalWeeks?.toFixed(1) || '0.0'}
+                            {data.totalWeeks?.toFixed(1) || '0.0'}주
                           </div>
                         </div>
                         <div className="text-xs text-center text-blue-800">
@@ -262,11 +262,14 @@ export default function Home() {
                             )}
                           </div>
                           <div className="text-blue-700">
-                            {data.totalPreviousWeeks?.toFixed(1) || '0.0'}
+                            {data.totalPreviousWeeks?.toFixed(1) || '0.0'}주
                           </div>
                         </div>
                         <div className="text-xs text-center font-bold text-blue-900">
-                          {data.inventoryYOY}%
+                          <div>{data.inventoryYOY}%</div>
+                          <div className={`text-xs font-semibold ${(data.totalWeeks || 0) - (data.totalPreviousWeeks || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {((data.totalWeeks || 0) - (data.totalPreviousWeeks || 0)) < 0 ? '-' : '+'}{Math.abs((data.totalWeeks || 0) - (data.totalPreviousWeeks || 0)).toFixed(1)}주
+                          </div>
                         </div>
                       </div>
                       
@@ -274,14 +277,17 @@ export default function Home() {
                         <div className="text-sm font-semibold text-slate-900">신발</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.shoes.current)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.shoes.weeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.shoes.weeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center text-slate-600">
                           <div>{formatNumber(data.accInventoryDetail.shoes.previous)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.shoes.previousWeeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.shoes.previousWeeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
-                          {Math.round((data.accInventoryDetail.shoes.current / data.accInventoryDetail.shoes.previous) * 100)}%
+                          <div>{Math.round((data.accInventoryDetail.shoes.current / data.accInventoryDetail.shoes.previous) * 100)}%</div>
+                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks).toFixed(1)}주
+                          </div>
                         </div>
                       </div>
                       
@@ -289,14 +295,17 @@ export default function Home() {
                         <div className="text-sm font-semibold text-slate-900">모자</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.hat.current)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.hat.weeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.hat.weeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center text-slate-600">
                           <div>{formatNumber(data.accInventoryDetail.hat.previous)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.hat.previousWeeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.hat.previousWeeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
-                          {Math.round((data.accInventoryDetail.hat.current / data.accInventoryDetail.hat.previous) * 100)}%
+                          <div>{Math.round((data.accInventoryDetail.hat.current / data.accInventoryDetail.hat.previous) * 100)}%</div>
+                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks).toFixed(1)}주
+                          </div>
                         </div>
                       </div>
                       
@@ -304,14 +313,17 @@ export default function Home() {
                         <div className="text-sm font-semibold text-slate-900">가방</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.bag.current)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.bag.weeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.bag.weeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center text-slate-600">
                           <div>{formatNumber(data.accInventoryDetail.bag.previous)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.bag.previousWeeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.bag.previousWeeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
-                          {Math.round((data.accInventoryDetail.bag.current / data.accInventoryDetail.bag.previous) * 100)}%
+                          <div>{Math.round((data.accInventoryDetail.bag.current / data.accInventoryDetail.bag.previous) * 100)}%</div>
+                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks).toFixed(1)}주
+                          </div>
                         </div>
                       </div>
                       
@@ -319,14 +331,17 @@ export default function Home() {
                         <div className="text-sm font-semibold text-slate-900">기타ACC</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.other.current)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.other.weeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.other.weeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center text-slate-600">
                           <div>{formatNumber(data.accInventoryDetail.other.previous)}</div>
-                          <div className="text-slate-500">{data.accInventoryDetail.other.previousWeeks.toFixed(1)}</div>
+                          <div className="text-slate-500">{data.accInventoryDetail.other.previousWeeks.toFixed(1)}주</div>
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
-                          {Math.round((data.accInventoryDetail.other.current / data.accInventoryDetail.other.previous) * 100)}%
+                          <div>{Math.round((data.accInventoryDetail.other.current / data.accInventoryDetail.other.previous) * 100)}%</div>
+                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks).toFixed(1)}주
+                          </div>
                         </div>
                       </div>
                     </div>
