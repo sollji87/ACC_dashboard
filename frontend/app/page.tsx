@@ -26,10 +26,20 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
+        console.log('🔄 메인 페이지 데이터 로드 시작:', selectedMonth);
         const data = await getRealData(selectedMonth);
+        console.log('✅ 메인 페이지 데이터 로드 완료:', data);
+        console.log('📊 데이터 상세:', data.map(d => ({
+          brandId: d.brandId,
+          brandName: d.brandName,
+          accEndingInventory: d.accEndingInventory,
+          accSalesAmount: d.accSalesAmount,
+          totalWeeks: d.totalWeeks,
+          accInventoryDetail: d.accInventoryDetail,
+        })));
         setDashboardData(data);
       } catch (error) {
-        console.error('데이터 로딩 실패, 샘플 데이터 사용:', error);
+        console.error('❌ 데이터 로딩 실패, 샘플 데이터 사용:', error);
         const data = getSampleData(selectedMonth);
         setDashboardData(data);
       } finally {
@@ -43,6 +53,8 @@ export default function Home() {
   const brandDataMap = new Map(
     dashboardData.map((data) => [data.brandId, data])
   );
+  
+  console.log('📊 brandDataMap:', Array.from(brandDataMap.entries()));
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ko-KR').format(num);
@@ -107,7 +119,15 @@ export default function Home() {
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {BRANDS.map((brand) => {
             const data = brandDataMap.get(brand.id);
-            if (!data) return null;
+            if (!data) {
+              console.warn(`⚠️ 브랜드 ${brand.id} 데이터 없음`);
+              return null;
+            }
+            console.log(`📊 브랜드 ${brand.name} 렌더링:`, {
+              accEndingInventory: data.accEndingInventory,
+              accSalesAmount: data.accSalesAmount,
+              totalWeeks: data.totalWeeks,
+            });
 
             return (
               <Card
@@ -137,16 +157,63 @@ export default function Home() {
                     </div>
                   </div>
 
+                  {/* 전체 재고주수 요약 */}
+                  {(() => {
+                    const currentWeeks = data.totalWeeks || 0;
+                    const previousWeeks = data.totalPreviousWeeks || 0;
+                    const diff = currentWeeks - previousWeeks;
+                    const isImproved = diff < 0; // 재고주수가 줄어들면 개선
+                    
+                    return (
+                      <div className="mt-4 mb-2 py-3 px-0 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-2xl border-2 border-blue-200/50 shadow-sm">
+                        <div className="flex items-center justify-between gap-0 px-1">
+                          <div className="flex-1 text-center min-w-0">
+                            <p className="text-xs font-medium text-slate-600 mb-1">당년</p>
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className="font-bold text-blue-600 leading-none" style={{ fontSize: '20px' }}>
+                                {currentWeeks.toFixed(1)}
+                              </span>
+                              <span className="text-sm font-medium text-slate-500" style={{ fontSize: '0.875rem' }}>주</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1 text-center border-l border-r border-slate-300/50 min-w-0">
+                            <p className="text-xs font-medium text-slate-600 mb-1">전년</p>
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className="font-bold text-slate-700 leading-none" style={{ fontSize: '20px' }}>
+                                {previousWeeks.toFixed(1)}
+                              </span>
+                              <span className="text-sm font-medium text-slate-500" style={{ fontSize: '0.875rem' }}>주</span>
+                            </div>
+                          </div>
+                          
+                          <div className="flex-1 text-center min-w-0">
+                            <p className="text-xs font-medium text-slate-600 mb-1">
+                              {isImproved ? '개선' : '악화'}
+                            </p>
+                            <div className="flex items-baseline justify-center gap-1">
+                              <span className={`font-bold leading-none ${isImproved ? 'text-emerald-600' : 'text-red-600'}`} style={{ fontSize: '20px' }}>
+                                {isImproved ? '-' : '+'}
+                                {Math.abs(diff).toFixed(1)}
+                              </span>
+                              <span className="text-sm font-medium text-slate-500" style={{ fontSize: '0.875rem' }}>주</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* 핵심 지표 */}
-                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-200">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 p-3 rounded-xl">
+                  <div className="grid grid-cols-2 gap-4 pt-2">
+                    <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 p-3 rounded-xl border-2 border-blue-200/50">
                       <p className="text-xs font-medium text-slate-600 mb-1">ACC 기말재고</p>
                       <p className="text-xl font-bold text-slate-900">
                         {formatNumber(data.accEndingInventory)}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">백만원</p>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 p-3 rounded-xl">
+                    <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 p-3 rounded-xl border-2 border-purple-200/50">
                       <p className="text-xs font-medium text-slate-600 mb-1">ACC 판매액</p>
                       <p className="text-xl font-bold text-slate-900">
                         {formatNumber(data.accSalesAmount)}
@@ -158,7 +225,7 @@ export default function Home() {
 
                 <CardContent className="pt-0 pb-4 flex-1 flex flex-col bg-white">
                   {/* ACC 재고 상세보기 */}
-                  <div className="mb-4 flex-1">
+                  <div className="mb-4 flex-1 -mt-4">
                     <div className="flex items-center gap-2 mb-3">
                       <div className="h-1 w-1 rounded-full bg-blue-500"></div>
                       <h3 className="text-sm font-bold text-slate-900">

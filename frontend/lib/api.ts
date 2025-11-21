@@ -6,37 +6,31 @@
 export interface ApiInventoryData {
   brandCode: string;
   month: string;
-  salesYOY: number;
-  inventoryYOY: number;
-  accEndingInventory: number;
-  accSalesAmount: number;
-  totalWeeks?: number;
-  totalPreviousWeeks?: number;
-  accInventoryDetail: {
-    shoes: {
-      current: number;
-      previous: number;
-      weeks: number;
-      previousWeeks: number;
-    };
-    hat: {
-      current: number;
-      previous: number;
-      weeks: number;
-      previousWeeks: number;
-    };
-    bag: {
-      current: number;
-      previous: number;
-      weeks: number;
-      previousWeeks: number;
-    };
-    other: {
-      current: number;
-      previous: number;
-      weeks: number;
-      previousWeeks: number;
-    };
+  salesYOY: number; // 기본값 (당월, 호환성 유지)
+  inventoryYOY: number; // 기본값 (당월, 호환성 유지)
+  accEndingInventory: number; // 기본값 (당월, 호환성 유지)
+  accSalesAmount: number; // 기본값 (당월, 호환성 유지)
+  totalWeeks?: number; // 기본값 (당월, 호환성 유지)
+  totalPreviousWeeks?: number; // 기본값 (당월, 호환성 유지)
+  accInventoryDetail: any; // 기본값 (당월, 호환성 유지)
+  // 당월/누적 데이터 분리
+  monthly?: {
+    salesYOY: number;
+    inventoryYOY: number;
+    accEndingInventory: number;
+    accSalesAmount: number;
+    totalWeeks?: number;
+    totalPreviousWeeks?: number;
+    accInventoryDetail: any;
+  };
+  accumulated?: {
+    salesYOY: number;
+    inventoryYOY: number;
+    accEndingInventory: number;
+    accSalesAmount: number;
+    totalWeeks?: number;
+    totalPreviousWeeks?: number;
+    accInventoryDetail: any;
   };
 }
 
@@ -124,6 +118,75 @@ export async function fetchBrandInventory(
     return result.data;
   } catch (error) {
     console.error('❌ 단일 브랜드 재고 데이터 조회 실패:', error);
+    console.error('❌ 에러 상세:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error;
+  }
+}
+
+/**
+ * 품번별 재고주수 데이터 조회
+ */
+export interface ProductDetailData {
+  productCode: string;
+  productName: string;
+  season?: string; // 시즌 정보
+  seasonCategory?: 'current' | 'old'; // 현재 시즌 / 과거 시즌
+  weeks: number;
+  previousWeeks: number;
+  endingInventory: number;
+  previousEndingInventory: number;
+  salesAmount: number;
+  previousSalesAmount: number;
+  inventoryYOY: number;
+  salesYOY: number;
+}
+
+export interface ProductDetailResponse {
+  itemStd: string;
+  monthly: ProductDetailData[];
+  accumulated: ProductDetailData[];
+}
+
+export async function fetchProductDetails(
+  brandCode: string,
+  itemStd: string,
+  month: string
+): Promise<ProductDetailResponse> {
+  try {
+    // YYYY-MM 형식을 YYYYMM 형식으로 변환
+    const yyyymm = month.replace(/-/g, '');
+    const apiUrl = `/api/dashboard/inventory/detail?brandCode=${brandCode}&itemStd=${encodeURIComponent(itemStd)}&month=${yyyymm}`;
+    
+    console.log(`🔍 품번별 데이터 조회 시작:`, apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📡 응답 상태 (품번별):`, response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API 오류 응답 (품번별):`, errorText);
+      throw new Error(`API 호출 실패: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'API 오류');
+    }
+
+    console.log(`✅ 품번별 데이터 조회 성공 (${brandCode} ${itemStd}, ${yyyymm})`);
+    return result.data;
+  } catch (error) {
+    console.error('❌ 품번별 재고 데이터 조회 실패:', error);
     console.error('❌ 에러 상세:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,

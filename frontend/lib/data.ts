@@ -7,36 +7,73 @@ export interface BrandDashboardData {
   brandName: string;
   brandCode: string;
   month: string; // YYYY-MM 형식
-  salesYOY: number; // 매출액 YOY (%)
-  inventoryYOY: number; // 기말재고 YOY (%)
-  accEndingInventory: number; // ACC 기말재고 (백만원)
-  accSalesAmount: number; // ACC 판매액 (백만원)
-  totalWeeks?: number; // 전체 재고주수 (당년)
-  totalPreviousWeeks?: number; // 전체 재고주수 (전년)
-  accInventoryDetail: {
+  salesYOY: number; // 매출액 YOY (%) - 기본값 (당월)
+  inventoryYOY: number; // 기말재고 YOY (%) - 기본값 (당월)
+  accEndingInventory: number; // ACC 기말재고 (백만원) - 기본값 (당월)
+  accSalesAmount: number; // ACC 판매액 (백만원) - 기본값 (당월)
+  totalWeeks?: number; // 전체 재고주수 (당년) - 기본값 (당월)
+  totalPreviousWeeks?: number; // 전체 재고주수 (전년) - 기본값 (당월)
+  accInventoryDetail: { // 기본값 (당월)
     shoes: {
-      current: number; // 당년 (백만원)
-      previous: number; // 전년 (백만원)
+      current: number; // 당년 기말재고 (백만원)
+      previous: number; // 전년 기말재고 (백만원)
       weeks: number; // 당년 재고주수 (주)
       previousWeeks: number; // 전년 재고주수 (주)
+      salesCurrent?: number; // 당년 판매액 (백만원)
+      salesPrevious?: number; // 전년 판매액 (백만원)
     };
     hat: {
       current: number;
       previous: number;
       weeks: number;
       previousWeeks: number;
+      salesCurrent?: number;
+      salesPrevious?: number;
     };
     bag: {
       current: number;
       previous: number;
       weeks: number;
       previousWeeks: number;
+      salesCurrent?: number;
+      salesPrevious?: number;
     };
     other: {
       current: number;
       previous: number;
       weeks: number;
       previousWeeks: number;
+      salesCurrent?: number;
+      salesPrevious?: number;
+    };
+  };
+  // 당월/누적 데이터 분리
+  monthly?: {
+    salesYOY: number;
+    inventoryYOY: number;
+    accEndingInventory: number;
+    accSalesAmount: number;
+    totalWeeks?: number;
+    totalPreviousWeeks?: number;
+    accInventoryDetail: {
+      shoes: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+      hat: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+      bag: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+      other: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+    };
+  };
+  accumulated?: {
+    salesYOY: number;
+    inventoryYOY: number;
+    accEndingInventory: number;
+    accSalesAmount: number;
+    totalWeeks?: number;
+    totalPreviousWeeks?: number;
+    accInventoryDetail: {
+      shoes: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+      hat: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+      bag: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
+      other: { current: number; previous: number; weeks: number; previousWeeks: number; salesCurrent?: number; salesPrevious?: number };
     };
   };
 }
@@ -50,24 +87,84 @@ import { BRANDS } from './brands';
 export async function getRealData(month: string = '2025-10'): Promise<BrandDashboardData[]> {
   try {
     const apiData = await fetchAllBrandsInventory(month);
+    console.log('📊 API에서 받은 원본 데이터:', apiData);
     
     // API 데이터를 프론트엔드 형식으로 변환
-    return apiData.map((data: ApiInventoryData) => {
+    const mappedData = apiData.map((data: ApiInventoryData) => {
       const brand = BRANDS.find(b => b.code === data.brandCode);
+      console.log(`📊 브랜드 ${data.brandCode} 매핑:`, {
+        brand: brand?.name,
+        accInventoryDetail: data.accInventoryDetail,
+      });
+      
+      // accInventoryDetail에 모든 필수 아이템이 있는지 확인하고 기본값 설정
+      const defaultItem = {
+        current: 0,
+        previous: 0,
+        weeks: 0,
+        previousWeeks: 0,
+        salesCurrent: 0,
+        salesPrevious: 0,
+      };
+      
+      // 당월/누적 데이터 분리
+      const monthlyData = data.monthly || {
+        salesYOY: data.salesYOY || 0,
+        inventoryYOY: data.inventoryYOY || 0,
+        accEndingInventory: data.accEndingInventory || 0,
+        accSalesAmount: data.accSalesAmount || 0,
+        totalWeeks: data.totalWeeks || 0,
+        totalPreviousWeeks: data.totalPreviousWeeks || 0,
+        accInventoryDetail: data.accInventoryDetail || {},
+      };
+      
+      const accumulatedData = data.accumulated || {
+        salesYOY: data.salesYOY || 0,
+        inventoryYOY: data.inventoryYOY || 0,
+        accEndingInventory: data.accEndingInventory || 0,
+        accSalesAmount: data.accSalesAmount || 0,
+        totalWeeks: data.totalWeeks || 0,
+        totalPreviousWeeks: data.totalPreviousWeeks || 0,
+        accInventoryDetail: data.accInventoryDetail || {},
+      };
+      
+      // 기본값 설정
+      const ensureInventoryDetail = (detail: any) => {
+        return {
+          shoes: detail?.shoes || defaultItem,
+          hat: detail?.hat || defaultItem,
+          bag: detail?.bag || defaultItem,
+          other: detail?.other || defaultItem,
+        };
+      };
+      
       return {
         brandId: brand?.id || '',
         brandName: brand?.name || '',
         brandCode: data.brandCode,
         month,
-        salesYOY: data.salesYOY,
-        inventoryYOY: data.inventoryYOY,
-        accEndingInventory: data.accEndingInventory,
-        accSalesAmount: data.accSalesAmount,
-        totalWeeks: data.totalWeeks,
-        totalPreviousWeeks: data.totalPreviousWeeks,
-        accInventoryDetail: data.accInventoryDetail,
+        // 기본값 (당월 데이터, 호환성 유지)
+        salesYOY: monthlyData.salesYOY,
+        inventoryYOY: monthlyData.inventoryYOY,
+        accEndingInventory: monthlyData.accEndingInventory,
+        accSalesAmount: monthlyData.accSalesAmount,
+        totalWeeks: monthlyData.totalWeeks,
+        totalPreviousWeeks: monthlyData.totalPreviousWeeks,
+        accInventoryDetail: ensureInventoryDetail(monthlyData.accInventoryDetail),
+        // 당월/누적 데이터 분리
+        monthly: {
+          ...monthlyData,
+          accInventoryDetail: ensureInventoryDetail(monthlyData.accInventoryDetail),
+        },
+        accumulated: {
+          ...accumulatedData,
+          accInventoryDetail: ensureInventoryDetail(accumulatedData.accInventoryDetail),
+        },
       };
     });
+    
+    console.log('📊 최종 변환된 데이터:', mappedData);
+    return mappedData;
   } catch (error) {
     console.error('실제 데이터 조회 실패, 샘플 데이터 사용:', error);
     return getSampleData(month);
