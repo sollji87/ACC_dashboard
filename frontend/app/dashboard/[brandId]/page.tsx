@@ -259,6 +259,7 @@ export default function BrandDashboard() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // 정렬 방향
   const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('12weeks'); // 4주/8주/12주 토글
   const [selectedItemForChart, setSelectedItemForChart] = useState<'all' | 'shoes' | 'hat' | 'bag' | 'other'>('all'); // 차트용 아이템 선택
+  const [excludePurchase, setExcludePurchase] = useState<boolean>(false); // 사입제외 옵션
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태
 
@@ -333,7 +334,7 @@ export default function BrandDashboard() {
       try {
         const yyyymm = selectedMonth.replace(/-/g, '');
         const itemStd = selectedItemForChart === 'all' ? 'all' : getItemNameFromKey(selectedItemForChart);
-        const url = `/api/dashboard/chart?brandCode=${encodeURIComponent(brand.code)}&yyyymm=${yyyymm}&weeksType=${weeksType}&itemStd=${encodeURIComponent(itemStd)}`;
+        const url = `/api/dashboard/chart?brandCode=${encodeURIComponent(brand.code)}&yyyymm=${yyyymm}&weeksType=${weeksType}&itemStd=${encodeURIComponent(itemStd)}&excludePurchase=${excludePurchase}`;
         console.log('📊 차트 데이터 요청 URL:', url);
         
         const response = await fetch(url);
@@ -365,7 +366,7 @@ export default function BrandDashboard() {
     };
 
     loadChartData();
-  }, [brand, selectedMonth, weeksType, selectedItemForChart]);
+  }, [brand, selectedMonth, weeksType, selectedItemForChart, excludePurchase]);
 
   if (!brand) {
     return (
@@ -735,6 +736,29 @@ export default function BrandDashboard() {
                         }`}
                       >
                         12주
+                      </button>
+                    </div>
+                    {/* 사입제외 필터 */}
+                    <div className="flex items-center gap-1 bg-orange-50 rounded-lg p-0.5 border border-orange-200">
+                      <button
+                        onClick={() => setExcludePurchase(false)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                          !excludePurchase
+                            ? 'bg-orange-600 text-white shadow-sm'
+                            : 'text-orange-600 hover:bg-orange-100'
+                        }`}
+                      >
+                        전체
+                      </button>
+                      <button
+                        onClick={() => setExcludePurchase(true)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                          excludePurchase
+                            ? 'bg-orange-600 text-white shadow-sm'
+                            : 'text-orange-600 hover:bg-orange-100'
+                        }`}
+                      >
+                        사입제외
                       </button>
                     </div>
                   </div>

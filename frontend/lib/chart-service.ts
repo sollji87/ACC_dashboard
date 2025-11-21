@@ -19,7 +19,8 @@ export function buildChartDataQuery(
   brandCode: string,
   yyyymm: string,
   weeksType: '4weeks' | '8weeks' | '12weeks' = '12weeks',
-  itemStd: string = 'all'
+  itemStd: string = 'all',
+  excludePurchase: boolean = false
 ): string {
   const { year, month } = parseYearMonth(yyyymm);
   
@@ -100,6 +101,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm in (${months.map(m => `'${m}'`).join(',')})
     group by a.pst_yyyymm
@@ -115,6 +117,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm in (${pyMonths.map(m => `'${m}'`).join(',')})
     group by a.pst_yyyymm

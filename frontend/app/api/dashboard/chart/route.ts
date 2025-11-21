@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     const weeksTypeParam = searchParams.get('weeksType');
     const weeksType = (weeksTypeParam as '4weeks' | '8weeks' | '12weeks') || '12weeks';
     const itemStd = searchParams.get('itemStd') || 'all';
+    const excludePurchaseParam = searchParams.get('excludePurchase');
+    const excludePurchase = excludePurchaseParam === 'true';
 
     if (!brandCode || !yyyymm) {
       console.error('❌ 필수 파라미터 누락:', { brandCode, yyyymm });
@@ -19,9 +21,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('📊 차트 데이터 조회 시작:', { brandCode, yyyymm, weeksType, itemStd });
+    console.log('📊 차트 데이터 조회 시작:', { brandCode, yyyymm, weeksType, itemStd, excludePurchase });
 
-    const query = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd);
+    const query = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd, excludePurchase);
     console.log('📝 생성된 쿼리 길이:', query.length, '자');
     console.log('📝 쿼리 시작 부분:', query.substring(0, 300));
 
