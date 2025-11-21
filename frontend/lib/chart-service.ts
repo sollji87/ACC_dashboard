@@ -45,8 +45,7 @@ export function buildChartDataQuery(
   if (weeksType === '8weeks') monthsForAvg = 2;
   if (weeksType === '12weeks') monthsForAvg = 3;
   
-  // 시즌 분류 조건 (9-2월이면 차기시즌 포함)
-  const isNextSeasonPeriod = month >= 9 || month <= 2;
+  // 시즌 분류는 SQL에서 월별로 처리 (각 월마다 다른 조건 적용)
   
   return `
 -- item: ACC 아이템 기준
@@ -148,20 +147,34 @@ with item as (
     select 
         a.yyyymm,
         sum(case 
-            -- 당시즌: 당년(25F, 25N, 26N)
-            when (b.sesn like '%25F%' or b.sesn like '%25N%' or b.sesn like '%26N%') 
-            then end_stock_tag_amt else 0 
+            -- 당시즌: 11-2월은 24F, 25N / 3-8월은 25S, 25N / 9-10월은 25N, 25F
+            when cast(substring(a.yyyymm, 5, 2) as int) in (11, 12) or cast(substring(a.yyyymm, 5, 2) as int) in (1, 2)
+                then case when (b.sesn like '%24F%' or b.sesn like '%25N%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 3 and 8
+                then case when (b.sesn like '%25S%' or b.sesn like '%25N%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 9 and 10
+                then case when (b.sesn like '%25N%' or b.sesn like '%25F%') then end_stock_tag_amt else 0 end
+            else 0
         end) as current_season_stock,
         sum(case 
-            -- 차기시즌: 당년(26S) - 9-2월 기준
-            when ${isNextSeasonPeriod ? `b.sesn like '%26S%'` : '1=0'}
-            then end_stock_tag_amt else 0 
+            -- 차기시즌: 11-2월은 25N, 25S, 26S, 26F / 3-8월은 26S, 26N, 25F / 9-10월은 26S, 26N, 26F
+            when cast(substring(a.yyyymm, 5, 2) as int) in (11, 12) or cast(substring(a.yyyymm, 5, 2) as int) in (1, 2)
+                then case when (b.sesn like '%25N%' or b.sesn like '%25S%' or b.sesn like '%26S%' or b.sesn like '%26F%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 3 and 8
+                then case when (b.sesn like '%26S%' or b.sesn like '%26N%' or b.sesn like '%25F%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 9 and 10
+                then case when (b.sesn like '%26S%' or b.sesn like '%26N%' or b.sesn like '%26F%') then end_stock_tag_amt else 0 end
+            else 0
         end) as next_season_stock,
         sum(case 
-            -- 과시즌: 그 이전 시즌
-            when not (b.sesn like '%25F%' or b.sesn like '%25N%' or b.sesn like '%26N%' 
-                     ${isNextSeasonPeriod ? `or b.sesn like '%26S%'` : ''})
-            then end_stock_tag_amt else 0 
+            -- 과시즌: 당시즌과 차기시즌이 아닌 나머지
+            when cast(substring(a.yyyymm, 5, 2) as int) in (11, 12) or cast(substring(a.yyyymm, 5, 2) as int) in (1, 2)
+                then case when not ((b.sesn like '%24F%' or b.sesn like '%25N%') or (b.sesn like '%25N%' or b.sesn like '%25S%' or b.sesn like '%26S%' or b.sesn like '%26F%')) then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 3 and 8
+                then case when not ((b.sesn like '%25S%' or b.sesn like '%25N%') or (b.sesn like '%26S%' or b.sesn like '%26N%' or b.sesn like '%25F%')) then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 9 and 10
+                then case when not ((b.sesn like '%25N%' or b.sesn like '%25F%') or (b.sesn like '%26S%' or b.sesn like '%26N%' or b.sesn like '%26F%')) then end_stock_tag_amt else 0 end
+            else 0
         end) as old_season_stock
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
@@ -175,20 +188,34 @@ with item as (
     select 
         a.yyyymm,
         sum(case 
-            -- 당시즌: 전년(24F, 24N, 25N)
-            when (b.sesn like '%24F%' or b.sesn like '%24N%' or b.sesn like '%25N%') 
-            then end_stock_tag_amt else 0 
+            -- 당시즌: 11-2월은 23F, 24N / 3-8월은 24S, 24N / 9-10월은 24N, 24F
+            when cast(substring(a.yyyymm, 5, 2) as int) in (11, 12) or cast(substring(a.yyyymm, 5, 2) as int) in (1, 2)
+                then case when (b.sesn like '%23F%' or b.sesn like '%24N%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 3 and 8
+                then case when (b.sesn like '%24S%' or b.sesn like '%24N%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 9 and 10
+                then case when (b.sesn like '%24N%' or b.sesn like '%24F%') then end_stock_tag_amt else 0 end
+            else 0
         end) as current_season_stock,
         sum(case 
-            -- 차기시즌: 전년(25S) - 9-2월 기준
-            when ${isNextSeasonPeriod ? `b.sesn like '%25S%'` : '1=0'}
-            then end_stock_tag_amt else 0 
+            -- 차기시즌: 11-2월은 24N, 24S, 25S, 25F / 3-8월은 25S, 25N, 24F / 9-10월은 25S, 25N, 25F
+            when cast(substring(a.yyyymm, 5, 2) as int) in (11, 12) or cast(substring(a.yyyymm, 5, 2) as int) in (1, 2)
+                then case when (b.sesn like '%24N%' or b.sesn like '%24S%' or b.sesn like '%25S%' or b.sesn like '%25F%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 3 and 8
+                then case when (b.sesn like '%25S%' or b.sesn like '%25N%' or b.sesn like '%24F%') then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 9 and 10
+                then case when (b.sesn like '%25S%' or b.sesn like '%25N%' or b.sesn like '%25F%') then end_stock_tag_amt else 0 end
+            else 0
         end) as next_season_stock,
         sum(case 
-            -- 과시즌: 그 이전 시즌
-            when not (b.sesn like '%24F%' or b.sesn like '%24N%' or b.sesn like '%25N%' 
-                     ${isNextSeasonPeriod ? `or b.sesn like '%25S%'` : ''})
-            then end_stock_tag_amt else 0 
+            -- 과시즌: 당시즌과 차기시즌이 아닌 나머지
+            when cast(substring(a.yyyymm, 5, 2) as int) in (11, 12) or cast(substring(a.yyyymm, 5, 2) as int) in (1, 2)
+                then case when not ((b.sesn like '%23F%' or b.sesn like '%24N%') or (b.sesn like '%24N%' or b.sesn like '%24S%' or b.sesn like '%25S%' or b.sesn like '%25F%')) then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 3 and 8
+                then case when not ((b.sesn like '%24S%' or b.sesn like '%24N%') or (b.sesn like '%25S%' or b.sesn like '%25N%' or b.sesn like '%24F%')) then end_stock_tag_amt else 0 end
+            when cast(substring(a.yyyymm, 5, 2) as int) between 9 and 10
+                then case when not ((b.sesn like '%24N%' or b.sesn like '%24F%') or (b.sesn like '%25S%' or b.sesn like '%25N%' or b.sesn like '%25F%')) then end_stock_tag_amt else 0 end
+            else 0
         end) as old_season_stock
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
@@ -197,7 +224,7 @@ with item as (
         and a.yyyymm in (${pyMonths.map(m => `'${m}'`).join(',')})
     group by a.yyyymm
 )
--- 정체재고 (최근 6개월 이내 판매 없던 재고 - 당년)
+-- 정체재고 (최근 1개월 이내 판매 없던 재고 - 당년)
 , stagnant_stock_cy as (
     select 
         a.yyyymm,
@@ -205,12 +232,16 @@ with item as (
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
      left join (
-        -- 최근 6개월 판매 이력
-        select distinct prdt_cd
-        from sap_fnf.dm_pl_shop_prdt_m
-        where brd_cd = '${brandCode}'
-        and pst_yyyymm >= '${months[Math.max(0, months.length - 6)]}'
-        and tag_sale_amt > 0
+        -- 최근 1개월 판매 이력
+        select distinct a.prdt_cd
+        from sap_fnf.dm_pl_shop_prdt_m a
+         left join sap_fnf.mst_shop c
+            on a.brd_cd = c.brd_cd
+            and a.shop_cd = c.sap_shop_cd
+        where a.brd_cd = '${brandCode}'
+        and a.pst_yyyymm >= '${months[Math.max(0, months.length - 1)]}'
+        and a.tag_sale_amt > 0
+        and c.chnl_cd <> '9' -- 수출제외
      ) c on a.prdt_cd = c.prdt_cd
     where 1=1
         and a.brd_cd = '${brandCode}'
@@ -218,7 +249,7 @@ with item as (
         and c.prdt_cd is null -- 판매 이력이 없는 품번
     group by a.yyyymm
 )
--- 정체재고 (최근 6개월 이내 판매 없던 재고 - 전년)
+-- 정체재고 (최근 1개월 이내 판매 없던 재고 - 전년)
 , stagnant_stock_py as (
     select 
         a.yyyymm,
@@ -226,12 +257,16 @@ with item as (
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
      left join (
-        -- 최근 6개월 판매 이력
-        select distinct prdt_cd
-        from sap_fnf.dm_pl_shop_prdt_m
-        where brd_cd = '${brandCode}'
-        and pst_yyyymm >= '${pyMonths[Math.max(0, pyMonths.length - 6)]}'
-        and tag_sale_amt > 0
+        -- 최근 1개월 판매 이력
+        select distinct a.prdt_cd
+        from sap_fnf.dm_pl_shop_prdt_m a
+         left join sap_fnf.mst_shop c
+            on a.brd_cd = c.brd_cd
+            and a.shop_cd = c.sap_shop_cd
+        where a.brd_cd = '${brandCode}'
+        and a.pst_yyyymm >= '${pyMonths[Math.max(0, pyMonths.length - 1)]}'
+        and a.tag_sale_amt > 0
+        and c.chnl_cd <> '9' -- 수출제외
      ) c on a.prdt_cd = c.prdt_cd
     where 1=1
         and a.brd_cd = '${brandCode}'

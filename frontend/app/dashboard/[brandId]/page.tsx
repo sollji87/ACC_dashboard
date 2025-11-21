@@ -172,21 +172,9 @@ const CustomInventoryTooltip = ({ active, payload, label }: any) => {
   // YOY
   const stockYOY = data.stockYOY || 0;
 
-  // 시즌별 데이터 수집
-  const seasonData = [
-    { name: '당년-당시즌', value: data.currentSeasonStock || 0, color: '#3b82f6' },
-    { name: '당년-차기시즌', value: data.nextSeasonStock || 0, color: '#8b5cf6' },
-    { name: '당년-과시즌', value: data.oldSeasonStock || 0, color: '#94a3b8' },
-    { name: '당년-정체재고', value: data.stagnantStock || 0, color: '#ef4444' },
-    { name: '전년-당시즌', value: data.previousCurrentSeasonStock || 0, color: '#93c5fd' },
-    { name: '전년-차기시즌', value: data.previousNextSeasonStock || 0, color: '#c4b5fd' },
-    { name: '전년-과시즌', value: data.previousOldSeasonStock || 0, color: '#cbd5e1' },
-    { name: '전년-정체재고', value: data.previousStagnantStock || 0, color: '#fca5a5' },
-  ].filter(item => item.value > 0).sort((a, b) => b.value - a.value);
-
   return (
     <div 
-      className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[280px] bg-white" 
+      className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[320px] bg-white" 
       style={{ 
         backgroundColor: '#ffffff',
         background: '#ffffff',
@@ -202,11 +190,11 @@ const CustomInventoryTooltip = ({ active, payload, label }: any) => {
       <div className="space-y-2 mb-3">
         <div className="flex justify-between items-center">
           <span className="text-sm text-slate-600">총재고택금액</span>
-          <span className="text-sm font-semibold text-slate-900">{formatNumber(totalStock)}백만원</span>
+          <span className="text-sm font-semibold text-slate-900">{formatNumber(totalStock)}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-slate-600">전년 재고택금액</span>
-          <span className="text-sm font-semibold text-slate-900">{formatNumber(previousTotalStock)}백만원</span>
+          <span className="text-sm font-semibold text-slate-900">{formatNumber(previousTotalStock)}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-sm text-slate-600">YOY</span>
@@ -218,19 +206,110 @@ const CustomInventoryTooltip = ({ active, payload, label }: any) => {
 
       <div className="pt-2 border-t border-slate-200">
         <div className="text-xs font-semibold text-slate-700 mb-2">시즌별 상세</div>
-        <div className="space-y-1.5">
-          {seasonData.map((item, index) => (
-            <div key={index} className="flex justify-between items-center text-xs">
-              <div className="flex items-center gap-2">
-                <div 
-                  className="w-3 h-3 rounded-sm" 
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-slate-600">{item.name}</span>
+        <div className="space-y-2">
+          {/* 과시즌 */}
+          {((data.oldSeasonStock || 0) > 0 || (data.previousOldSeasonStock || 0) > 0) && (
+            <div className="text-xs">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#94a3b8' }} />
+                <span className="text-slate-600 font-medium">과시즌</span>
               </div>
-              <span className="font-semibold text-slate-900">{formatNumber(item.value)}</span>
+              <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">당년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.oldSeasonStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">전년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.previousOldSeasonStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">YOY</span>
+                  <span className={`font-semibold ${(data.oldSeasonStock || 0) - (data.previousOldSeasonStock || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {((data.oldSeasonStock || 0) - (data.previousOldSeasonStock || 0)) >= 0 ? '+' : ''}{formatNumber((data.oldSeasonStock || 0) - (data.previousOldSeasonStock || 0))}
+                  </span>
+                </div>
+              </div>
             </div>
-          ))}
+          )}
+          
+          {/* 당시즌 */}
+          {((data.currentSeasonStock || 0) > 0 || (data.previousCurrentSeasonStock || 0) > 0) && (
+            <div className="text-xs">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#3b82f6' }} />
+                <span className="text-slate-600 font-medium">당시즌</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">당년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.currentSeasonStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">전년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.previousCurrentSeasonStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">YOY</span>
+                  <span className={`font-semibold ${(data.currentSeasonStock || 0) - (data.previousCurrentSeasonStock || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {((data.currentSeasonStock || 0) - (data.previousCurrentSeasonStock || 0)) >= 0 ? '+' : ''}{formatNumber((data.currentSeasonStock || 0) - (data.previousCurrentSeasonStock || 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* 차기시즌 */}
+          {((data.nextSeasonStock || 0) > 0 || (data.previousNextSeasonStock || 0) > 0) && (
+            <div className="text-xs">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#8b5cf6' }} />
+                <span className="text-slate-600 font-medium">차기시즌</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">당년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.nextSeasonStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">전년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.previousNextSeasonStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">YOY</span>
+                  <span className={`font-semibold ${(data.nextSeasonStock || 0) - (data.previousNextSeasonStock || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {((data.nextSeasonStock || 0) - (data.previousNextSeasonStock || 0)) >= 0 ? '+' : ''}{formatNumber((data.nextSeasonStock || 0) - (data.previousNextSeasonStock || 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          {/* 정체재고 */}
+          {((data.stagnantStock || 0) > 0 || (data.previousStagnantStock || 0) > 0) && (
+            <div className="text-xs">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
+                <span className="text-slate-600 font-medium">정체재고</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">당년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.stagnantStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">전년</span>
+                  <span className="font-semibold text-slate-900">{formatNumber(data.previousStagnantStock || 0)}</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-slate-500 text-[10px] mb-0.5">YOY</span>
+                  <span className={`font-semibold ${(data.stagnantStock || 0) - (data.previousStagnantStock || 0) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {((data.stagnantStock || 0) - (data.previousStagnantStock || 0)) >= 0 ? '+' : ''}{formatNumber((data.stagnantStock || 0) - (data.previousStagnantStock || 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
