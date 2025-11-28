@@ -22,48 +22,6 @@
 import { parseYearMonth } from './date-utils';
 
 /**
- * 시즌 조건 생성 함수들 (월별로 동적 계산)
- */
-function getSeasonConditions(yyyymm: string) {
-  const { year, month } = parseYearMonth(yyyymm);
-  const yy = year % 100;
-  
-  // FW: 9-2월, SS: 3-8월
-  const isFW = month >= 9 || month <= 2;
-  const baseYear = isFW && month <= 2 ? yy - 1 : yy;
-  
-  if (isFW) {
-    // FW 시즌 (9-2월)
-    return {
-      currentSeasons: [`${baseYear}N`, `${baseYear}F`],
-      nextSeasons: [`${baseYear+1}N`, `${baseYear+1}S`, `${baseYear+1}F`, `${baseYear+2}N`, `${baseYear+2}S`],
-      activeSeasons: [`${baseYear}N`, `${baseYear}F`, `${baseYear+1}N`, `${baseYear+1}S`, `${baseYear+1}F`, `${baseYear+2}N`, `${baseYear+2}S`],
-    };
-  } else {
-    // SS 시즌 (3-8월)
-    return {
-      currentSeasons: [`${yy}N`, `${yy}S`],
-      nextSeasons: [`${yy}F`, `${yy+1}N`, `${yy+1}S`, `${yy+1}F`, `${yy+2}N`, `${yy+2}S`],
-      activeSeasons: [`${yy}N`, `${yy}S`, `${yy}F`, `${yy+1}N`, `${yy+1}S`, `${yy+2}N`, `${yy+2}S`],
-    };
-  }
-}
-
-/**
- * 시즌 LIKE 조건 생성
- */
-function buildSeasonLikeCondition(seasons: string[], columnName: string = 'b.sesn'): string {
-  return seasons.map(s => `${columnName} LIKE '%${s}%'`).join(' OR ');
-}
-
-/**
- * 활성 시즌 NOT LIKE 조건 생성 (정체재고용)
- */
-function buildActiveSeasonsNotLikeCondition(seasons: string[], columnName: string = 'b.sesn'): string {
-  return seasons.map(s => `${columnName} NOT LIKE '%${s}%'`).join(' AND ');
-}
-
-/**
  * 최근 12개월 재고주수 및 재고택금액 데이터 조회 쿼리 생성
  */
 export function buildChartDataQuery(
