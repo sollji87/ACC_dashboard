@@ -136,9 +136,11 @@ export interface ProductDetailData {
   seasonCategory?: 'current' | 'next' | 'old' | 'stagnant'; // 당시즌 / 차기시즌 / 과시즌 / 정체재고
   weeks: number;
   previousWeeks: number;
-  endingInventory: number;
+  endingInventoryQty: number; // 기말재고 수량
+  previousEndingInventoryQty: number;
+  endingInventory: number; // 기말재고택(V+) 백만원
   previousEndingInventory: number;
-  salesAmount: number;
+  salesAmount: number; // 실판매액(V+) 백만원
   previousSalesAmount: number;
   inventoryYOY: number;
   salesYOY: number;

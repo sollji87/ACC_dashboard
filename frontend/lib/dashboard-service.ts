@@ -567,6 +567,7 @@ with item as (
             , b.prdt_cd
             , b.product_name
             , sum(end_stock_tag_amt) as cm_end_stock_tag_amt
+            , sum(end_stock_qty) as cm_end_stock_qty
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b
         on a.prdt_cd = b.prdt_cd
@@ -580,6 +581,7 @@ with item as (
             , b.prdt_cd
             , b.product_name
             , sum(end_stock_tag_amt) as cm_end_stock_tag_amt
+            , sum(end_stock_qty) as cm_end_stock_qty
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b
         on a.prdt_cd = b.prdt_cd
@@ -741,6 +743,8 @@ select a.prdt_cd
                 , 1)
             else null
           end as py_stock_week_cnt
+        , sum(case when a.div='cy' then a.cm_end_stock_qty else 0 end) as cy_end_stock_qty
+        , sum(case when a.div='py' then a.cm_end_stock_qty else 0 end) as py_end_stock_qty
         , sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) as cy_end_stock_tag_amt
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
         , sum(case when a.div='cy' then d.act_sale_amt else 0 end) as cy_act_sale_amt
@@ -776,6 +780,8 @@ select a.prdt_cd
                 , 1)
             else null
           end as py_stock_week_cnt
+        , sum(case when a.div='cy' then a.cm_end_stock_qty else 0 end) as cy_end_stock_qty
+        , sum(case when a.div='py' then a.cm_end_stock_qty else 0 end) as py_end_stock_qty
         , sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) as cy_end_stock_tag_amt
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
         , sum(case when a.div='cy' then d_acc.act_sale_amt else 0 end) as cy_act_sale_amt
@@ -807,6 +813,8 @@ interface ProductDetailData {
   PERIOD_TYPE: 'monthly' | 'accumulated';
   CY_STOCK_WEEK_CNT: number;
   PY_STOCK_WEEK_CNT: number;
+  CY_END_STOCK_QTY: number;  // 기말재고 수량
+  PY_END_STOCK_QTY: number;
   CY_END_STOCK_TAG_AMT: number;
   PY_END_STOCK_TAG_AMT: number;
   CY_ACT_SALE_AMT: number;  // 실판매출 (화면 표시용)
@@ -919,6 +927,8 @@ export function formatProductDetailData(
   // 당월 데이터 포맷팅 및 필터링 (기말재고 0이고 판매액 0인 항목 제거)
   const monthlyProducts = monthlyRows
     .map((row: any) => {
+      const cyEndStockQty = Number(getVal(row, 'CY_END_STOCK_QTY')) || 0;
+      const pyEndStockQty = Number(getVal(row, 'PY_END_STOCK_QTY')) || 0;
       const cyEndStock = Number(getVal(row, 'CY_END_STOCK_TAG_AMT')) || 0;
       const pyEndStock = Number(getVal(row, 'PY_END_STOCK_TAG_AMT')) || 0;
       const cyWeeks = Number(getVal(row, 'CY_STOCK_WEEK_CNT')) || 0;
@@ -938,6 +948,8 @@ export function formatProductDetailData(
         seasonCategory: seasonCategory,
         weeks: cyWeeks,
         previousWeeks: pyWeeks,
+        endingInventoryQty: cyEndStockQty,
+        previousEndingInventoryQty: pyEndStockQty,
         endingInventory: Math.round(cyEndStock / 1000000),
         previousEndingInventory: Math.round(pyEndStock / 1000000),
         salesAmount: Math.round(cySale / 1000000),
@@ -954,6 +966,8 @@ export function formatProductDetailData(
   // 누적 데이터 포맷팅 및 필터링 (기말재고 0이고 판매액 0인 항목 제거)
   const accumulatedProducts = accumulatedRows
     .map((row: any) => {
+      const cyEndStockQty = Number(getVal(row, 'CY_END_STOCK_QTY')) || 0;
+      const pyEndStockQty = Number(getVal(row, 'PY_END_STOCK_QTY')) || 0;
       const cyEndStock = Number(getVal(row, 'CY_END_STOCK_TAG_AMT')) || 0;
       const pyEndStock = Number(getVal(row, 'PY_END_STOCK_TAG_AMT')) || 0;
       const cyWeeks = Number(getVal(row, 'CY_STOCK_WEEK_CNT')) || 0;
@@ -973,6 +987,8 @@ export function formatProductDetailData(
         seasonCategory: seasonCategory,
         weeks: cyWeeks,
         previousWeeks: pyWeeks,
+        endingInventoryQty: cyEndStockQty,
+        previousEndingInventoryQty: pyEndStockQty,
         endingInventory: Math.round(cyEndStock / 1000000),
         previousEndingInventory: Math.round(pyEndStock / 1000000),
         salesAmount: Math.round(cySale / 1000000),

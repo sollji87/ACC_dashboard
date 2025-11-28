@@ -43,7 +43,7 @@ const CustomStockWeeksLegend = ({ payload }: any) => {
   if (!payload || payload.length === 0) return null;
 
   return (
-    <div className="flex items-center justify-center gap-6 mt-4" style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}>
+    <div className="flex items-center justify-center gap-4 mt-4 flex-wrap" style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}>
       {payload.map((entry: any, index: number) => {
         const color = entry.color || '#64748b';
         const isDashed = entry.strokeDasharray;
@@ -115,17 +115,21 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
     return `${shortYear}년 ${parseInt(month)}월`;
   });
 
-  // 당년 재고주수
+  // 전체 재고주수
   const stockWeeks = data.stockWeeks || 0;
-  // 전년 재고주수
   const previousStockWeeks = data.previousStockWeeks || 0;
-  // YOY 차이 (당년 - 전년)
   const weeksDiff = stockWeeks - previousStockWeeks;
   const isImproved = weeksDiff < 0;
 
+  // 정상재고 재고주수 (전체 - 정체재고)
+  const stockWeeksNormal = data.stockWeeksNormal || 0;
+  const previousStockWeeksNormal = data.previousStockWeeksNormal || 0;
+  const weeksDiffNormal = stockWeeksNormal - previousStockWeeksNormal;
+  const isImprovedNormal = weeksDiffNormal < 0;
+
   return (
     <div 
-      className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[240px] bg-white" 
+      className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[280px] bg-white" 
       style={{ 
         backgroundColor: '#ffffff',
         background: '#ffffff',
@@ -138,26 +142,59 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
         {formattedMonth}
       </div>
       
-      <div className="space-y-2">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#1e40af' }} />
-            <span className="text-sm text-slate-600">당년 재고주수</span>
+      <div className="space-y-3">
+        {/* 전체 재고 */}
+        <div>
+          <div className="text-xs font-semibold text-slate-500 mb-1.5">전체 재고</div>
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#1e40af' }} />
+                <span className="text-xs text-slate-600">당년</span>
+              </div>
+              <span className="text-sm font-semibold text-slate-900">{stockWeeks.toFixed(1)}주</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#94a3b8' }} />
+                <span className="text-xs text-slate-600">전년</span>
+              </div>
+              <span className="text-sm font-semibold text-slate-900">{previousStockWeeks.toFixed(1)}주</span>
+            </div>
+            <div className="flex justify-between items-center pl-4">
+              <span className="text-xs text-slate-500">YOY</span>
+              <span className={`text-xs font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
+                {isImproved ? '-' : '+'}{Math.abs(weeksDiff).toFixed(1)}주
+              </span>
+            </div>
           </div>
-          <span className="text-sm font-semibold text-slate-900">{stockWeeks.toFixed(1)}주</span>
         </div>
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#94a3b8' }} />
-            <span className="text-sm text-slate-600">전년 재고주수</span>
+
+        {/* 정상재고 (전체 - 정체재고) */}
+        <div className="pt-2 border-t border-slate-100">
+          <div className="text-xs font-semibold text-slate-500 mb-1.5">정상재고 (전체 - 정체재고)</div>
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#10b981' }} />
+                <span className="text-xs text-slate-600">당년</span>
+              </div>
+              <span className="text-sm font-semibold text-slate-900">{stockWeeksNormal.toFixed(1)}주</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#86efac' }} />
+                <span className="text-xs text-slate-600">전년</span>
+              </div>
+              <span className="text-sm font-semibold text-slate-900">{previousStockWeeksNormal.toFixed(1)}주</span>
+            </div>
+            <div className="flex justify-between items-center pl-4">
+              <span className="text-xs text-slate-500">YOY</span>
+              <span className={`text-xs font-semibold ${isImprovedNormal ? 'text-emerald-600' : 'text-red-600'}`}>
+                {isImprovedNormal ? '-' : '+'}{Math.abs(weeksDiffNormal).toFixed(1)}주
+              </span>
+            </div>
           </div>
-          <span className="text-sm font-semibold text-slate-900">{previousStockWeeks.toFixed(1)}주</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-sm text-slate-600">YOY</span>
-          <span className={`text-sm font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
-            {isImproved ? '-' : '+'}{Math.abs(weeksDiff).toFixed(1)}주
-          </span>
         </div>
       </div>
     </div>
@@ -364,6 +401,7 @@ export default function BrandDashboard() {
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<any>(null); // 클릭한 품번 상세정보
   const [productMonthlyTrend, setProductMonthlyTrend] = useState<any[]>([]); // 품번별 월별 추이 데이터
   const [isLoadingMonthlyTrend, setIsLoadingMonthlyTrend] = useState(false); // 월별 추이 로딩 상태
+  const [excludeSeasonFilter, setExcludeSeasonFilter] = useState<'all' | 'excludeS' | 'excludeF'>('all'); // 시즌 제외 필터
 
   const monthOptions = getMonthOptions();
 
@@ -918,7 +956,7 @@ export default function BrandDashboard() {
                   <div className="space-y-6">
                     {/* 재고주수 꺾은선 그래프 */}
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">재고주수 추이 (당년/전년)</h3>
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3">재고주수 추이 (당년/전년 × 전체/정상)</h3>
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -941,7 +979,7 @@ export default function BrandDashboard() {
                             tickFormatter={(value) => new Intl.NumberFormat('ko-KR').format(value)}
                             width={60}
                             domain={(() => {
-                              // chartData에서 모든 재고주수 값 수집
+                              // chartData에서 모든 재고주수 값 수집 (전체 + 당시즌)
                               const allValues: number[] = [];
                               chartData.forEach((item: any) => {
                                 if (item.stockWeeks != null && item.stockWeeks !== undefined) {
@@ -949,6 +987,12 @@ export default function BrandDashboard() {
                                 }
                                 if (item.previousStockWeeks != null && item.previousStockWeeks !== undefined) {
                                   allValues.push(item.previousStockWeeks);
+                                }
+                                if (item.stockWeeksNormal != null && item.stockWeeksNormal !== undefined) {
+                                  allValues.push(item.stockWeeksNormal);
+                                }
+                                if (item.previousStockWeeksNormal != null && item.previousStockWeeksNormal !== undefined) {
+                                  allValues.push(item.previousStockWeeksNormal);
                                 }
                               });
                               
@@ -980,10 +1024,11 @@ export default function BrandDashboard() {
                             }}
                           />
                           <Legend content={<CustomStockWeeksLegend />} />
+                          {/* 전체 재고 기준 */}
                           <Line 
                             type="natural" 
                             dataKey="stockWeeks" 
-                            name="당년" 
+                            name="당년(전체)" 
                             stroke="#1e40af" 
                             strokeWidth={2.5}
                             dot={{ r: 4, fill: '#1e40af' }}
@@ -991,11 +1036,29 @@ export default function BrandDashboard() {
                           <Line 
                             type="natural" 
                             dataKey="previousStockWeeks" 
-                            name="전년" 
+                            name="전년(전체)" 
                             stroke="#94a3b8" 
                             strokeWidth={2.5}
                             strokeDasharray="5 5"
                             dot={{ r: 4, fill: '#94a3b8' }}
+                          />
+                          {/* 정상재고 기준 (전체 - 정체재고) */}
+                          <Line 
+                            type="natural" 
+                            dataKey="stockWeeksNormal" 
+                            name="당년(정상)" 
+                            stroke="#10b981" 
+                            strokeWidth={2.5}
+                            dot={{ r: 4, fill: '#10b981' }}
+                          />
+                          <Line 
+                            type="natural" 
+                            dataKey="previousStockWeeksNormal" 
+                            name="전년(정상)" 
+                            stroke="#86efac" 
+                            strokeWidth={2.5}
+                            strokeDasharray="5 5"
+                            dot={{ r: 4, fill: '#86efac' }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -1107,8 +1170,43 @@ export default function BrandDashboard() {
                           <ChevronDown className="h-5 w-5" />
                         )}
                       </Button>
-                      <div>
-                        <CardTitle>{getItemNameFromKey(selectedItem)} 품번별 세부 내역</CardTitle>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <CardTitle>{getItemNameFromKey(selectedItem)} 품번별 세부 내역</CardTitle>
+                          {/* 시즌 제외 필터 토글 */}
+                          <div className="flex items-center gap-1 bg-purple-50 rounded-lg p-0.5 border border-purple-200">
+                            <button
+                              onClick={() => setExcludeSeasonFilter('all')}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                                excludeSeasonFilter === 'all'
+                                  ? 'bg-purple-600 text-white shadow-sm'
+                                  : 'text-purple-600 hover:bg-purple-100'
+                              }`}
+                            >
+                              전체
+                            </button>
+                            <button
+                              onClick={() => setExcludeSeasonFilter('excludeS')}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                                excludeSeasonFilter === 'excludeS'
+                                  ? 'bg-purple-600 text-white shadow-sm'
+                                  : 'text-purple-600 hover:bg-purple-100'
+                              }`}
+                            >
+                              S시즌제외
+                            </button>
+                            <button
+                              onClick={() => setExcludeSeasonFilter('excludeF')}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                                excludeSeasonFilter === 'excludeF'
+                                  ? 'bg-purple-600 text-white shadow-sm'
+                                  : 'text-purple-600 hover:bg-purple-100'
+                              }`}
+                            >
+                              F시즌제외
+                            </button>
+                          </div>
+                        </div>
                         <CardDescription>
                           {selectedMonth} 기준 품번별 재고 및 판매 현황
                         </CardDescription>
@@ -1266,7 +1364,18 @@ export default function BrandDashboard() {
                             const matchesSeason = seasonFilter === 'all' ||
                               product.seasonCategory === seasonFilter;
                             
-                            return matchesSearch && matchesSeason;
+                            // 시즌 제외 필터 (S시즌/F시즌 제외)
+                            const season = product.season || '';
+                            let matchesExcludeFilter = true;
+                            if (excludeSeasonFilter === 'excludeS') {
+                              // S시즌 제외 (예: 24S, 25S 등)
+                              matchesExcludeFilter = !season.includes('S');
+                            } else if (excludeSeasonFilter === 'excludeF') {
+                              // F시즌 제외 (예: 24F, 25F 등)
+                              matchesExcludeFilter = !season.includes('F');
+                            }
+                            
+                            return matchesSearch && matchesSeason && matchesExcludeFilter;
                           });
                           
                           // 정렬
@@ -1322,6 +1431,8 @@ export default function BrandDashboard() {
                             if (products.length === 0) return null;
                             
                             // 합계 계산
+                            const totalEndingInventoryQty = products.reduce((sum, p) => sum + (p.endingInventoryQty || 0), 0);
+                            const totalPreviousEndingInventoryQty = products.reduce((sum, p) => sum + (p.previousEndingInventoryQty || 0), 0);
                             const totalEndingInventory = products.reduce((sum, p) => sum + p.endingInventory, 0);
                             const totalPreviousEndingInventory = products.reduce((sum, p) => sum + p.previousEndingInventory, 0);
                             const totalSalesAmount = products.reduce((sum, p) => sum + p.salesAmount, 0);
@@ -1345,7 +1456,8 @@ export default function BrandDashboard() {
                                     <colgroup>
                                       <col className="w-[120px]" />
                                       <col className="w-[200px]" />
-                                      <col className="w-[140px]" />
+                                      <col className="w-[120px]" />
+                                      <col className="w-[100px]" />
                                       <col className="w-[140px]" />
                                       <col className="w-[140px]" />
                                       <col className="w-[100px]" />
@@ -1358,11 +1470,12 @@ export default function BrandDashboard() {
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'weeks') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('weeks'); setSortDirection('desc'); } }}>
                                           <div className="flex items-center justify-center gap-1">재고주수 {sortColumn === 'weeks' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">기말재고수량</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'endingInventory') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('endingInventory'); setSortDirection('desc'); } }}>
-                                          <div className="flex items-center justify-center gap-1">기말재고 {sortColumn === 'endingInventory' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                          <div className="flex items-center justify-center gap-1">기말재고택(V+) {sortColumn === 'endingInventory' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'salesAmount') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('salesAmount'); setSortDirection('desc'); } }}>
-                                          <div className="flex items-center justify-center gap-1">판매액(V+) {sortColumn === 'salesAmount' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                          <div className="flex items-center justify-center gap-1">실판매액(V+) {sortColumn === 'salesAmount' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">재고YOY</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">판매YOY</th>
@@ -1376,6 +1489,12 @@ export default function BrandDashboard() {
                                             <p className="font-bold text-slate-800">{formatNumberWithDecimal(avgWeeks)}주</p>
                                             <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(avgPreviousWeeks)}주</p>
                                             <p className={`text-[10px] font-semibold ${avgWeeks - avgPreviousWeeks < 0 ? 'text-emerald-600' : 'text-red-600'}`}>{avgWeeks - avgPreviousWeeks < 0 ? '-' : '+'}{formatNumberWithDecimal(Math.abs(avgWeeks - avgPreviousWeeks))}주</p>
+                                          </div>
+                                        </td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          <div>
+                                            <p className="font-bold text-slate-800">{formatNumber(totalEndingInventoryQty)}</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(totalPreviousEndingInventoryQty)}</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
@@ -1425,6 +1544,12 @@ export default function BrandDashboard() {
                                                 <p className="font-semibold text-slate-900">{formatNumberWithDecimal(product.weeks)}주</p>
                                                 <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(product.previousWeeks)}주</p>
                                                 <p className={`text-[10px] font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>{isImproved ? '-' : '+'}{formatNumberWithDecimal(Math.abs(weeksDiff))}주</p>
+                                              </div>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              <div>
+                                                <p className="font-semibold text-slate-900">{formatNumber(product.endingInventoryQty || 0)}</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousEndingInventoryQty || 0)}</p>
                                               </div>
                                             </td>
                                             <td className="py-2 px-3 text-xs text-center">

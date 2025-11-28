@@ -247,7 +247,7 @@ monthly_season_summary AS (
     GROUP BY yyyymm
 ),
 
--- 월별 재고주수 계산용 매출
+-- 월별 재고주수 계산용 매출 (전체)
 monthly_sale AS (
     SELECT 
         a.pst_yyyymm as yyyymm,
@@ -264,7 +264,25 @@ monthly_sale AS (
     GROUP BY a.pst_yyyymm
 ),
 
--- 월별 평균 매출 (재고주수용)
+-- 월별 정체재고 판매액 집계
+monthly_stagnant_sale AS (
+    SELECT 
+        yyyymm,
+        SUM(CASE WHEN season_type = '정체재고' THEN tag_sale_amt ELSE 0 END) as stagnant_sale_amt
+    FROM monthly_classified_stock
+    GROUP BY yyyymm
+),
+
+-- 월별 정상재고 판매액 (전체 - 정체재고)
+monthly_normal_sale AS (
+    SELECT 
+        ms.yyyymm,
+        ms.tag_sale_amt - COALESCE(mss.stagnant_sale_amt, 0) as normal_sale_amt
+    FROM monthly_sale ms
+    LEFT JOIN monthly_stagnant_sale mss ON ms.yyyymm = mss.yyyymm
+),
+
+-- 월별 평균 매출 (재고주수용 - 전체)
 monthly_avg_sale AS (
     SELECT 
         yyyymm,
@@ -273,6 +291,33 @@ monthly_avg_sale AS (
           : `AVG(tag_sale_amt) OVER (ORDER BY yyyymm ROWS BETWEEN ${monthsForAvg - 1} PRECEDING AND CURRENT ROW) as avg_tag_sale_amt`
         }
     FROM monthly_sale
+),
+
+-- 월별 평균 정상재고 판매액 (정상재고 재고주수용)
+monthly_avg_normal_sale AS (
+    SELECT 
+        yyyymm,
+        ${weeksType === '4weeks' 
+          ? 'normal_sale_amt as avg_normal_sale_amt' 
+          : `AVG(normal_sale_amt) OVER (ORDER BY yyyymm ROWS BETWEEN ${monthsForAvg - 1} PRECEDING AND CURRENT ROW) as avg_normal_sale_amt`
+        }
+    FROM monthly_normal_sale
+),
+
+-- 월별 정상재고 재고주수 계산용 (정상재고 / 정상재고 평균 판매)
+-- 정상재고 = 전체 재고 - 정체재고
+monthly_normal_stock_weeks AS (
+    SELECT 
+        ss.yyyymm,
+        ss.total_stock - ss.stagnant_stock as normal_stock,
+        mans.avg_normal_sale_amt,
+        CASE 
+            WHEN mans.avg_normal_sale_amt > 0 AND (mans.avg_normal_sale_amt / 30 * 7) > 0
+            THEN ROUND((ss.total_stock - ss.stagnant_stock) / (mans.avg_normal_sale_amt / 30 * 7), 1)
+            ELSE NULL
+        END as normal_stock_weeks
+    FROM monthly_season_summary ss
+    LEFT JOIN monthly_avg_normal_sale mans ON ss.yyyymm = mans.yyyymm
 )
 
 -- 최종 결과
@@ -284,6 +329,7 @@ SELECT
         THEN ROUND(ss.total_stock / (mas.avg_tag_sale_amt / 30 * 7), 1)
         ELSE NULL
     END as stock_weeks,
+    ns.normal_stock_weeks,
     ss.current_season_stock,
     ss.next_season_stock,
     ss.old_season_stock,
@@ -291,6 +337,7 @@ SELECT
     ss.total_stock
 FROM monthly_season_summary ss
 LEFT JOIN monthly_avg_sale mas ON ss.yyyymm = mas.yyyymm
+LEFT JOIN monthly_normal_stock_weeks ns ON ss.yyyymm = ns.yyyymm
 ORDER BY ss.yyyymm
   `;
 }
@@ -341,6 +388,9 @@ export function formatChartData(rows: any[]): any {
       month: `${year}-${monthStr}`,
       stockWeeks: Number(cy.STOCK_WEEKS || cy.stock_weeks) || 0,
       previousStockWeeks: Number(py?.STOCK_WEEKS || py?.stock_weeks) || 0,
+      // 정상재고 재고주수 추가 (전체 - 정체재고)
+      stockWeeksNormal: Number(cy.NORMAL_STOCK_WEEKS || cy.normal_stock_weeks) || 0,
+      previousStockWeeksNormal: Number(py?.NORMAL_STOCK_WEEKS || py?.normal_stock_weeks) || 0,
       // 당년 시즌별 재고택금액
       currentSeasonStock: cyCurrentSeasonStock,
       nextSeasonStock: cyNextSeasonStock,
