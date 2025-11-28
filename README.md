@@ -1,7 +1,3 @@
-악세사리 재고주수 대시보드
-
-아래 전체 블록을 그대로 복사해 README.md에 넣으면 된다.
-
 # 악세사리 재고주수 대시보드  
 브랜드별 TAG 금액 기준 Weeks of Inventory 시각화 (MLB / MLB KIDS / DISCOVERY / DUVETICA / SERGIO TACCHINI)
 
