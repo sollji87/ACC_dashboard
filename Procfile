@@ -1,2 +1,1 @@
-web: npm run start:prod
-
+web: npm --prefix frontend run start
