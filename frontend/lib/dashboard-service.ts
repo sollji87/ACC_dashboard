@@ -2,6 +2,8 @@
  * 대시보드 데이터 처리 로직
  */
 
+import { getPreviousYearMonth, parseYearMonth, getItemKey, getItemNameFromKey } from './date-utils';
+
 interface InventoryWeeksData {
   ITEM_STD: string;
   PERIOD_TYPE?: string; // 'monthly' or 'accumulated'
@@ -12,26 +14,6 @@ interface InventoryWeeksData {
   CY_ACT_SALE_AMT: number;
   PY_ACT_SALE_AMT: number;
   SEQ: number;
-}
-
-/**
- * 전년 월 계산
- */
-function getPreviousYearMonth(yyyymm: string): string {
-  const year = parseInt(yyyymm.substring(0, 4));
-  const month = parseInt(yyyymm.substring(4, 6));
-  
-  const prevYear = year - 1;
-  return `${prevYear}${String(month).padStart(2, '0')}`;
-}
-
-/**
- * YYYYMM 형식에서 년월 추출 (예: '202510' -> {year: 2025, month: 10})
- */
-function parseYearMonth(yyyymm: string): { year: number; month: number } {
-  const year = parseInt(yyyymm.substring(0, 4));
-  const month = parseInt(yyyymm.substring(4, 6));
-  return { year, month };
 }
 
 /**
@@ -234,13 +216,13 @@ select '전체' as item_std
         , 'monthly' as period_type
         , case when sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+                / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
                 , 1)
             else null
           end as cy_stock_week_cnt
         , case when sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+                / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
                 , 1)
             else null
           end as py_stock_week_cnt
@@ -290,13 +272,13 @@ select a.item_std
         , 'monthly' as period_type
         , case when sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+                / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
                 , 1)
             else null
           end as cy_stock_week_cnt
         , case when sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+                / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
                 , 1)
             else null
           end as py_stock_week_cnt
@@ -491,31 +473,9 @@ export function formatInventoryData(
   return result;
 }
 
-/**
- * 아이템명을 키로 변환
- */
-export function getItemKey(itemStd: string): string {
-  const mapping: { [key: string]: string } = {
-    신발: 'shoes',
-    모자: 'hat',
-    가방: 'bag',
-    기타ACC: 'other',
-  };
-  return mapping[itemStd] || itemStd;
-}
-
-/**
- * 아이템 키를 아이템명으로 변환
- */
-export function getItemNameFromKey(itemKey: string): string {
-  const mapping: { [key: string]: string } = {
-    shoes: '신발',
-    hat: '모자',
-    bag: '가방',
-    other: '기타ACC',
-  };
-  return mapping[itemKey] || itemKey;
-}
+// getItemKey, getItemNameFromKey 함수는 date-utils.ts에서 import하여 사용
+// re-export for backward compatibility
+export { getItemKey, getItemNameFromKey } from './date-utils';
 
 /**
  * 품번별 재고주수 쿼리 생성 (당월 + 누적 데이터 포함 + 정체재고 판별)
@@ -731,13 +691,13 @@ select a.prdt_cd
         , 'monthly' as period_type
         , case when sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+                / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
                 , 1)
             else null
           end as cy_stock_week_cnt
         , case when sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+                / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
                 , 1)
             else null
           end as py_stock_week_cnt

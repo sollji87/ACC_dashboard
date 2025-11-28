@@ -149,10 +149,10 @@ with item as (
 )
 select '전체' as item_std
         , round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-            / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+            / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
             , 1) as cy_stock_week_cnt
         , round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-            / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+            / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
             , 1) as py_stock_week_cnt
         , sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) as cy_end_stock_tag_amt
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
@@ -169,10 +169,10 @@ and a.div = d.div
 union all
 select a.item_std
         , round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-            / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+            / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
             , 1) as cy_stock_week_cnt
         , round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-            / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
+            / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 30 * 7),0)
             , 1) as py_stock_week_cnt
         , sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) as cy_end_stock_tag_amt
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt

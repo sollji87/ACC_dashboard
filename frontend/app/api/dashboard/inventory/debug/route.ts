@@ -5,13 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
-
-function getCurrentYearMonth(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}${month}`;
-}
+import { getCurrentYearMonth, getPreviousYearMonth } from '@/lib/date-utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,9 +14,8 @@ export async function GET(request: NextRequest) {
     const brandCode = searchParams.get('brandCode') || 'M';
     const month = searchParams.get('month');
     const yyyymm = month || getCurrentYearMonth();
-    const pyYyyymm = yyyymm.substring(0, 4) === '2025' 
-      ? `${parseInt(yyyymm.substring(0, 4)) - 1}${yyyymm.substring(4)}`
-      : `${parseInt(yyyymm.substring(0, 4)) - 1}${yyyymm.substring(4)}`;
+    // 전년 동일 월 계산 (공통 유틸 함수 사용)
+    const pyYyyymm = getPreviousYearMonth(yyyymm);
 
     if (!productCode) {
       return NextResponse.json(
@@ -161,7 +154,7 @@ select
     , sum(s.cm_end_stock_tag_amt) as ending_inventory
     , sum(b.c6m_tag_sale_amt) as tag_sale_amount
     , sum(d.act_sale_amt) as act_sale_amount
-    , sum(s.cm_end_stock_tag_amt) / nullif(sum(b.c6m_tag_sale_amt / 1 / 30 * 7), 0) as calculated_weeks
+    , sum(s.cm_end_stock_tag_amt) / nullif(sum(b.c6m_tag_sale_amt / 30 * 7), 0) as calculated_weeks
 from item i
 left join cm_stock s on i.prdt_cd = s.prdt_cd and s.div = 'cy'
 left join c6m_sale b on i.prdt_cd = b.prdt_cd and b.div = 'cy'
@@ -177,7 +170,7 @@ select
     , sum(s.cm_end_stock_tag_amt) as ending_inventory
     , sum(b.c6m_tag_sale_amt) as tag_sale_amount
     , sum(d.act_sale_amt) as act_sale_amount
-    , sum(s.cm_end_stock_tag_amt) / nullif(sum(b.c6m_tag_sale_amt / 1 / 30 * 7), 0) as calculated_weeks
+    , sum(s.cm_end_stock_tag_amt) / nullif(sum(b.c6m_tag_sale_amt / 30 * 7), 0) as calculated_weeks
 from item i
 left join cm_stock s on i.prdt_cd = s.prdt_cd and s.div = 'py'
 left join c6m_sale b on i.prdt_cd = b.prdt_cd and b.div = 'py'
