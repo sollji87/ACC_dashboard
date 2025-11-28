@@ -21,6 +21,29 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // SQL 인젝션 방지: 파라미터 검증
+    if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 브랜드 코드입니다.' },
+        { status: 400 }
+      );
+    }
+    
+    if (!/^\d{6}$/.test(yyyymm)) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 월 형식입니다. (YYYYMM 형식 필요)' },
+        { status: 400 }
+      );
+    }
+    
+    const validItemStd = ['신발', '모자', '가방', '기타ACC', 'all'];
+    if (!validItemStd.includes(itemStd)) {
+      return NextResponse.json(
+        { success: false, error: '유효하지 않은 아이템 분류입니다.' },
+        { status: 400 }
+      );
+    }
+
     console.log('📊 차트 데이터 조회 시작:', { brandCode, yyyymm, weeksType, itemStd, excludePurchase });
 
     const query = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd, excludePurchase);

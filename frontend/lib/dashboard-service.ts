@@ -518,7 +518,7 @@ export function getItemNameFromKey(itemKey: string): string {
 }
 
 /**
- * 품번별 재고주수 쿼리 생성 (당월 + 누적 데이터 포함)
+ * 품번별 재고주수 쿼리 생성 (당월 + 누적 데이터 포함 + 정체재고 판별)
  */
 export function buildProductDetailQuery(brandCode: string, itemStd: string, yyyymm: string): string {
   const pyYyyymm = getPreviousYearMonth(yyyymm);
@@ -548,6 +548,17 @@ with item as (
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Bag'     then '가방'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Acc_etc' then '기타ACC'
         end = '${itemStd}'
+)
+-- 해당 아이템 재고 기준금액 (정체재고 판별용 - 차트와 동일하게 해당 아이템 기준)
+, total_item_stock as (
+    select 
+        sum(a.end_stock_tag_amt) as total_stock_amt,
+        sum(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
+    from sap_fnf.dw_ivtr_shop_prdt_m a
+    join item b on a.prdt_cd = b.prdt_cd
+    where a.brd_cd = '${brandCode}'
+      and a.yyyymm = '${yyyymm}'
+      and b.item_std IS NOT NULL
 )
 -- cm_stock: 당월 재고 (품번별)
 , cm_stock as (
@@ -713,7 +724,7 @@ with item as (
         and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}' -- 1월부터 해당월까지 누적
     group by b.prdt_cd
 )
--- 당월 데이터 - 품번별 (시즌 정보 포함)
+-- 당월 데이터 - 품번별 (시즌 정보 + 정체재고 판별)
 select a.prdt_cd
         , max(a.product_name) as product_name
         , max(e.sesn) as sesn
@@ -734,17 +745,21 @@ select a.prdt_cd
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
         , sum(case when a.div='cy' then d.act_sale_amt else 0 end) as cy_act_sale_amt
         , sum(case when a.div='py' then d.act_sale_amt else 0 end) as py_act_sale_amt
+        , sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) as cy_tag_sale_amt
+        , sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) as py_tag_sale_amt
+        , max(tas.threshold_amt) as threshold_amt
 from cm_stock a 
 join item e on a.prdt_cd = e.prdt_cd
-join c6m_sale b
+cross join total_item_stock tas
+left join c6m_sale b
 on a.prdt_cd = b.prdt_cd
 and a.div = b.div
-join act_sale d
+left join act_sale d
 on a.prdt_cd = d.prdt_cd
 and a.div = d.div
 group by a.prdt_cd
 union all
--- 누적 데이터 - 품번별 (시즌 정보 포함)
+-- 누적 데이터 - 품번별 (시즌 정보 + 정체재고 판별)
 select a.prdt_cd
         , max(a.product_name) as product_name
         , max(e.sesn) as sesn
@@ -765,12 +780,16 @@ select a.prdt_cd
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
         , sum(case when a.div='cy' then d_acc.act_sale_amt else 0 end) as cy_act_sale_amt
         , sum(case when a.div='py' then d_acc.act_sale_amt else 0 end) as py_act_sale_amt
+        , sum(case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) as cy_tag_sale_amt
+        , sum(case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) as py_tag_sale_amt
+        , max(tas.threshold_amt) as threshold_amt
 from cm_stock a 
 join item e on a.prdt_cd = e.prdt_cd
-join c6m_sale_accumulated b_acc
+cross join total_item_stock tas
+left join c6m_sale_accumulated b_acc
 on a.prdt_cd = b_acc.prdt_cd
 and a.div = b_acc.div
-join act_sale_accumulated d_acc
+left join act_sale_accumulated d_acc
 on a.prdt_cd = d_acc.prdt_cd
 and a.div = d_acc.div
 group by a.prdt_cd
@@ -790,8 +809,11 @@ interface ProductDetailData {
   PY_STOCK_WEEK_CNT: number;
   CY_END_STOCK_TAG_AMT: number;
   PY_END_STOCK_TAG_AMT: number;
-  CY_ACT_SALE_AMT: number;
+  CY_ACT_SALE_AMT: number;  // 실판매출 (화면 표시용)
   PY_ACT_SALE_AMT: number;
+  CY_TAG_SALE_AMT: number;  // 택판매출 (정체재고 판별용)
+  PY_TAG_SALE_AMT: number;
+  THRESHOLD_AMT?: number; // 정체재고 판별 기준금액
 }
 
 /**
@@ -826,62 +848,93 @@ export function formatProductDetailData(
   }
 
   // 시즌 기준 그룹핑을 위한 헬퍼 함수
-  // 현재 시즌 판단 규칙:
-  // - 25N, 26N: 항상 현재 시즌
-  // - 25F: 9월~2월 기간일 때만 현재 시즌
-  // - 25S: 3월~8월 기간일 때만 현재 시즌 (25S는 기본적으로 과거 시즌)
-  const getSeasonCategory = (prdtCd: string, sesn?: string): 'current' | 'old' => {
-    // 시즌 정보가 있으면 시즌 코드로 판단
-    if (sesn) {
-      const sesnUpper = sesn.toUpperCase();
-      
-      // 25N, 26N은 항상 현재 시즌
-      if (sesnUpper.includes(`${currentYear}N`) || sesnUpper.includes(`${currentYear + 1}N`)) {
-        return 'current';
+  // 당시즌/차기시즌/정체재고/과시즌 4가지 분류
+  // - FW 시즌 (9월~2월): 당시즌=25N,25F / 차기시즌=26N,26S,26F 이후 / 과시즌=그 외
+  // - SS 시즌 (3월~8월): 당시즌=25N,25S / 차기시즌=25F,26N,26S 이후 / 과시즌=그 외
+  // - 정체재고: 과시즌 중 판매금액이 기준금액(0.01%) 미만인 품목
+  const getSeasonCategory = (
+    prdtCd: string, 
+    sesn: string | undefined, 
+    saleAmt: number, 
+    thresholdAmt: number
+  ): 'current' | 'next' | 'stagnant' | 'old' => {
+    const sesnUpper = (sesn || '').toUpperCase();
+    
+    // 당시즌 조건
+    const isCurrentSeason = (): boolean => {
+      if (currentMonth >= 9 || currentMonth <= 2) {
+        // FW 시즌: 당시즌 = 25N, 25F
+        return sesnUpper.includes(`${currentYear}N`) || sesnUpper.includes(`${currentYear}F`);
+      } else {
+        // SS 시즌: 당시즌 = 25N, 25S
+        return sesnUpper.includes(`${currentYear}N`) || sesnUpper.includes(`${currentYear}S`);
       }
-      
-      // 25F는 9월~2월 기간일 때만 현재 시즌
-      if (sesnUpper.includes(`${currentYear}F`)) {
-        if (currentMonth >= 9 || currentMonth <= 2) {
-          return 'current';
-        }
-        return 'old';
+    };
+    
+    // 차기시즌 조건
+    const isNextSeason = (): boolean => {
+      if (currentMonth >= 9 || currentMonth <= 2) {
+        // FW 시즌: 차기시즌 = 26N, 26S, 26F, 27N, 27S...
+        return sesnUpper.includes(`${currentYear + 1}N`) || 
+               sesnUpper.includes(`${currentYear + 1}S`) || 
+               sesnUpper.includes(`${currentYear + 1}F`) ||
+               sesnUpper.includes(`${currentYear + 2}N`) ||
+               sesnUpper.includes(`${currentYear + 2}S`);
+      } else {
+        // SS 시즌: 차기시즌 = 25F, 26N, 26S, 26F, 27N, 27S...
+        return sesnUpper.includes(`${currentYear}F`) || 
+               sesnUpper.includes(`${currentYear + 1}N`) || 
+               sesnUpper.includes(`${currentYear + 1}S`) ||
+               sesnUpper.includes(`${currentYear + 1}F`) ||
+               sesnUpper.includes(`${currentYear + 2}N`) ||
+               sesnUpper.includes(`${currentYear + 2}S`);
       }
-      
-      // 25S는 3월~8월 기간일 때만 현재 시즌
-      if (sesnUpper.includes(`${currentYear}S`)) {
-        if (currentMonth >= 3 && currentMonth <= 8) {
-          return 'current';
-        }
-        return 'old';
-      }
+    };
+    
+    // 당시즌인지 확인
+    if (isCurrentSeason()) {
+      return 'current';
     }
     
-    // 시즌 정보가 없으면 품번 코드 앞 2자리로 판단 (현재 연도 또는 다음 연도)
-    const codePrefix = parseInt(prdtCd.substring(0, 2));
-    if (!isNaN(codePrefix) && (codePrefix === currentYear || codePrefix === currentYear + 1)) {
-      return 'current';
+    // 차기시즌인지 확인
+    if (isNextSeason()) {
+      return 'next';
+    }
+    
+    // 과시즌 (당시즌, 차기시즌이 아닌 경우)
+    // 정체재고 판별: 판매금액이 기준금액(전체 ACC 재고의 0.01%) 미만이면 정체재고
+    // thresholdAmt가 0이거나 유효하지 않으면 정체재고로 분류하지 않음
+    if (thresholdAmt > 0 && saleAmt < thresholdAmt) {
+      return 'stagnant';
     }
     
     return 'old';
   };
 
+  // Snowflake 컬럼명 대소문자 처리 헬퍼 함수
+  const getVal = (row: any, upperKey: string): any => {
+    return row[upperKey] ?? row[upperKey.toLowerCase()] ?? null;
+  };
+
   // 당월 데이터 포맷팅 및 필터링 (기말재고 0이고 판매액 0인 항목 제거)
   const monthlyProducts = monthlyRows
-    .map((row) => {
-      const cyEndStock = Number(row.CY_END_STOCK_TAG_AMT) || 0;
-      const pyEndStock = Number(row.PY_END_STOCK_TAG_AMT) || 0;
-      const cyWeeks = Number(row.CY_STOCK_WEEK_CNT) || 0;
-      const pyWeeks = Number(row.PY_STOCK_WEEK_CNT) || 0;
-      const cySale = Number(row.CY_ACT_SALE_AMT) || 0;
-      const pySale = Number(row.PY_ACT_SALE_AMT) || 0;
+    .map((row: any) => {
+      const cyEndStock = Number(getVal(row, 'CY_END_STOCK_TAG_AMT')) || 0;
+      const pyEndStock = Number(getVal(row, 'PY_END_STOCK_TAG_AMT')) || 0;
+      const cyWeeks = Number(getVal(row, 'CY_STOCK_WEEK_CNT')) || 0;
+      const pyWeeks = Number(getVal(row, 'PY_STOCK_WEEK_CNT')) || 0;
+      const cySale = Number(getVal(row, 'CY_ACT_SALE_AMT')) || 0;  // 실판매출 (화면 표시용)
+      const pySale = Number(getVal(row, 'PY_ACT_SALE_AMT')) || 0;
+      const cyTagSale = Number(getVal(row, 'CY_TAG_SALE_AMT')) || 0;  // 택판매출 (정체재고 판별용)
+      const thresholdAmt = Number(getVal(row, 'THRESHOLD_AMT')) || 0;
       
-      const seasonCategory = getSeasonCategory(row.PRDT_CD, row.SESN);
+      // 정체재고 판별은 택판매출 기준
+      const seasonCategory = getSeasonCategory(getVal(row, 'PRDT_CD'), getVal(row, 'SESN'), cyTagSale, thresholdAmt);
       
       return {
-        productCode: row.PRDT_CD,
-        productName: row.PRODUCT_NAME || row.PRDT_CD,
-        season: row.SESN || '',
+        productCode: getVal(row, 'PRDT_CD'),
+        productName: getVal(row, 'PRODUCT_NAME') || getVal(row, 'PRDT_CD'),
+        season: getVal(row, 'SESN') || '',
         seasonCategory: seasonCategory,
         weeks: cyWeeks,
         previousWeeks: pyWeeks,
@@ -900,19 +953,23 @@ export function formatProductDetailData(
   
   // 누적 데이터 포맷팅 및 필터링 (기말재고 0이고 판매액 0인 항목 제거)
   const accumulatedProducts = accumulatedRows
-    .map((row) => {
-      const cyEndStock = Number(row.CY_END_STOCK_TAG_AMT) || 0;
-      const pyEndStock = Number(row.PY_END_STOCK_TAG_AMT) || 0;
-      const cyWeeks = Number(row.CY_STOCK_WEEK_CNT) || 0;
-      const pyWeeks = Number(row.PY_STOCK_WEEK_CNT) || 0;
-      const cySale = Number(row.CY_ACT_SALE_AMT) || 0;
-      const pySale = Number(row.PY_ACT_SALE_AMT) || 0;
-      const seasonCategory = getSeasonCategory(row.PRDT_CD, row.SESN);
+    .map((row: any) => {
+      const cyEndStock = Number(getVal(row, 'CY_END_STOCK_TAG_AMT')) || 0;
+      const pyEndStock = Number(getVal(row, 'PY_END_STOCK_TAG_AMT')) || 0;
+      const cyWeeks = Number(getVal(row, 'CY_STOCK_WEEK_CNT')) || 0;
+      const pyWeeks = Number(getVal(row, 'PY_STOCK_WEEK_CNT')) || 0;
+      const cySale = Number(getVal(row, 'CY_ACT_SALE_AMT')) || 0;  // 실판매출 (화면 표시용)
+      const pySale = Number(getVal(row, 'PY_ACT_SALE_AMT')) || 0;
+      const cyTagSale = Number(getVal(row, 'CY_TAG_SALE_AMT')) || 0;  // 택판매출 (정체재고 판별용)
+      const thresholdAmt = Number(getVal(row, 'THRESHOLD_AMT')) || 0;
+      
+      // 정체재고 판별은 택판매출 기준
+      const seasonCategory = getSeasonCategory(getVal(row, 'PRDT_CD'), getVal(row, 'SESN'), cyTagSale, thresholdAmt);
       
       return {
-        productCode: row.PRDT_CD,
-        productName: row.PRODUCT_NAME || row.PRDT_CD,
-        season: row.SESN || '',
+        productCode: getVal(row, 'PRDT_CD'),
+        productName: getVal(row, 'PRODUCT_NAME') || getVal(row, 'PRDT_CD'),
+        season: getVal(row, 'SESN') || '',
         seasonCategory: seasonCategory,
         weeks: cyWeeks,
         previousWeeks: pyWeeks,
@@ -929,15 +986,20 @@ export function formatProductDetailData(
       return product.endingInventory !== 0 || product.salesAmount !== 0;
     });
   
+  // 기준금액 추출 (첫 번째 행에서 - getVal 사용하여 대소문자 무관하게 처리)
+  const thresholdAmt = monthlyRows.length > 0 ? Number(getVal(monthlyRows[0], 'THRESHOLD_AMT')) || 0 : 0;
+  
   console.log(`📊 [${itemStd}] 최종 포맷팅 결과:`, {
     monthly: monthlyProducts.length,
     accumulated: accumulatedProducts.length,
+    thresholdAmt: thresholdAmt,
   });
   
   return {
     itemStd,
     monthly: monthlyProducts,
     accumulated: accumulatedProducts,
+    thresholdAmt: thresholdAmt,
   };
 }
 

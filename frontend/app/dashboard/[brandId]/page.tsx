@@ -16,7 +16,26 @@ import { getBrandById, BRANDS } from '@/lib/brands';
 import { getRealData, getSampleData, getMonthOptions, BrandDashboardData } from '@/lib/data';
 import { fetchProductDetails, ProductDetailResponse } from '@/lib/api';
 import { getItemNameFromKey } from '@/lib/dashboard-service';
-import { ArrowLeft, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowLeft, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Search, ArrowUp, ArrowDown, Download } from 'lucide-react';
+
+// 커스텀 saveAs 함수 (file-saver 대체)
+const saveAs = (blob: Blob, filename: string) => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  
+  // 클릭 이벤트를 비동기로 트리거
+  setTimeout(() => {
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 250);
+  }, 0);
+};
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, TooltipProps } from 'recharts';
 
 // 재고주수 추이 차트용 커스텀 범례
@@ -316,6 +335,7 @@ const CustomInventoryTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+
 export default function BrandDashboard() {
   const params = useParams();
   const router = useRouter();
@@ -333,7 +353,7 @@ export default function BrandDashboard() {
   const [isLoadingDetails, setIsLoadingDetails] = useState(false); // 품번별 데이터 로딩 상태
   const [isDetailExpanded, setIsDetailExpanded] = useState<{ [key: string]: boolean }>({}); // 품번별 세부 내역 접기/펼치기 상태
   const [searchFilter, setSearchFilter] = useState<string>(''); // 검색 필터 (품번/품명)
-  const [seasonFilter, setSeasonFilter] = useState<'all' | 'current' | 'old'>('all'); // 시즌 필터
+  const [seasonFilter, setSeasonFilter] = useState<'all' | 'current' | 'next' | 'stagnant' | 'old'>('all'); // 시즌 필터
   const [sortColumn, setSortColumn] = useState<'endingInventory' | 'salesAmount' | 'weeks' | null>(null); // 정렬 컬럼
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // 정렬 방향
   const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('12weeks'); // 4주/8주/12주 토글
@@ -341,6 +361,9 @@ export default function BrandDashboard() {
   const [excludePurchase, setExcludePurchase] = useState<boolean>(false); // 사입제외 옵션
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태
+  const [selectedProductForDetail, setSelectedProductForDetail] = useState<any>(null); // 클릭한 품번 상세정보
+  const [productMonthlyTrend, setProductMonthlyTrend] = useState<any[]>([]); // 품번별 월별 추이 데이터
+  const [isLoadingMonthlyTrend, setIsLoadingMonthlyTrend] = useState(false); // 월별 추이 로딩 상태
 
   const monthOptions = getMonthOptions();
 
@@ -446,6 +469,41 @@ export default function BrandDashboard() {
 
     loadChartData();
   }, [brand, selectedMonth, weeksType, selectedItemForChart, excludePurchase]);
+
+  // 품번별 월별 추이 데이터 로드
+  useEffect(() => {
+    if (!selectedProductForDetail || !brand) {
+      setProductMonthlyTrend([]);
+      return;
+    }
+
+    const loadMonthlyTrend = async () => {
+      setIsLoadingMonthlyTrend(true);
+      try {
+        const yyyymm = selectedMonth.replace(/-/g, '');
+        const url = `/api/dashboard/product/monthly-trend?brandCode=${encodeURIComponent(brand.code)}&productCode=${encodeURIComponent(selectedProductForDetail.productCode)}&endMonth=${yyyymm}`;
+        console.log('📊 품번 월별 추이 요청:', url);
+        
+        const response = await fetch(url);
+        const result = await response.json();
+        
+        if (result.success && result.data?.monthlyTrend) {
+          console.log('✅ 품번 월별 추이 로드 성공:', result.data.monthlyTrend.length, '개월');
+          setProductMonthlyTrend(result.data.monthlyTrend);
+        } else {
+          console.error('❌ 품번 월별 추이 로드 실패:', result.error);
+          setProductMonthlyTrend([]);
+        }
+      } catch (error) {
+        console.error('❌ 품번 월별 추이 로드 에러:', error);
+        setProductMonthlyTrend([]);
+      } finally {
+        setIsLoadingMonthlyTrend(false);
+      }
+    };
+
+    loadMonthlyTrend();
+  }, [selectedProductForDetail, brand, selectedMonth]);
 
   if (!brand) {
     return (
@@ -629,7 +687,14 @@ export default function BrandDashboard() {
                     className={`shadow-sm border-slate-200 transition-all duration-300 cursor-pointer hover:shadow-lg ${colorClass.hover} ${
                       isSelected ? `border-2 ${colorClass.selected} shadow-lg scale-[1.02]` : ''
                     }`}
-                    onClick={() => setSelectedItem(isSelected ? null : item.key)}
+                    onClick={() => {
+                      const newItem = isSelected ? null : item.key;
+                      setSelectedItem(newItem);
+                      // 카드 클릭 시 차트 필터도 연동 (YOY 정확도 향상)
+                      if (newItem) {
+                        setSelectedItemForChart(newItem as 'all' | 'shoes' | 'hat' | 'bag' | 'other');
+                      }
+                    }}
                   >
                     <CardHeader className="pb-0">
                       <CardTitle className={`text-lg font-bold ${item.titleColor} flex items-center gap-2`}>
@@ -1047,33 +1112,101 @@ export default function BrandDashboard() {
                         <CardDescription>
                           {selectedMonth} 기준 품번별 재고 및 판매 현황
                         </CardDescription>
-                        <p className="text-xs text-slate-500 mt-1">
-                          현재 시즌: 25N, 26N {(() => {
+                        {/* 시즌 정의 - 한 줄 */}
+                        <div className="mt-1.5 text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          {(() => {
                             const month = parseInt(selectedMonth.split('-')[1]);
-                            if (month >= 9 || month <= 2) {
-                              return ', 25F';
-                            } else if (month >= 3 && month <= 8) {
-                              return ', 25S';
-                            }
-                            return '';
-                          })()} / 과거 시즌: 그 외 모든 시즌
-                        </p>
+                            const year = parseInt(selectedMonth.split('-')[0]);
+                            const yy = year % 100;
+                            const isFW = month >= 9 || month <= 2;
+                            const thresholdText = productDetails && productDetails.thresholdAmt > 0 
+                              ? ` (기준:${Math.round(productDetails.thresholdAmt / 1000000).toLocaleString()}백만)` 
+                              : '';
+                            
+                            return (
+                              <>
+                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-500"></span><strong>당시즌</strong> {isFW ? `${yy}N,${yy}F` : `${yy}N,${yy}S`}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-violet-500"></span><strong>차기시즌</strong> {isFW ? `${yy+1}N,${yy+1}S,${yy+1}F~` : `${yy}F,${yy+1}N~`}</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-slate-400"></span><strong>과시즌</strong> 그외(정체제외)</span>
+                                <span className="text-slate-300">|</span>
+                                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-500"></span><strong>정체재고</strong> 과시즌中 판매&lt;0.01%{thresholdText}</span>
+                              </>
+                            );
+                          })()}
+                        </div>
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedItem(null);
-                        setIsDetailExpanded(prev => ({
-                          ...prev,
-                          [selectedItem]: false
-                        }));
-                      }}
-                      className="text-slate-500 hover:text-slate-700"
-                    >
-                      닫기
-                    </Button>
+                    <div className="flex gap-2">
+                      {/* 엑셀 다운로드 버튼 */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!productDetails) return;
+                          
+                          const products = periodType === 'monthly' ? productDetails.monthly : productDetails.accumulated;
+                          
+                          // CSV 헤더
+                          const headers = ['시즌구분', '품번', '품명', '시즌', '재고주수', '전년재고주수', '기말재고(백만)', '전년기말재고(백만)', '판매액(백만)', '전년판매액(백만)', '재고YOY(%)', '판매YOY(%)'];
+                          
+                          // CSV 데이터
+                          const csvData = products.map(p => {
+                            const seasonLabel = p.seasonCategory === 'current' ? '당시즌' 
+                              : p.seasonCategory === 'next' ? '차기시즌' 
+                              : p.seasonCategory === 'stagnant' ? '정체재고' 
+                              : '과시즌';
+                            return [
+                              seasonLabel,
+                              p.productCode,
+                              p.productName || '',
+                              p.season || '',
+                              p.weeks,
+                              p.previousWeeks,
+                              p.endingInventory,
+                              p.previousEndingInventory,
+                              p.salesAmount,
+                              p.previousSalesAmount,
+                              p.inventoryYOY,
+                              p.salesYOY
+                            ];
+                          });
+                          
+                          // BOM 추가 (한글 깨짐 방지)
+                          const BOM = '\uFEFF';
+                          const csvContent = BOM + [headers, ...csvData].map(row => row.join(',')).join('\n');
+                          
+                          // 파일명 생성 (영문+숫자로)
+                          const itemCode = selectedItem === 'shoes' ? 'shoes' : 
+                                          selectedItem === 'hat' ? 'hat' : 
+                                          selectedItem === 'bag' ? 'bag' : 'etc';
+                          const monthCode = selectedMonth.replace(/-/g, '');
+                          const periodCode = periodType === 'monthly' ? 'monthly' : 'accumulated';
+                          const fileName = `MLB_ACC_${itemCode}_${monthCode}_${periodCode}.csv`;
+                          const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                          saveAs(blob, fileName);
+                        }}
+                        className="text-slate-600 hover:text-slate-800 gap-1"
+                      >
+                        <Download className="h-4 w-4" />
+                        다운로드
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedItem(null);
+                          setIsDetailExpanded(prev => ({
+                            ...prev,
+                            [selectedItem]: false
+                          }));
+                        }}
+                        className="text-slate-500 hover:text-slate-700"
+                      >
+                        닫기
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 {isDetailExpanded[selectedItem] && (
@@ -1102,15 +1235,17 @@ export default function BrandDashboard() {
                           {/* 시즌 필터 */}
                           <Select
                             value={seasonFilter}
-                            onValueChange={(value: 'all' | 'current' | 'old') => setSeasonFilter(value)}
+                            onValueChange={(value: 'all' | 'current' | 'next' | 'stagnant' | 'old') => setSeasonFilter(value)}
                           >
                             <SelectTrigger className="w-full sm:w-[180px]">
                               <SelectValue placeholder="시즌 선택" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="all">전체 시즌</SelectItem>
-                              <SelectItem value="current">현재 시즌</SelectItem>
-                              <SelectItem value="old">과거 시즌</SelectItem>
+                              <SelectItem value="current">당시즌</SelectItem>
+                              <SelectItem value="next">차기시즌</SelectItem>
+                              <SelectItem value="old">과시즌</SelectItem>
+                              <SelectItem value="stagnant">정체재고</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -1129,8 +1264,7 @@ export default function BrandDashboard() {
                             
                             // 시즌 필터
                             const matchesSeason = seasonFilter === 'all' ||
-                              (seasonFilter === 'current' && product.seasonCategory === 'current') ||
-                              (seasonFilter === 'old' && product.seasonCategory === 'old');
+                              product.seasonCategory === seasonFilter;
                             
                             return matchesSearch && matchesSeason;
                           });
@@ -1166,277 +1300,324 @@ export default function BrandDashboard() {
                             });
                           }
                           
-                          // 시즌별 그룹핑
+                          // 시즌별 그룹핑 (4가지: 당시즌, 차기시즌, 과시즌, 정체재고)
                           const currentSeasonProducts = filtered.filter(p => p.seasonCategory === 'current');
+                          const nextSeasonProducts = filtered.filter(p => p.seasonCategory === 'next');
                           const oldSeasonProducts = filtered.filter(p => p.seasonCategory === 'old');
+                          const stagnantProducts = filtered.filter(p => p.seasonCategory === 'stagnant');
+                          
+                          // 전체 데이터에서 재고주수 TOP 10 및 정체재고 중 재고금액 TOP 10 계산
+                          const allProducts = [...currentSeasonProducts, ...nextSeasonProducts, ...oldSeasonProducts, ...stagnantProducts];
+                          const top10WeeksCodes = [...allProducts]
+                            .sort((a, b) => b.weeks - a.weeks)
+                            .slice(0, 10)
+                            .map(p => p.productCode);
+                          const stagnantTop10InventoryCodes = [...stagnantProducts]
+                            .sort((a, b) => b.endingInventory - a.endingInventory)
+                            .slice(0, 10)
+                            .map(p => p.productCode);
+                          
+                          // 테이블 렌더링 헬퍼 함수
+                          const renderProductTable = (products: typeof filtered, title: string, colorClass: string) => {
+                            if (products.length === 0) return null;
+                            
+                            // 합계 계산
+                            const totalEndingInventory = products.reduce((sum, p) => sum + p.endingInventory, 0);
+                            const totalPreviousEndingInventory = products.reduce((sum, p) => sum + p.previousEndingInventory, 0);
+                            const totalSalesAmount = products.reduce((sum, p) => sum + p.salesAmount, 0);
+                            const totalPreviousSalesAmount = products.reduce((sum, p) => sum + p.previousSalesAmount, 0);
+                            const totalInventoryYOY = totalPreviousEndingInventory > 0 ? Math.round((totalEndingInventory / totalPreviousEndingInventory) * 100) : 0;
+                            const totalSalesYOY = totalPreviousSalesAmount > 0 ? Math.round((totalSalesAmount / totalPreviousSalesAmount) * 100) : 0;
+                            // 가중평균 재고주수 계산 (재고금액 기준)
+                            const weightedWeeks = products.reduce((sum, p) => sum + (p.weeks * p.endingInventory), 0);
+                            const weightedPreviousWeeks = products.reduce((sum, p) => sum + (p.previousWeeks * p.previousEndingInventory), 0);
+                            const avgWeeks = totalEndingInventory > 0 ? weightedWeeks / totalEndingInventory : 0;
+                            const avgPreviousWeeks = totalPreviousEndingInventory > 0 ? weightedPreviousWeeks / totalPreviousEndingInventory : 0;
+                            
+                            return (
+                              <div>
+                                <div className="mb-3 flex items-center gap-2">
+                                  <div className={`h-2 w-2 rounded-full ${colorClass}`}></div>
+                                  <h3 className="text-sm font-semibold text-slate-700">{title} - {products.length}개</h3>
+                                </div>
+                                <div className="overflow-x-auto overflow-y-auto max-h-[400px] border rounded-lg">
+                                  <table className="w-full border-collapse table-fixed">
+                                    <colgroup>
+                                      <col className="w-[120px]" />
+                                      <col className="w-[200px]" />
+                                      <col className="w-[140px]" />
+                                      <col className="w-[140px]" />
+                                      <col className="w-[140px]" />
+                                      <col className="w-[100px]" />
+                                      <col className="w-[100px]" />
+                                    </colgroup>
+                                    <thead className="sticky top-0 z-10 bg-white shadow-sm">
+                                      <tr className="border-b border-slate-200">
+                                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">품번</th>
+                                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">품명</th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'weeks') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('weeks'); setSortDirection('desc'); } }}>
+                                          <div className="flex items-center justify-center gap-1">재고주수 {sortColumn === 'weeks' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                        </th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'endingInventory') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('endingInventory'); setSortDirection('desc'); } }}>
+                                          <div className="flex items-center justify-center gap-1">기말재고 {sortColumn === 'endingInventory' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                        </th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'salesAmount') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('salesAmount'); setSortDirection('desc'); } }}>
+                                          <div className="flex items-center justify-center gap-1">판매액(V+) {sortColumn === 'salesAmount' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                        </th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">재고YOY</th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">판매YOY</th>
+                                      </tr>
+                                      {/* TOTAL 합계 행 */}
+                                      <tr className="border-b-2 border-slate-300 bg-slate-100">
+                                        <td className="py-2 px-3 text-xs font-bold text-slate-800 bg-slate-100">TOTAL</td>
+                                        <td className="py-2 px-3 text-xs font-bold text-slate-600 bg-slate-100">{products.length}개 품번</td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          <div>
+                                            <p className="font-bold text-slate-800">{formatNumberWithDecimal(avgWeeks)}주</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(avgPreviousWeeks)}주</p>
+                                            <p className={`text-[10px] font-semibold ${avgWeeks - avgPreviousWeeks < 0 ? 'text-emerald-600' : 'text-red-600'}`}>{avgWeeks - avgPreviousWeeks < 0 ? '-' : '+'}{formatNumberWithDecimal(Math.abs(avgWeeks - avgPreviousWeeks))}주</p>
+                                          </div>
+                                        </td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          <div>
+                                            <p className="font-bold text-slate-800">{formatNumber(totalEndingInventory)}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(totalPreviousEndingInventory)}백만</p>
+                                          </div>
+                                        </td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          <div>
+                                            <p className="font-bold text-slate-800">{formatNumber(totalSalesAmount)}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(totalPreviousSalesAmount)}백만</p>
+                                          </div>
+                                        </td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          <span className={`font-bold ${totalInventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>{formatNumber(totalInventoryYOY)}%</span>
+                                        </td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          <span className={`font-bold ${totalSalesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>{formatNumber(totalSalesYOY)}%</span>
+                                        </td>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {products.map((product) => {
+                                        const weeksDiff = product.weeks - product.previousWeeks;
+                                        const isImproved = weeksDiff < 0;
+                                        const isTop10Weeks = top10WeeksCodes.includes(product.productCode);
+                                        const isStagnantTop10Inventory = stagnantTop10InventoryCodes.includes(product.productCode);
+                                        const isHighRisk = isTop10Weeks || isStagnantTop10Inventory;
+                                        
+                                        return (
+                                          <tr 
+                                            key={product.productCode} 
+                                            className={`border-b border-slate-100 transition-colors cursor-pointer ${isHighRisk ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}
+                                            onClick={() => setSelectedProductForDetail(product)}
+                                          >
+                                            <td className="py-2 px-3 text-xs font-mono text-slate-900">
+                                              <div className="flex items-center gap-1">
+                                                {isTop10Weeks && <span title="재고주수 TOP 10" className="text-red-500">🔺</span>}
+                                                {isStagnantTop10Inventory && !isTop10Weeks && <span title="정체재고 금액 TOP 10" className="text-orange-500">⚠️</span>}
+                                                <span className="hover:underline text-blue-600">{product.productCode}</span>
+                                              </div>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs text-slate-700 truncate" title={product.productName}>{product.productName || '-'}</td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              <div>
+                                                <p className="font-semibold text-slate-900">{formatNumberWithDecimal(product.weeks)}주</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(product.previousWeeks)}주</p>
+                                                <p className={`text-[10px] font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>{isImproved ? '-' : '+'}{formatNumberWithDecimal(Math.abs(weeksDiff))}주</p>
+                                              </div>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              <div>
+                                                <p className="font-semibold text-slate-900">{formatNumber(product.endingInventory)}백만</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousEndingInventory)}백만</p>
+                                              </div>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              <div>
+                                                <p className="font-semibold text-slate-900">{formatNumber(product.salesAmount)}백만</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousSalesAmount)}백만</p>
+                                              </div>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              <span className={`font-semibold ${product.inventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>{formatNumber(product.inventoryYOY)}%</span>
+                                            </td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              <span className={`font-semibold ${product.salesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>{formatNumber(product.salesYOY)}%</span>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            );
+                          };
+
+                          const month = parseInt(selectedMonth.split('-')[1]);
+                          const year = parseInt(selectedMonth.split('-')[0]);
+                          const yy = year % 100;
+                          const isFW = month >= 9 || month <= 2;
+                          
+                          // 시즌별 합계 계산
+                          const seasonSummary = [
+                            {
+                              key: 'current',
+                              name: '당시즌',
+                              season: isFW ? `${yy}N, ${yy}F` : `${yy}N, ${yy}S`,
+                              products: currentSeasonProducts,
+                              colorClass: 'bg-blue-500',
+                              bgClass: 'bg-blue-50 border-blue-200',
+                              textClass: 'text-blue-700'
+                            },
+                            {
+                              key: 'next',
+                              name: '차기시즌',
+                              season: isFW ? `${yy+1}N~` : `${yy}F~`,
+                              products: nextSeasonProducts,
+                              colorClass: 'bg-violet-500',
+                              bgClass: 'bg-violet-50 border-violet-200',
+                              textClass: 'text-violet-700'
+                            },
+                            {
+                              key: 'old',
+                              name: '과시즌',
+                              season: '그외',
+                              products: oldSeasonProducts,
+                              colorClass: 'bg-slate-400',
+                              bgClass: 'bg-slate-50 border-slate-200',
+                              textClass: 'text-slate-700'
+                            },
+                            {
+                              key: 'stagnant',
+                              name: '정체재고',
+                              season: `<${productDetails?.thresholdAmt ? Math.round(productDetails.thresholdAmt / 1000000).toLocaleString() : '?'}백만`,
+                              products: stagnantProducts,
+                              colorClass: 'bg-red-500',
+                              bgClass: 'bg-red-50 border-red-200',
+                              textClass: 'text-red-700'
+                            }
+                          ];
+                          
+                          // 필터 결과 요약 계산
+                          const totalProducts = periodType === 'monthly' ? productDetails.monthly : productDetails.accumulated;
+                          const totalCount = totalProducts.length;
+                          const filteredCount = filtered.length;
+                          const totalInventorySum = totalProducts.reduce((sum, p) => sum + p.endingInventory, 0);
+                          const filteredInventorySum = filtered.reduce((sum, p) => sum + p.endingInventory, 0);
+                          const isFiltered = searchFilter.trim() !== '' || seasonFilter !== 'all';
                           
                           return (
                             <div className="space-y-6">
-                              {/* 현재 시즌 */}
-                              {currentSeasonProducts.length > 0 && (
-                                <div>
-                                  <div className="mb-3 flex items-center gap-2">
-                                    <div className="h-1 w-1 rounded-full bg-blue-500"></div>
-                                    <h3 className="text-sm font-semibold text-slate-700">
-                                      현재 시즌 ({(() => {
-                                        const month = parseInt(selectedMonth.split('-')[1]);
-                                        let seasons = '25N, 26N';
-                                        if (month >= 9 || month <= 2) {
-                                          seasons += ', 25F';
-                                        } else if (month >= 3 && month <= 8) {
-                                          seasons += ', 25S';
-                                        }
-                                        return seasons;
-                                      })()}) - {currentSeasonProducts.length}개
-                                    </h3>
+                              {/* 필터 결과 요약 바 */}
+                              {isFiltered && (
+                                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-4 py-2.5 flex items-center justify-between">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-blue-600 text-sm">🔍</span>
+                                    <span className="text-sm text-blue-800">
+                                      전체 <strong>{formatNumber(totalCount)}</strong>개 중{' '}
+                                      <strong className="text-blue-600">{formatNumber(filteredCount)}</strong>개 표시
+                                    </span>
+                                    <span className="text-slate-400">|</span>
+                                    <span className="text-sm text-slate-600">
+                                      재고 <strong className="text-blue-600">{formatNumber(filteredInventorySum)}</strong>백만원
+                                      <span className="text-slate-400 ml-1">
+                                        ({formatNumber(totalInventorySum)}백만원 중 {totalInventorySum > 0 ? Math.round((filteredInventorySum / totalInventorySum) * 100) : 0}%)
+                                      </span>
+                                    </span>
                                   </div>
-                                  <div className="overflow-x-auto overflow-y-auto max-h-[600px] border rounded-lg">
-                                    <table className="w-full border-collapse table-fixed">
-                                      <colgroup>
-                                        <col className="w-[120px]" />
-                                        <col className="w-[200px]" />
-                                        <col className="w-[140px]" />
-                                        <col className="w-[140px]" />
-                                        <col className="w-[140px]" />
-                                        <col className="w-[100px]" />
-                                        <col className="w-[100px]" />
-                                      </colgroup>
-                                      <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                                        <tr className="border-b border-slate-200">
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 bg-white">품번</th>
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 bg-white">품명</th>
-                                          <th 
-                                            className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50"
-                                            onClick={() => {
-                                              if (sortColumn === 'weeks') {
-                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                                              } else {
-                                                setSortColumn('weeks');
-                                                setSortDirection('desc');
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-center gap-1">
-                                              재고주수
-                                              {sortColumn === 'weeks' && (
-                                                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                                              )}
-                                            </div>
-                                          </th>
-                                          <th 
-                                            className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50"
-                                            onClick={() => {
-                                              if (sortColumn === 'endingInventory') {
-                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                                              } else {
-                                                setSortColumn('endingInventory');
-                                                setSortDirection('desc');
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-center gap-1">
-                                              기말재고
-                                              {sortColumn === 'endingInventory' && (
-                                                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                                              )}
-                                            </div>
-                                          </th>
-                                          <th 
-                                            className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50"
-                                            onClick={() => {
-                                              if (sortColumn === 'salesAmount') {
-                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                                              } else {
-                                                setSortColumn('salesAmount');
-                                                setSortDirection('desc');
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-center gap-1">
-                                              판매액
-                                              {sortColumn === 'salesAmount' && (
-                                                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                                              )}
-                                            </div>
-                                          </th>
-                                          <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white">재고 YOY</th>
-                                          <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white">판매 YOY</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {currentSeasonProducts.map((product) => {
-                                          const weeksDiff = product.weeks - product.previousWeeks;
-                                          const isImproved = weeksDiff < 0;
-                                          return (
-                                            <tr key={product.productCode} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                              <td className="py-3 px-4 text-sm font-mono text-slate-900">{product.productCode}</td>
-                                              <td className="py-3 px-4 text-sm text-slate-700">{product.productName || '-'}</td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <div>
-                                                  <p className="font-semibold text-slate-900">{formatNumberWithDecimal(product.weeks)}주</p>
-                                                  <p className="text-xs text-slate-500">전년 {formatNumberWithDecimal(product.previousWeeks)}주</p>
-                                                  <p className={`text-xs font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {isImproved ? '-' : '+'}{formatNumberWithDecimal(Math.abs(weeksDiff))}주
-                                                  </p>
-                                                </div>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <div>
-                                                  <p className="font-semibold text-slate-900">{formatNumber(product.endingInventory)}백만원</p>
-                                                  <p className="text-xs text-slate-500">전년 {formatNumber(product.previousEndingInventory)}백만원</p>
-                                                </div>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <div>
-                                                  <p className="font-semibold text-slate-900">{formatNumber(product.salesAmount)}백만원</p>
-                                                  <p className="text-xs text-slate-500">전년 {formatNumber(product.previousSalesAmount)}백만원</p>
-                                                </div>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <span className={`font-semibold ${product.inventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                  {formatNumber(product.inventoryYOY)}%
-                                                </span>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <span className={`font-semibold ${product.salesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                  {formatNumber(product.salesYOY)}%
-                                                </span>
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
+                                  <button
+                                    onClick={() => { setSearchFilter(''); setSeasonFilter('all'); }}
+                                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                  >
+                                    필터 초기화
+                                  </button>
                                 </div>
                               )}
                               
-                              {/* 과거 시즌 */}
-                              {oldSeasonProducts.length > 0 && (
-                                <div>
-                                  <div className="mb-3 flex items-center gap-2">
-                                    <div className="h-1 w-1 rounded-full bg-slate-400"></div>
-                                    <h3 className="text-sm font-semibold text-slate-700">이전 시즌 (그 외 모든 시즌) - {oldSeasonProducts.length}개</h3>
-                                  </div>
-                                  <div className="overflow-x-auto overflow-y-auto max-h-[600px] border rounded-lg">
-                                    <table className="w-full border-collapse table-fixed">
-                                      <colgroup>
-                                        <col className="w-[120px]" />
-                                        <col className="w-[200px]" />
-                                        <col className="w-[140px]" />
-                                        <col className="w-[140px]" />
-                                        <col className="w-[140px]" />
-                                        <col className="w-[100px]" />
-                                        <col className="w-[100px]" />
-                                      </colgroup>
-                                      <thead className="sticky top-0 z-10 bg-white shadow-sm">
-                                        <tr className="border-b border-slate-200">
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 bg-white">품번</th>
-                                          <th className="text-left py-3 px-4 text-sm font-semibold text-slate-700 bg-white">품명</th>
-                                          <th 
-                                            className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50"
-                                            onClick={() => {
-                                              if (sortColumn === 'weeks') {
-                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                                              } else {
-                                                setSortColumn('weeks');
-                                                setSortDirection('desc');
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-center gap-1">
-                                              재고주수
-                                              {sortColumn === 'weeks' && (
-                                                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                                              )}
-                                            </div>
-                                          </th>
-                                          <th 
-                                            className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50"
-                                            onClick={() => {
-                                              if (sortColumn === 'endingInventory') {
-                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                                              } else {
-                                                setSortColumn('endingInventory');
-                                                setSortDirection('desc');
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-center gap-1">
-                                              기말재고
-                                              {sortColumn === 'endingInventory' && (
-                                                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                                              )}
-                                            </div>
-                                          </th>
-                                          <th 
-                                            className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50"
-                                            onClick={() => {
-                                              if (sortColumn === 'salesAmount') {
-                                                setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                                              } else {
-                                                setSortColumn('salesAmount');
-                                                setSortDirection('desc');
-                                              }
-                                            }}
-                                          >
-                                            <div className="flex items-center justify-center gap-1">
-                                              판매액
-                                              {sortColumn === 'salesAmount' && (
-                                                sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />
-                                              )}
-                                            </div>
-                                          </th>
-                                          <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white">재고 YOY</th>
-                                          <th className="text-center py-3 px-4 text-sm font-semibold text-slate-700 bg-white">판매 YOY</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {oldSeasonProducts.map((product) => {
-                                          const weeksDiff = product.weeks - product.previousWeeks;
-                                          const isImproved = weeksDiff < 0;
-                                          return (
-                                            <tr key={product.productCode} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                                              <td className="py-3 px-4 text-sm font-mono text-slate-900">{product.productCode}</td>
-                                              <td className="py-3 px-4 text-sm text-slate-700">{product.productName || '-'}</td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <div>
-                                                  <p className="font-semibold text-slate-900">{formatNumberWithDecimal(product.weeks)}주</p>
-                                                  <p className="text-xs text-slate-500">전년 {formatNumberWithDecimal(product.previousWeeks)}주</p>
-                                                  <p className={`text-xs font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                    {isImproved ? '-' : '+'}{formatNumberWithDecimal(Math.abs(weeksDiff))}주
-                                                  </p>
-                                                </div>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <div>
-                                                  <p className="font-semibold text-slate-900">{formatNumber(product.endingInventory)}백만원</p>
-                                                  <p className="text-xs text-slate-500">전년 {formatNumber(product.previousEndingInventory)}백만원</p>
-                                                </div>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <div>
-                                                  <p className="font-semibold text-slate-900">{formatNumber(product.salesAmount)}백만원</p>
-                                                  <p className="text-xs text-slate-500">전년 {formatNumber(product.previousSalesAmount)}백만원</p>
-                                                </div>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <span className={`font-semibold ${product.inventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                                  {formatNumber(product.inventoryYOY)}%
-                                                </span>
-                                              </td>
-                                              <td className="py-3 px-4 text-sm text-center">
-                                                <span className={`font-semibold ${product.salesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                                  {formatNumber(product.salesYOY)}%
-                                                </span>
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                </div>
+                              {/* 시즌별 요약 카드 */}
+                              {/* chartData에서 현재 월의 시즌별 전년 데이터 가져오기 */}
+                              {(() => {
+                                const currentMonthChartData = chartData?.find((d: any) => d.month === selectedMonth);
+                                const pyCurrentSeasonStock = currentMonthChartData?.previousCurrentSeasonStock || 0;
+                                const pyNextSeasonStock = currentMonthChartData?.previousNextSeasonStock || 0;
+                                const pyOldSeasonStock = currentMonthChartData?.previousOldSeasonStock || 0;
+                                const pyStagnantStock = currentMonthChartData?.previousStagnantStock || 0;
+                                
+                                return null; // 값만 계산하고 렌더링은 하지 않음
+                              })()}
+                              <div className="grid grid-cols-4 gap-3">
+                                {seasonSummary.map((season) => {
+                                  const totalInventory = season.products.reduce((sum, p) => sum + p.endingInventory, 0);
+                                  
+                                  // chartData에서 현재 월의 시즌별 전년 데이터 사용
+                                  const currentMonthChartData = chartData?.find((d: any) => d.month === selectedMonth);
+                                  let previousSeasonStock = 0;
+                                  if (currentMonthChartData) {
+                                    if (season.key === 'current') previousSeasonStock = currentMonthChartData.previousCurrentSeasonStock || 0;
+                                    else if (season.key === 'next') previousSeasonStock = currentMonthChartData.previousNextSeasonStock || 0;
+                                    else if (season.key === 'old') previousSeasonStock = currentMonthChartData.previousOldSeasonStock || 0;
+                                    else if (season.key === 'stagnant') previousSeasonStock = currentMonthChartData.previousStagnantStock || 0;
+                                  }
+                                  
+                                  const yoyPercent = previousSeasonStock > 0 ? Math.round((totalInventory / previousSeasonStock) * 100) : 0;
+                                  const productCount = season.products.length;
+                                  
+                                  return (
+                                    <div 
+                                      key={season.key}
+                                      className={`rounded-lg border p-3 ${season.bgClass} cursor-pointer transition-all hover:shadow-md ${seasonFilter === season.key ? 'ring-2 ring-offset-1 ring-slate-400' : ''}`}
+                                      onClick={() => setSeasonFilter(seasonFilter === season.key ? 'all' : season.key as any)}
+                                    >
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div className={`h-2.5 w-2.5 rounded-full ${season.colorClass}`}></div>
+                                        <span className={`text-xs font-bold ${season.textClass}`}>{season.name}</span>
+                                        <span className="text-[10px] text-slate-500 ml-auto">{season.season}</span>
+                                      </div>
+                                      <div className="flex items-end justify-between">
+                                        <div>
+                                          <p className={`text-lg font-bold ${season.textClass}`}>{formatNumber(totalInventory)}<span className="text-xs font-normal">백만</span></p>
+                                          <p className="text-[10px] text-slate-500">{productCount}개 품번</p>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className={`text-xs font-semibold ${yoyPercent >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                            {yoyPercent > 0 ? `${formatNumber(yoyPercent)}%` : '-'}
+                                          </p>
+                                          <p className="text-[10px] text-slate-400">YOY</p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              
+                              {/* 당시즌 */}
+                              {renderProductTable(
+                                currentSeasonProducts, 
+                                `당시즌 (${isFW ? `${yy}N, ${yy}F` : `${yy}N, ${yy}S`})`, 
+                                'bg-blue-500'
+                              )}
+                              
+                              {/* 차기시즌 */}
+                              {renderProductTable(
+                                nextSeasonProducts, 
+                                `차기시즌 (${isFW ? `${yy+1}N, ${yy+1}S, ${yy+1}F 이후` : `${yy}F, ${yy+1}N 이후`})`, 
+                                'bg-violet-500'
+                              )}
+                              
+                              {/* 과시즌 */}
+                              {renderProductTable(
+                                oldSeasonProducts, 
+                                '과시즌 (정체재고 제외)', 
+                                'bg-slate-400'
+                              )}
+                              
+                              {/* 정체재고 */}
+                              {renderProductTable(
+                                stagnantProducts, 
+                                `정체재고 (과시즌 중 당월판매 < ${productDetails?.thresholdAmt ? Math.round(productDetails.thresholdAmt / 1000000).toLocaleString() + '백만원' : '기준금액'})`, 
+                                'bg-red-500'
                               )}
                               
                               {filtered.length === 0 && (
@@ -1477,6 +1658,187 @@ export default function BrandDashboard() {
           </Card>
         )}
       </main>
+      
+      {/* 품번 상세 정보 모달 */}
+      {selectedProductForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedProductForDetail(null)}>
+          <div 
+            className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[80vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 모달 헤더 */}
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">{selectedProductForDetail.productCode}</h3>
+                <p className="text-sm text-slate-500">{selectedProductForDetail.productName || '-'}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                  selectedProductForDetail.seasonCategory === 'current' ? 'bg-blue-100 text-blue-700' :
+                  selectedProductForDetail.seasonCategory === 'next' ? 'bg-violet-100 text-violet-700' :
+                  selectedProductForDetail.seasonCategory === 'stagnant' ? 'bg-red-100 text-red-700' :
+                  'bg-slate-100 text-slate-700'
+                }`}>
+                  {selectedProductForDetail.seasonCategory === 'current' ? '당시즌' :
+                   selectedProductForDetail.seasonCategory === 'next' ? '차기시즌' :
+                   selectedProductForDetail.seasonCategory === 'stagnant' ? '정체재고' : '과시즌'}
+                </span>
+                <button onClick={() => setSelectedProductForDetail(null)} className="text-slate-400 hover:text-slate-600 text-xl">×</button>
+              </div>
+            </div>
+            
+            {/* 모달 내용 */}
+            <div className="p-6 space-y-6">
+              {/* 기본 정보 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-xs text-slate-500 mb-1">시즌</p>
+                  <p className="text-lg font-bold text-slate-900">{selectedProductForDetail.season || '-'}</p>
+                </div>
+                <div className="bg-slate-50 rounded-lg p-4">
+                  <p className="text-xs text-slate-500 mb-1">재고주수</p>
+                  <p className="text-lg font-bold text-slate-900">{formatNumberWithDecimal(selectedProductForDetail.weeks)}주</p>
+                  <p className="text-xs text-slate-500">전년 {formatNumberWithDecimal(selectedProductForDetail.previousWeeks)}주</p>
+                </div>
+              </div>
+              
+              {/* 재고/판매 비교 */}
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-100">
+                    <tr>
+                      <th className="py-2 px-4 text-left text-xs font-semibold text-slate-700"></th>
+                      <th className="py-2 px-4 text-center text-xs font-semibold text-slate-700">당년</th>
+                      <th className="py-2 px-4 text-center text-xs font-semibold text-slate-700">전년</th>
+                      <th className="py-2 px-4 text-center text-xs font-semibold text-slate-700">YOY</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-t">
+                      <td className="py-3 px-4 text-sm font-medium text-slate-700">기말재고</td>
+                      <td className="py-3 px-4 text-center text-sm font-bold text-slate-900">{formatNumber(selectedProductForDetail.endingInventory)}백만</td>
+                      <td className="py-3 px-4 text-center text-sm text-slate-600">{formatNumber(selectedProductForDetail.previousEndingInventory)}백만</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`text-sm font-bold ${selectedProductForDetail.inventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
+                          {formatNumber(selectedProductForDetail.inventoryYOY)}%
+                        </span>
+                      </td>
+                    </tr>
+                    <tr className="border-t">
+                      <td className="py-3 px-4 text-sm font-medium text-slate-700">판매액(V+)</td>
+                      <td className="py-3 px-4 text-center text-sm font-bold text-slate-900">{formatNumber(selectedProductForDetail.salesAmount)}백만</td>
+                      <td className="py-3 px-4 text-center text-sm text-slate-600">{formatNumber(selectedProductForDetail.previousSalesAmount)}백만</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`text-sm font-bold ${selectedProductForDetail.salesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {formatNumber(selectedProductForDetail.salesYOY)}%
+                        </span>
+                      </td>
+                    </tr>
+                    <tr className="border-t">
+                      <td className="py-3 px-4 text-sm font-medium text-slate-700">재고주수</td>
+                      <td className="py-3 px-4 text-center text-sm font-bold text-slate-900">{formatNumberWithDecimal(selectedProductForDetail.weeks)}주</td>
+                      <td className="py-3 px-4 text-center text-sm text-slate-600">{formatNumberWithDecimal(selectedProductForDetail.previousWeeks)}주</td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`text-sm font-bold ${selectedProductForDetail.weeks <= selectedProductForDetail.previousWeeks ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {selectedProductForDetail.weeks <= selectedProductForDetail.previousWeeks ? '-' : '+'}{formatNumberWithDecimal(Math.abs(selectedProductForDetail.weeks - selectedProductForDetail.previousWeeks))}주
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* 월별 재고/판매 추이 차트 */}
+              <div className="bg-gradient-to-r from-slate-50 to-slate-100 rounded-lg p-4">
+                <h4 className="text-xs font-semibold text-slate-700 mb-3">📊 월별 재고/판매 추이 (최근 12개월)</h4>
+                {isLoadingMonthlyTrend ? (
+                  <div className="h-[200px] flex items-center justify-center">
+                    <p className="text-sm text-slate-500">데이터 로딩 중...</p>
+                  </div>
+                ) : productMonthlyTrend.length > 0 ? (
+                  <div className="h-[220px]">
+                    {/* Y축 라벨 */}
+                    <div className="flex justify-between text-[9px] text-slate-500 mb-1 px-1">
+                      <span className="text-blue-600 font-medium">재고(백만)</span>
+                      <span className="text-orange-600 font-medium">판매액(백만)</span>
+                    </div>
+                    <ResponsiveContainer width="100%" height={190}>
+                      <ComposedChart
+                        data={productMonthlyTrend}
+                        margin={{ top: 5, right: 5, left: -5, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis 
+                          dataKey="month" 
+                          tick={{ fontSize: 9, fill: '#64748b' }} 
+                          tickFormatter={(value) => value.substring(5)} // MM만 표시
+                        />
+                        <YAxis 
+                          yAxisId="left"
+                          tick={{ fontSize: 9, fill: '#3b82f6' }} 
+                          tickFormatter={(value) => formatNumber(value)}
+                        />
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          tick={{ fontSize: 9, fill: '#f97316' }} 
+                          tickFormatter={(value) => formatNumber(value)}
+                        />
+                        <Tooltip
+                          formatter={(value: number, name: string) => [
+                            `${formatNumber(value)}백만`,
+                            name === 'endStock' ? '기말재고' : '판매액(V+)'
+                          ]}
+                          labelFormatter={(label) => `${label}`}
+                          contentStyle={{ fontSize: '11px', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ fontSize: '10px' }}
+                          formatter={(value) => value === 'endStock' ? '기말재고' : '판매액(V+)'}
+                        />
+                        <Bar 
+                          yAxisId="left"
+                          dataKey="endStock" 
+                          fill="#3b82f6" 
+                          radius={[2, 2, 0, 0]}
+                          name="endStock"
+                        />
+                        <Line 
+                          yAxisId="right"
+                          type="monotone" 
+                          dataKey="actSale" 
+                          stroke="#f97316" 
+                          strokeWidth={2}
+                          dot={{ r: 3, fill: '#f97316' }}
+                          name="actSale"
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center">
+                    <p className="text-sm text-slate-400">데이터가 없습니다</p>
+                  </div>
+                )}
+                <div className="mt-3 grid grid-cols-2 gap-2 text-center">
+                  <div className="bg-white rounded-lg p-2 border">
+                    <p className="text-[10px] text-slate-500">재고 YOY</p>
+                    <p className={`text-sm font-bold ${selectedProductForDetail.inventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {formatNumber(selectedProductForDetail.inventoryYOY)}%
+                    </p>
+                  </div>
+                  <div className="bg-white rounded-lg p-2 border">
+                    <p className="text-[10px] text-slate-500">판매 YOY</p>
+                    <p className={`text-sm font-bold ${selectedProductForDetail.salesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {formatNumber(selectedProductForDetail.salesYOY)}%
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

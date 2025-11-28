@@ -133,7 +133,7 @@ export interface ProductDetailData {
   productCode: string;
   productName: string;
   season?: string; // 시즌 정보
-  seasonCategory?: 'current' | 'old'; // 현재 시즌 / 과거 시즌
+  seasonCategory?: 'current' | 'next' | 'old' | 'stagnant'; // 당시즌 / 차기시즌 / 과시즌 / 정체재고
   weeks: number;
   previousWeeks: number;
   endingInventory: number;
@@ -148,6 +148,7 @@ export interface ProductDetailResponse {
   itemStd: string;
   monthly: ProductDetailData[];
   accumulated: ProductDetailData[];
+  thresholdAmt: number; // 정체재고 판별 기준금액 (원 단위)
 }
 
 export async function fetchProductDetails(
