@@ -452,9 +452,14 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
     const pyStagnantSale = Math.round((Number(py?.STAGNANT_SALE || py?.stagnant_sale) || 0) / divisor);
     const pyTotalSale = Math.round((Number(py?.TOTAL_SALE || py?.total_sale) || 0) / divisor);
     
-    // YOY 계산 (당년 / 전년 * 100)
+    // 재고택금액 YOY 계산 (당년 / 전년 * 100)
     const stockYOY = pyTotalStock !== 0 
       ? Math.round((cyTotalStock / pyTotalStock) * 1000) / 10 
+      : 0;
+    
+    // 택매출 YOY 계산 (당년택매출 / 전년택매출 * 100)
+    const saleYOY = pyTotalSale !== 0 
+      ? Math.round((cyTotalSale / pyTotalSale) * 1000) / 10 
       : 0;
     
     // 당년 비율 계산 (전체 재고 중 각 카테고리 비율)
@@ -483,6 +488,20 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       : 0;
     const pyStagnantRatio = pyTotalStock > 0 
       ? Math.round((pyStagnantStock / pyTotalStock) * 100) 
+      : 0;
+    
+    // 당년 매출액 비율 계산 (전체 매출액 중 각 카테고리 비율)
+    const cyCurrentSeasonSaleRatio = cyTotalSale > 0 
+      ? Math.round((cyCurrentSeasonSale / cyTotalSale) * 100) 
+      : 0;
+    const cyNextSeasonSaleRatio = cyTotalSale > 0 
+      ? Math.round((cyNextSeasonSale / cyTotalSale) * 100) 
+      : 0;
+    const cyOldSeasonSaleRatio = cyTotalSale > 0 
+      ? Math.round((cyOldSeasonSale / cyTotalSale) * 100) 
+      : 0;
+    const cyStagnantSaleRatio = cyTotalSale > 0 
+      ? Math.round((cyStagnantSale / cyTotalSale) * 100) 
       : 0;
     
     return {
@@ -516,6 +535,7 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       previousStagnantRatio: pyStagnantRatio,
       // YOY
       stockYOY: stockYOY,
+      saleYOY: saleYOY,
       // 당년 시즌별 매출액
       currentSeasonSale: cyCurrentSeasonSale,
       nextSeasonSale: cyNextSeasonSale,
@@ -527,7 +547,12 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       previousNextSeasonSale: pyNextSeasonSale,
       previousOldSeasonSale: pyOldSeasonSale,
       previousStagnantSale: pyStagnantSale,
-      previousTotalSale: pyTotalSale
+      previousTotalSale: pyTotalSale,
+      // 당년 매출액 비율 (%)
+      currentSeasonSaleRatio: cyCurrentSeasonSaleRatio,
+      nextSeasonSaleRatio: cyNextSeasonSaleRatio,
+      oldSeasonSaleRatio: cyOldSeasonSaleRatio,
+      stagnantSaleRatio: cyStagnantSaleRatio
     };
   });
   

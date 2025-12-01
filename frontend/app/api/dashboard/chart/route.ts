@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
     const itemStd = searchParams.get('itemStd') || 'all';
     const excludePurchaseParam = searchParams.get('excludePurchase');
     const excludePurchase = excludePurchaseParam === 'true';
+    const baseParam = searchParams.get('base');
+    const base = (baseParam === 'quantity' ? 'quantity' : 'amount') as 'amount' | 'quantity';
 
     if (!brandCode || !yyyymm) {
       console.error('❌ 필수 파라미터 누락:', { brandCode, yyyymm });
@@ -44,9 +46,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log('📊 차트 데이터 조회 시작:', { brandCode, yyyymm, weeksType, itemStd, excludePurchase });
+    console.log('📊 차트 데이터 조회 시작:', { brandCode, yyyymm, weeksType, itemStd, excludePurchase, base });
 
-    const query = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd, excludePurchase);
+    const query = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd, excludePurchase, base);
     console.log('📝 생성된 쿼리 길이:', query.length, '자');
     console.log('📝 쿼리 시작 부분:', query.substring(0, 300));
 
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
       console.log('✅ 쿼리 실행 성공:', rows.length, '개 행 반환');
       console.log('📊 첫 번째 행 샘플:', rows[0]);
       
-      const formattedData = formatChartData(rows);
+      const formattedData = formatChartData(rows, base);
       console.log('✅ 데이터 포맷팅 완료:', formattedData.length, '개 월 데이터');
       console.log('📊 포맷팅된 데이터 샘플:', formattedData[0]);
 

@@ -119,8 +119,8 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
   if (!data) return null;
 
   // 월 형식 변환 (2024-11 -> 24년 11월)
-  const monthLabel = label || data.month || '';
-  const formattedMonth = monthLabel.replace(/(\d{4})-(\d{2})/, (match: string, year: string, month: string) => {
+  const monthLabel = typeof label === 'string' ? label : (data.month || '');
+  const formattedMonth = String(monthLabel).replace(/(\d{4})-(\d{2})/, (match: string, year: string, month: string) => {
     const shortYear = year.substring(2);
     return `${shortYear}년 ${parseInt(month)}월`;
   });
@@ -261,8 +261,8 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
   if (!data) return null;
 
   // 월 형식 변환 (2024-11 -> 24년 11월)
-  const monthLabel = label || data.month || '';
-  const formattedMonth = monthLabel.replace(/(\d{4})-(\d{2})/, (match: string, year: string, month: string) => {
+  const monthLabel = typeof label === 'string' ? label : (data.month || '');
+  const formattedMonth = String(monthLabel).replace(/(\d{4})-(\d{2})/, (match: string, year: string, month: string) => {
     const shortYear = year.substring(2);
     return `${shortYear}년 ${parseInt(month)}월`;
   });
@@ -316,7 +316,12 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-slate-600">당년 매출액</span>
-            <span className="text-sm font-semibold text-slate-900">{formatNumber(totalSale)}</span>
+            <span className="text-sm font-semibold text-slate-900">
+              {formatNumber(totalSale)}
+              {data.saleYOY > 0 && (
+                <span className="ml-2 text-xs text-red-500">({data.saleYOY.toFixed(1)}%)</span>
+              )}
+            </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-slate-600">재고주수</span>
@@ -1322,20 +1327,18 @@ export default function BrandDashboard() {
                           </button>
                         </div>
                       </div>
+                      {/* 하나의 ComposedChart에 stacked bar + YOY line */}
                       <ResponsiveContainer width="100%" height={350}>
-                        <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
+                        <ComposedChart 
+                          data={chartData} 
+                          margin={{ top: 20, right: 60, left: 20, bottom: 10 }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis 
                             dataKey="month" 
                             stroke="#64748b"
                             fontSize={12}
                             tick={{ fill: '#64748b' }}
-                            domain={['dataMin', 'dataMax']}
-                            padding={{ left: 0, right: 0 }}
-                            angle={0}
-                            height={60}
-                            xAxisId={0}
-                            allowDuplicatedCategory={false}
                           />
                           <YAxis 
                             yAxisId="left"
@@ -1346,8 +1349,51 @@ export default function BrandDashboard() {
                             width={60}
                           />
                           <YAxis 
+                            yAxisId="sale"
+                            orientation="right"
+                            stroke="#64748b"
+                            fontSize={12}
+                            tick={{ fill: '#64748b' }}
+                            tickFormatter={(value) => new Intl.NumberFormat('ko-KR').format(value)}
+                            width={60}
+                            hide={true}
+                            domain={(() => {
+                              // 재고택금액 최대값의 50%를 매출액 Y축 최대값으로 설정
+                              if (!chartData || chartData.length === 0) return [0, 'auto'];
+                              const maxStock = Math.max(
+                                ...chartData.map((item: any) => item.totalStock || 0)
+                              );
+                              const maxSaleAxis = Math.ceil(maxStock * 0.5 / 1000) * 1000; // 천 단위 반올림
+                              return [0, maxSaleAxis];
+                            })()}
+                          />
+                          <YAxis 
                             yAxisId="right"
                             orientation="right"
+                            stroke="#ef4444"
+                            fontSize={12}
+                            tick={{ fill: '#ef4444' }}
+                            tickFormatter={(value) => `${value.toFixed(0)}%`}
+                            width={60}
+                            domain={(() => {
+                              // YOY 데이터 범위를 동적으로 계산 (라인이 상단에 보이도록 -200부터 시작)
+                              if (!chartData || chartData.length === 0) return [-200, 150];
+                              
+                              const yoyKey = inventoryChartMode === 'yoy' ? 'stockYOY' : 'saleYOY';
+                              const yoyValues = chartData
+                                .map((item: any) => item[yoyKey])
+                                .filter((val: any) => val !== null && val !== undefined && !isNaN(val) && val > 0);
+                              
+                              if (yoyValues.length === 0) return [-200, 150];
+                              
+                              const maxYoy = Math.max(...yoyValues);
+                              
+                              // 최대값에 20% 여유 추가, 10단위 올림
+                              const domainMax = Math.ceil((maxYoy + 20) / 10) * 10;
+                              
+                              // -200부터 시작하여 라인이 상단에 위치하도록
+                              return [-200, domainMax];
+                            })()}
                             hide={true}
                           />
                           <Tooltip 
@@ -1369,16 +1415,34 @@ export default function BrandDashboard() {
                             }}
                           />
                           <Legend content={<CustomInventoryLegend />} />
+                          
                           {inventoryChartMode === 'sales' ? (
                             <>
-                              {/* 매출액대비 모드: 당년 매출액 막대 (먼저 그리기) */}
-                              <Bar yAxisId="left" dataKey="nextSeasonSale" stackId="cy-sale" name="당년-차기시즌(매출)" fill="#c084fc" opacity={0.7}>
+                              {/* 택매출 YOY 라인 (먼저 렌더링하여 뒤에 배치, 투명하게) */}
+                              <Line 
+                                yAxisId="right"
+                                type="natural" 
+                                dataKey="saleYOY" 
+                                name="YOY" 
+                                stroke="#ef4444" 
+                                strokeWidth={3}
+                                strokeOpacity={0.4}
+                                dot={{ r: 5, fill: '#ef4444', fillOpacity: 0.4, strokeWidth: 2, stroke: '#ffffff', strokeOpacity: 0.4 }}
+                                activeDot={{ r: 6 }}
+                                connectNulls={true}
+                              />
+                              {/* 매출액대비 모드: 당년 매출액 막대 (별도 Y축 사용, 재고택금액의 50% 높이) */}
+                              <Bar yAxisId="sale" dataKey="nextSeasonSale" stackId="cy-sale" name="당년-차기시즌(매출)" fill="#c084fc" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="nextSeasonSaleRatio" />
                               </Bar>
-                              <Bar yAxisId="left" dataKey="currentSeasonSale" stackId="cy-sale" name="당년-당시즌(매출)" fill="#60a5fa" opacity={0.7}>
+                              <Bar yAxisId="sale" dataKey="currentSeasonSale" stackId="cy-sale" name="당년-당시즌(매출)" fill="#60a5fa" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="currentSeasonSaleRatio" />
                               </Bar>
-                              <Bar yAxisId="left" dataKey="oldSeasonSale" stackId="cy-sale" name="당년-과시즌(매출)" fill="#cbd5e1" opacity={0.7}>
+                              <Bar yAxisId="sale" dataKey="oldSeasonSale" stackId="cy-sale" name="당년-과시즌(매출)" fill="#cbd5e1" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="oldSeasonSaleRatio" />
                               </Bar>
-                              <Bar yAxisId="left" dataKey="stagnantSale" stackId="cy-sale" name="당년-정체재고(매출)" fill="#f87171" opacity={0.7}>
+                              <Bar yAxisId="sale" dataKey="stagnantSale" stackId="cy-sale" name="당년-정체재고(매출)" fill="#f87171" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="stagnantSaleRatio" />
                               </Bar>
                               {/* 매출액대비 모드: 당년 재고택금액 막대 */}
                               <Bar yAxisId="left" dataKey="nextSeasonStock" stackId="cy" name="당년-차기시즌" fill="#8b5cf6">
@@ -1396,6 +1460,19 @@ export default function BrandDashboard() {
                             </>
                           ) : (
                             <>
+                              {/* 재고택금액 YOY 라인 (먼저 렌더링하여 뒤에 배치, 투명하게) */}
+                              <Line 
+                                yAxisId="right"
+                                type="natural" 
+                                dataKey="stockYOY" 
+                                name="YOY" 
+                                stroke="#ef4444" 
+                                strokeWidth={3}
+                                strokeOpacity={0.4}
+                                dot={{ r: 5, fill: '#ef4444', fillOpacity: 0.4, strokeWidth: 2, stroke: '#ffffff', strokeOpacity: 0.4 }}
+                                activeDot={{ r: 6 }}
+                                connectNulls={true}
+                              />
                               {/* 전년대비 모드: 전년 스택형 막대 (재고택금액) */}
                               <Bar yAxisId="left" dataKey="previousNextSeasonStock" stackId="py" name="전년-차기시즌" fill="#c4b5fd">
                                 <LabelList content={<CustomRatioLabel />} dataKey="previousNextSeasonRatio" />
@@ -1423,19 +1500,6 @@ export default function BrandDashboard() {
                                 <LabelList content={<CustomRatioLabel />} dataKey="stagnantRatio" />
                               </Bar>
                             </>
-                          )}
-                          {/* YOY 라인 (전년대비 모드일 때만 표시) */}
-                          {inventoryChartMode === 'yoy' && (
-                            <Line 
-                              yAxisId="right"
-                              type="natural" 
-                              dataKey="stockYOY" 
-                              name="YOY" 
-                              stroke="#ef4444" 
-                              strokeWidth={2.5}
-                              dot={{ r: 4, fill: '#ef4444' }}
-                              connectNulls={true}
-                            />
                           )}
                         </ComposedChart>
                       </ResponsiveContainer>
