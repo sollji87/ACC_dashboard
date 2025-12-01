@@ -1535,12 +1535,13 @@ export default function BrandDashboard() {
                                     <colgroup>
                                       <col className="w-[120px]" />
                                       <col className="w-[200px]" />
-                                      <col className="w-[120px]" />
-                                      <col className="w-[100px]" />
-                                      <col className="w-[140px]" />
-                                      <col className="w-[140px]" />
-                                      <col className="w-[100px]" />
-                                      <col className="w-[100px]" />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 320px) / 7)' }} />
                                     </colgroup>
                                     <thead className="sticky top-0 z-10 bg-white shadow-sm">
                                       <tr className="border-b border-slate-200">
