@@ -78,7 +78,8 @@ export function buildChartDataQuery(
   yyyymm: string,
   weeksType: '4weeks' | '8weeks' | '12weeks' = '12weeks',
   itemStd: string = 'all',
-  excludePurchase: boolean = false
+  excludePurchase: boolean = false,
+  base: 'amount' | 'quantity' = 'amount'
 ): string {
   const { year, month } = parseYearMonth(yyyymm);
   
@@ -102,6 +103,10 @@ export function buildChartDataQuery(
   let monthsForAvg = 1;
   if (weeksType === '8weeks') monthsForAvg = 2;
   if (weeksType === '12weeks') monthsForAvg = 3;
+  
+  // 금액/수량 기준에 따른 컬럼명 선택
+  const stockColumn = base === 'quantity' ? 'end_stock_qty' : 'end_stock_tag_amt';
+  const saleColumn = base === 'quantity' ? 'sale_qty' : 'tag_sale_amt';
   
   return `
 -- item: ACC 아이템 기준
@@ -128,8 +133,8 @@ WITH item AS (
 monthly_threshold AS (
     SELECT 
         a.yyyymm,
-        SUM(a.end_stock_tag_amt) as total_stock_amt,
-        SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt
+        SUM(a.${stockColumn}) as total_stock_amt,
+        SUM(a.${stockColumn}) * 0.0001 as threshold_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
     WHERE a.brd_cd = '${brandCode}'
@@ -138,30 +143,49 @@ monthly_threshold AS (
     GROUP BY a.yyyymm
 ),
 
--- 월별 품번별 판매택금액
+-- 월별 품번별 판매 (금액 또는 수량)
 monthly_sale_by_product AS (
-    SELECT 
+    ${base === 'quantity' 
+      ? `SELECT 
+        TO_CHAR(a.pst_dt, 'YYYYMM') as yyyymm,
+        a.prdt_cd,
+        SUM(a.${saleColumn}) as tag_sale_amt
+    FROM sap_fnf.dw_copa_d a
+    JOIN item b ON a.prdt_cd = b.prdt_cd
+    LEFT JOIN sap_fnf.mst_shop c
+        ON a.brd_cd = c.brd_cd
+        AND a.cust_cd = c.sap_shop_cd
+    WHERE a.brd_cd = '${brandCode}'
+      AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+      AND b.item_std IS NOT NULL
+      AND c.chnl_cd <> '9'
+      ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
+    GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM'), a.prdt_cd`
+      : `SELECT 
         a.pst_yyyymm as yyyymm,
         a.prdt_cd,
-        SUM(a.tag_sale_amt) as tag_sale_amt
+        SUM(a.${saleColumn}) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
+    JOIN item b ON a.prdt_cd = b.prdt_cd
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+      AND b.item_std IS NOT NULL
       AND c.chnl_cd <> '9'
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
-    GROUP BY a.pst_yyyymm, a.prdt_cd
+    GROUP BY a.pst_yyyymm, a.prdt_cd`
+    }
 ),
 
--- 월별 품번별 재고
+-- 월별 품번별 재고 (금액 또는 수량)
 monthly_stock_by_product AS (
     SELECT 
         a.yyyymm,
         a.prdt_cd,
         b.sesn,
-        SUM(a.end_stock_tag_amt) as end_stock_tag_amt
+        SUM(a.${stockColumn}) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
     WHERE a.brd_cd = '${brandCode}'
@@ -247,11 +271,25 @@ monthly_season_summary AS (
     GROUP BY yyyymm
 ),
 
--- 월별 재고주수 계산용 매출 (전체)
+-- 월별 재고주수 계산용 매출 (전체, 금액 또는 수량)
 monthly_sale AS (
-    SELECT 
+    ${base === 'quantity'
+      ? `SELECT 
+        TO_CHAR(a.pst_dt, 'YYYYMM') as yyyymm,
+        SUM(a.${saleColumn}) as tag_sale_amt
+    FROM sap_fnf.dw_copa_d a
+    JOIN item b ON a.prdt_cd = b.prdt_cd
+    LEFT JOIN sap_fnf.mst_shop c
+        ON a.brd_cd = c.brd_cd
+        AND a.cust_cd = c.sap_shop_cd
+    WHERE a.brd_cd = '${brandCode}'
+      AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+      AND c.chnl_cd <> '9'
+      ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
+    GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM')`
+      : `SELECT 
         a.pst_yyyymm as yyyymm,
-        SUM(a.tag_sale_amt) as tag_sale_amt
+        SUM(a.${saleColumn}) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
     LEFT JOIN sap_fnf.mst_shop c
@@ -261,7 +299,8 @@ monthly_sale AS (
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND c.chnl_cd <> '9'
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
-    GROUP BY a.pst_yyyymm
+    GROUP BY a.pst_yyyymm`
+    }
 ),
 
 -- 월별 정체재고 판매액 집계
@@ -345,7 +384,7 @@ ORDER BY ss.yyyymm
 /**
  * 차트 데이터 포맷팅
  */
-export function formatChartData(rows: any[]): any {
+export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amount'): any {
   if (!rows || rows.length === 0) return [];
   
   const cyData = rows.filter(r => (r.DIV || r.div) === 'cy');
@@ -365,19 +404,20 @@ export function formatChartData(rows: any[]): any {
       return pYyyymm === previousYyyymm;
     });
     
-    // 당년 시즌별 재고택금액 (백만원 단위)
-    const cyCurrentSeasonStock = Math.round((Number(cy.CURRENT_SEASON_STOCK || cy.current_season_stock) || 0) / 1000000);
-    const cyNextSeasonStock = Math.round((Number(cy.NEXT_SEASON_STOCK || cy.next_season_stock) || 0) / 1000000);
-    const cyOldSeasonStock = Math.round((Number(cy.OLD_SEASON_STOCK || cy.old_season_stock) || 0) / 1000000);
-    const cyStagnantStock = Math.round((Number(cy.STAGNANT_STOCK || cy.stagnant_stock) || 0) / 1000000);
-    const cyTotalStock = Math.round((Number(cy.TOTAL_STOCK || cy.total_stock) || 0) / 1000000);
+    // 당년 시즌별 재고 (금액: 백만원 단위, 수량: 그대로)
+    const divisor = base === 'quantity' ? 1 : 1000000;
+    const cyCurrentSeasonStock = Math.round((Number(cy.CURRENT_SEASON_STOCK || cy.current_season_stock) || 0) / divisor);
+    const cyNextSeasonStock = Math.round((Number(cy.NEXT_SEASON_STOCK || cy.next_season_stock) || 0) / divisor);
+    const cyOldSeasonStock = Math.round((Number(cy.OLD_SEASON_STOCK || cy.old_season_stock) || 0) / divisor);
+    const cyStagnantStock = Math.round((Number(cy.STAGNANT_STOCK || cy.stagnant_stock) || 0) / divisor);
+    const cyTotalStock = Math.round((Number(cy.TOTAL_STOCK || cy.total_stock) || 0) / divisor);
     
-    // 전년 시즌별 재고택금액 (백만원 단위)
-    const pyCurrentSeasonStock = Math.round((Number(py?.CURRENT_SEASON_STOCK || py?.current_season_stock) || 0) / 1000000);
-    const pyNextSeasonStock = Math.round((Number(py?.NEXT_SEASON_STOCK || py?.next_season_stock) || 0) / 1000000);
-    const pyOldSeasonStock = Math.round((Number(py?.OLD_SEASON_STOCK || py?.old_season_stock) || 0) / 1000000);
-    const pyStagnantStock = Math.round((Number(py?.STAGNANT_STOCK || py?.stagnant_stock) || 0) / 1000000);
-    const pyTotalStock = Math.round((Number(py?.TOTAL_STOCK || py?.total_stock) || 0) / 1000000);
+    // 전년 시즌별 재고 (금액: 백만원 단위, 수량: 그대로)
+    const pyCurrentSeasonStock = Math.round((Number(py?.CURRENT_SEASON_STOCK || py?.current_season_stock) || 0) / divisor);
+    const pyNextSeasonStock = Math.round((Number(py?.NEXT_SEASON_STOCK || py?.next_season_stock) || 0) / divisor);
+    const pyOldSeasonStock = Math.round((Number(py?.OLD_SEASON_STOCK || py?.old_season_stock) || 0) / divisor);
+    const pyStagnantStock = Math.round((Number(py?.STAGNANT_STOCK || py?.stagnant_stock) || 0) / divisor);
+    const pyTotalStock = Math.round((Number(py?.TOTAL_STOCK || py?.total_stock) || 0) / divisor);
     
     // YOY 계산 (당년 / 전년 * 100)
     const stockYOY = pyTotalStock !== 0 

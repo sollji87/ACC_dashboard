@@ -166,7 +166,7 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
             </div>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#f97316' }} />
+                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#3b82f6' }} />
                 <span className="text-xs text-slate-600">전년</span>
               </div>
               <span className="text-sm font-semibold text-slate-900">{previousStockWeeks.toFixed(1)}주</span>
@@ -186,7 +186,7 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#3b82f6' }} />
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#f97316' }} />
                 <span className="text-xs text-slate-600">당년</span>
               </div>
               <span className="text-sm font-semibold text-slate-900">{stockWeeksNormal.toFixed(1)}주</span>
@@ -434,6 +434,7 @@ export default function BrandDashboard() {
   const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('12weeks'); // 4주/8주/12주 토글
   const [selectedItemForChart, setSelectedItemForChart] = useState<'all' | 'shoes' | 'hat' | 'bag' | 'other'>('all'); // 차트용 아이템 선택
   const [excludePurchase, setExcludePurchase] = useState<boolean>(false); // 사입제외 옵션
+  const [chartBase, setChartBase] = useState<'amount' | 'quantity'>('amount'); // 금액기준/수량기준 토글
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<any>(null); // 클릭한 품번 상세정보
@@ -512,7 +513,7 @@ export default function BrandDashboard() {
       try {
         const yyyymm = selectedMonth.replace(/-/g, '');
         const itemStd = selectedItemForChart === 'all' ? 'all' : getItemNameFromKey(selectedItemForChart);
-        const url = `/api/dashboard/chart?brandCode=${encodeURIComponent(brand.code)}&yyyymm=${yyyymm}&weeksType=${weeksType}&itemStd=${encodeURIComponent(itemStd)}&excludePurchase=${excludePurchase}`;
+        const url = `/api/dashboard/chart?brandCode=${encodeURIComponent(brand.code)}&yyyymm=${yyyymm}&weeksType=${weeksType}&itemStd=${encodeURIComponent(itemStd)}&excludePurchase=${excludePurchase}&base=${chartBase}`;
         console.log('📊 차트 데이터 요청 URL:', url);
         
         const response = await fetch(url);
@@ -544,7 +545,7 @@ export default function BrandDashboard() {
     };
 
     loadChartData();
-  }, [brand, selectedMonth, weeksType, selectedItemForChart, excludePurchase]);
+  }, [brand, selectedMonth, weeksType, selectedItemForChart, excludePurchase, chartBase]);
 
   // 품번별 월별 추이 데이터 로드
   useEffect(() => {
@@ -981,6 +982,29 @@ export default function BrandDashboard() {
                         사입제외
                       </button>
                     </div>
+                    {/* 금액/수량 기준 필터 */}
+                    <div className="flex items-center gap-1 bg-purple-50 rounded-lg p-0.5 border border-purple-200">
+                      <button
+                        onClick={() => setChartBase('amount')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                          chartBase === 'amount'
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'text-purple-600 hover:bg-purple-100'
+                        }`}
+                      >
+                        금액기준
+                      </button>
+                      <button
+                        onClick={() => setChartBase('quantity')}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                          chartBase === 'quantity'
+                            ? 'bg-purple-600 text-white shadow-sm'
+                            : 'text-purple-600 hover:bg-purple-100'
+                        }`}
+                      >
+                        수량기준
+                      </button>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -1075,19 +1099,19 @@ export default function BrandDashboard() {
                             type="natural" 
                             dataKey="previousStockWeeks" 
                             name="전년(전체)" 
-                            stroke="#f97316" 
+                            stroke="#3b82f6" 
                             strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#f97316' }}
+                            strokeDasharray="5 5"
+                            dot={{ r: 4, fill: '#3b82f6' }}
                           />
                           {/* 정상재고 기준 (전체 - 정체재고) */}
                           <Line 
                             type="natural" 
                             dataKey="stockWeeksNormal" 
                             name="당년(정상)" 
-                            stroke="#3b82f6" 
+                            stroke="#f97316" 
                             strokeWidth={2.5}
-                            strokeDasharray="5 5"
-                            dot={{ r: 4, fill: '#3b82f6' }}
+                            dot={{ r: 4, fill: '#f97316' }}
                           />
                           <Line 
                             type="natural" 
@@ -1301,7 +1325,7 @@ export default function BrandDashboard() {
                           const products = periodType === 'monthly' ? productDetails.monthly : productDetails.accumulated;
                           
                           // CSV 헤더
-                          const headers = ['시즌구분', '품번', '품명', '시즌', '재고주수', '전년재고주수', '기말재고(백만)', '전년기말재고(백만)', '판매액(백만)', '전년판매액(백만)', '재고YOY(%)', '판매YOY(%)'];
+                          const headers = ['시즌구분', '품번', '품명', '시즌', 'TAG가격', '재고주수', '전년재고주수', '기말재고(백만)', '전년기말재고(백만)', '판매액(백만)', '전년판매액(백만)', '재고YOY(%)', '판매YOY(%)'];
                           
                           // CSV 데이터
                           const csvData = products.map(p => {
@@ -1314,6 +1338,7 @@ export default function BrandDashboard() {
                               p.productCode,
                               p.productName || '',
                               p.season || '',
+                              p.tagPrice || '',
                               p.weeks,
                               p.previousWeeks,
                               p.endingInventory,
@@ -1521,6 +1546,7 @@ export default function BrandDashboard() {
                                       <tr className="border-b border-slate-200">
                                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">품번</th>
                                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">품명</th>
+                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">TAG가격</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'weeks') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('weeks'); setSortDirection('desc'); } }}>
                                           <div className="flex items-center justify-center gap-1">재고주수 {sortColumn === 'weeks' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
@@ -1538,6 +1564,13 @@ export default function BrandDashboard() {
                                       <tr className="border-b-2 border-slate-300 bg-slate-100">
                                         <td className="py-2 px-3 text-xs font-bold text-slate-800 bg-slate-100">TOTAL</td>
                                         <td className="py-2 px-3 text-xs font-bold text-slate-600 bg-slate-100">{products.length}개 품번</td>
+                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
+                                          {totalEndingInventoryQty > 0 ? (
+                                            <p className="font-semibold text-slate-900">{formatNumber(Math.round((totalEndingInventory * 1000000) / totalEndingInventoryQty))}원</p>
+                                          ) : (
+                                            <p className="text-slate-400">-</p>
+                                          )}
+                                        </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
                                           <div>
                                             <p className="font-bold text-slate-800">{formatNumberWithDecimal(avgWeeks)}주</p>
@@ -1593,6 +1626,13 @@ export default function BrandDashboard() {
                                               </div>
                                             </td>
                                             <td className="py-2 px-3 text-xs text-slate-700 truncate" title={product.productName}>{product.productName || '-'}</td>
+                                            <td className="py-2 px-3 text-xs text-center">
+                                              {product.tagPrice != null && product.tagPrice > 0 ? (
+                                                <p className="font-semibold text-slate-900">{formatNumber(product.tagPrice)}원</p>
+                                              ) : (
+                                                <p className="text-slate-400">-</p>
+                                              )}
+                                            </td>
                                             <td className="py-2 px-3 text-xs text-center">
                                               <div>
                                                 <p className="font-semibold text-slate-900">{formatNumberWithDecimal(product.weeks)}주</p>

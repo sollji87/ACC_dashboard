@@ -134,6 +134,7 @@ export interface ProductDetailData {
   productName: string;
   season?: string; // 시즌 정보
   seasonCategory?: 'current' | 'next' | 'old' | 'stagnant'; // 당시즌 / 차기시즌 / 과시즌 / 정체재고
+  tagPrice?: number | null; // TAG 가격
   weeks: number;
   previousWeeks: number;
   endingInventoryQty: number; // 기말재고 수량

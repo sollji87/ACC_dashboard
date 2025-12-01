@@ -540,6 +540,7 @@ with item as (
                     when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Acc_etc' then '기타ACC'
               end as item_std
             , prdt_nm as product_name
+            , zzsellpr as tag_price
     from sap_fnf.mst_prdt
     where 1=1
     and brd_cd = '${brandCode}'
@@ -731,6 +732,7 @@ select a.prdt_cd
         , max(a.product_name) as product_name
         , max(e.sesn) as sesn
         , 'monthly' as period_type
+        , max(e.tag_price) as tag_price
         , case when sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
                 / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
@@ -768,6 +770,7 @@ select a.prdt_cd
         , max(a.product_name) as product_name
         , max(e.sesn) as sesn
         , 'accumulated' as period_type
+        , max(e.tag_price) as tag_price
         , case when sum(case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) > 0
             then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
                 / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
@@ -811,6 +814,7 @@ interface ProductDetailData {
   PRODUCT_NAME: string;
   SESN?: string; // 시즌 정보
   PERIOD_TYPE: 'monthly' | 'accumulated';
+  TAG_PRICE?: number; // TAG 가격
   CY_STOCK_WEEK_CNT: number;
   PY_STOCK_WEEK_CNT: number;
   CY_END_STOCK_QTY: number;  // 기말재고 수량
@@ -937,6 +941,8 @@ export function formatProductDetailData(
       const pySale = Number(getVal(row, 'PY_ACT_SALE_AMT')) || 0;
       const cyTagSale = Number(getVal(row, 'CY_TAG_SALE_AMT')) || 0;  // 택판매출 (정체재고 판별용)
       const thresholdAmt = Number(getVal(row, 'THRESHOLD_AMT')) || 0;
+      const tagPriceRaw = getVal(row, 'TAG_PRICE');
+      const tagPrice = tagPriceRaw != null && tagPriceRaw !== '' ? Number(tagPriceRaw) : null;
       
       // 정체재고 판별은 택판매출 기준
       const seasonCategory = getSeasonCategory(getVal(row, 'PRDT_CD'), getVal(row, 'SESN'), cyTagSale, thresholdAmt);
@@ -946,6 +952,7 @@ export function formatProductDetailData(
         productName: getVal(row, 'PRODUCT_NAME') || getVal(row, 'PRDT_CD'),
         season: getVal(row, 'SESN') || '',
         seasonCategory: seasonCategory,
+        tagPrice: tagPrice,
         weeks: cyWeeks,
         previousWeeks: pyWeeks,
         endingInventoryQty: cyEndStockQty,
@@ -976,6 +983,8 @@ export function formatProductDetailData(
       const pySale = Number(getVal(row, 'PY_ACT_SALE_AMT')) || 0;
       const cyTagSale = Number(getVal(row, 'CY_TAG_SALE_AMT')) || 0;  // 택판매출 (정체재고 판별용)
       const thresholdAmt = Number(getVal(row, 'THRESHOLD_AMT')) || 0;
+      const tagPriceRaw = getVal(row, 'TAG_PRICE');
+      const tagPrice = tagPriceRaw != null && tagPriceRaw !== '' ? Number(tagPriceRaw) : null;
       
       // 정체재고 판별은 택판매출 기준
       const seasonCategory = getSeasonCategory(getVal(row, 'PRDT_CD'), getVal(row, 'SESN'), cyTagSale, thresholdAmt);
@@ -985,6 +994,7 @@ export function formatProductDetailData(
         productName: getVal(row, 'PRODUCT_NAME') || getVal(row, 'PRDT_CD'),
         season: getVal(row, 'SESN') || '',
         seasonCategory: seasonCategory,
+        tagPrice: tagPrice,
         weeks: cyWeeks,
         previousWeeks: pyWeeks,
         endingInventoryQty: cyEndStockQty,
