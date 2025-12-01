@@ -159,14 +159,14 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#1e40af' }} />
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#1e3a8a' }} />
                 <span className="text-xs text-slate-600">당년</span>
               </div>
               <span className="text-sm font-semibold text-slate-900">{stockWeeks.toFixed(1)}주</span>
             </div>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#94a3b8' }} />
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#f97316' }} />
                 <span className="text-xs text-slate-600">전년</span>
               </div>
               <span className="text-sm font-semibold text-slate-900">{previousStockWeeks.toFixed(1)}주</span>
@@ -186,14 +186,14 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#10b981' }} />
+                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#3b82f6' }} />
                 <span className="text-xs text-slate-600">당년</span>
               </div>
               <span className="text-sm font-semibold text-slate-900">{stockWeeksNormal.toFixed(1)}주</span>
             </div>
             <div className="flex justify-between items-center">
               <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#86efac' }} />
+                <div className="w-2.5 h-2.5 rounded-full border-2 border-dashed" style={{ borderColor: '#fdba74' }} />
                 <span className="text-xs text-slate-600">전년</span>
               </div>
               <span className="text-sm font-semibold text-slate-900">{previousStockWeeksNormal.toFixed(1)}주</span>
@@ -1067,36 +1067,36 @@ export default function BrandDashboard() {
                             type="natural" 
                             dataKey="stockWeeks" 
                             name="당년(전체)" 
-                            stroke="#1e40af" 
+                            stroke="#1e3a8a" 
                             strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#1e40af' }}
+                            dot={{ r: 4, fill: '#1e3a8a' }}
                           />
                           <Line 
                             type="natural" 
                             dataKey="previousStockWeeks" 
                             name="전년(전체)" 
-                            stroke="#94a3b8" 
+                            stroke="#f97316" 
                             strokeWidth={2.5}
-                            strokeDasharray="5 5"
-                            dot={{ r: 4, fill: '#94a3b8' }}
+                            dot={{ r: 4, fill: '#f97316' }}
                           />
                           {/* 정상재고 기준 (전체 - 정체재고) */}
                           <Line 
                             type="natural" 
                             dataKey="stockWeeksNormal" 
                             name="당년(정상)" 
-                            stroke="#dc2626" 
+                            stroke="#3b82f6" 
                             strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#dc2626' }}
+                            strokeDasharray="5 5"
+                            dot={{ r: 4, fill: '#3b82f6' }}
                           />
                           <Line 
                             type="natural" 
                             dataKey="previousStockWeeksNormal" 
                             name="전년(정상)" 
-                            stroke="#ec4899" 
+                            stroke="#fdba74" 
                             strokeWidth={2.5}
                             strokeDasharray="5 5"
-                            dot={{ r: 4, fill: '#ec4899' }}
+                            dot={{ r: 4, fill: '#fdba74' }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
