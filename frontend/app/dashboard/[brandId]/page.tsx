@@ -240,13 +240,21 @@ const CustomRatioLabel = ({ x, y, width, height, value }: any) => {
 };
 
 // 재고택금액 차트용 커스텀 툴팁
-const CustomInventoryTooltip = ({ active, payload, label }: any) => {
+const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ko-KR').format(num);
+  };
+
+  const formatWeeks = (weeks: number) => {
+    if (weeks === 0) return '-';
+    return new Intl.NumberFormat('ko-KR', {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1
+    }).format(weeks) + '주';
   };
 
   const data = payload[0]?.payload;
@@ -265,7 +273,162 @@ const CustomInventoryTooltip = ({ active, payload, label }: any) => {
   const previousTotalStock = data.previousTotalStock || 0;
   // YOY
   const stockYOY = data.stockYOY || 0;
+  // 당년 매출액
+  const totalSale = data.totalSale || 0;
 
+  // 매출액대비 모드일 때는 당년 재고택금액, 매출액, 재고주수 표시
+  if (mode === 'sales') {
+    // 전체 재고주수
+    const stockWeeks = data.stockWeeks || 0;
+    
+    // 시즌별 재고주수 계산 (시즌별 재고택금액 / (시즌별 매출액 / 30 * 7))
+    const calculateSeasonWeeks = (stock: number, sale: number) => {
+      if (sale > 0 && (sale / 30 * 7) > 0) {
+        return Math.round((stock / (sale / 30 * 7)) * 10) / 10;
+      }
+      return 0;
+    };
+    
+    const oldSeasonWeeks = calculateSeasonWeeks(data.oldSeasonStock || 0, data.oldSeasonSale || 0);
+    const currentSeasonWeeks = calculateSeasonWeeks(data.currentSeasonStock || 0, data.currentSeasonSale || 0);
+    const nextSeasonWeeks = calculateSeasonWeeks(data.nextSeasonStock || 0, data.nextSeasonSale || 0);
+    const stagnantWeeks = calculateSeasonWeeks(data.stagnantStock || 0, data.stagnantSale || 0);
+    
+    return (
+      <div 
+        className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[320px] bg-white" 
+        style={{ 
+          backgroundColor: '#ffffff',
+          background: '#ffffff',
+          opacity: 1,
+          backdropFilter: 'none',
+          zIndex: 9999
+        }}
+      >
+        <div className="font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200">
+          {formattedMonth}
+        </div>
+        
+        <div className="space-y-2 mb-3">
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-slate-600">당년 재고택금액</span>
+            <span className="text-sm font-semibold text-slate-900">{formatNumber(totalStock)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-slate-600">당년 매출액</span>
+            <span className="text-sm font-semibold text-slate-900">{formatNumber(totalSale)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-sm text-slate-600">재고주수</span>
+            <span className="text-sm font-semibold text-slate-900">{formatWeeks(stockWeeks)}</span>
+          </div>
+        </div>
+
+        <div className="pt-2 border-t border-slate-200">
+          <div className="text-xs font-semibold text-slate-700 mb-2">시즌별 상세</div>
+          <div className="space-y-2">
+            {/* 과시즌 */}
+            {((data.oldSeasonStock || 0) > 0 || (data.oldSeasonSale || 0) > 0) && (
+              <div className="text-xs">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#94a3b8' }} />
+                  <span className="text-slate-600 font-medium">과시즌</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.oldSeasonStock || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.oldSeasonSale || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
+                    <span className="font-semibold text-slate-900">{formatWeeks(oldSeasonWeeks)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 당시즌 */}
+            {((data.currentSeasonStock || 0) > 0 || (data.currentSeasonSale || 0) > 0) && (
+              <div className="text-xs">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#3b82f6' }} />
+                  <span className="text-slate-600 font-medium">당시즌</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.currentSeasonStock || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.currentSeasonSale || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
+                    <span className="font-semibold text-slate-900">{formatWeeks(currentSeasonWeeks)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 차기시즌 */}
+            {((data.nextSeasonStock || 0) > 0 || (data.nextSeasonSale || 0) > 0) && (
+              <div className="text-xs">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#8b5cf6' }} />
+                  <span className="text-slate-600 font-medium">차기시즌</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.nextSeasonStock || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.nextSeasonSale || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
+                    <span className="font-semibold text-slate-900">{formatWeeks(nextSeasonWeeks)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* 정체재고 */}
+            {((data.stagnantStock || 0) > 0 || (data.stagnantSale || 0) > 0) && (
+              <div className="text-xs">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
+                  <span className="text-slate-600 font-medium">정체재고</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.stagnantStock || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="font-semibold text-slate-900">{formatNumber(data.stagnantSale || 0)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
+                    <span className="font-semibold text-slate-900">{formatWeeks(stagnantWeeks)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 전년대비 모드일 때는 기존처럼 표시
   return (
     <div 
       className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[320px] bg-white" 
@@ -283,7 +446,7 @@ const CustomInventoryTooltip = ({ active, payload, label }: any) => {
       
       <div className="space-y-2 mb-3">
         <div className="flex justify-between items-center">
-          <span className="text-sm text-slate-600">총재고택금액</span>
+          <span className="text-sm text-slate-600">당년 재고택금액</span>
           <span className="text-sm font-semibold text-slate-900">{formatNumber(totalStock)}</span>
         </div>
         <div className="flex justify-between items-center">
@@ -431,12 +594,13 @@ export default function BrandDashboard() {
   const [seasonFilter, setSeasonFilter] = useState<'all' | 'current' | 'next' | 'stagnant' | 'old'>('all'); // 시즌 필터
   const [sortColumn, setSortColumn] = useState<'endingInventory' | 'salesAmount' | 'weeks' | null>(null); // 정렬 컬럼
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // 정렬 방향
-  const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('12weeks'); // 4주/8주/12주 토글
+  const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('4weeks'); // 4주/8주/12주 토글
   const [selectedItemForChart, setSelectedItemForChart] = useState<'all' | 'shoes' | 'hat' | 'bag' | 'other'>('all'); // 차트용 아이템 선택
   const [excludePurchase, setExcludePurchase] = useState<boolean>(false); // 사입제외 옵션
   const [chartBase, setChartBase] = useState<'amount' | 'quantity'>('amount'); // 금액기준/수량기준 토글
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태
+  const [inventoryChartMode, setInventoryChartMode] = useState<'yoy' | 'sales'>('yoy'); // 재고택금액 추이 차트 모드 (전년대비/매출액대비)
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<any>(null); // 클릭한 품번 상세정보
   const [productMonthlyTrend, setProductMonthlyTrend] = useState<any[]>([]); // 품번별 월별 추이 데이터
   const [isLoadingMonthlyTrend, setIsLoadingMonthlyTrend] = useState(false); // 월별 추이 로딩 상태
@@ -1128,7 +1292,36 @@ export default function BrandDashboard() {
                     
                     {/* 재고택금액 스택형 막대그래프 */}
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">재고택금액 추이 (시즌별, 백만원)-당년/전년 비교</h3>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-slate-700">
+                          {inventoryChartMode === 'yoy' 
+                            ? '재고택금액 추이 (시즌별, 백만원)-당년/전년 비교'
+                            : '재고택금액 추이 (시즌별, 백만원)-당년재고/매출액 비교'
+                          }
+                        </h3>
+                        <div className="flex items-center gap-1 bg-purple-50 rounded-lg p-0.5 border border-purple-200">
+                          <button
+                            onClick={() => setInventoryChartMode('yoy')}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                              inventoryChartMode === 'yoy'
+                                ? 'bg-purple-600 text-white shadow-sm'
+                                : 'text-purple-600 hover:bg-purple-100'
+                            }`}
+                          >
+                            전년대비
+                          </button>
+                          <button
+                            onClick={() => setInventoryChartMode('sales')}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
+                              inventoryChartMode === 'sales'
+                                ? 'bg-purple-600 text-white shadow-sm'
+                                : 'text-purple-600 hover:bg-purple-100'
+                            }`}
+                          >
+                            매출액대비
+                          </button>
+                        </div>
+                      </div>
                       <ResponsiveContainer width="100%" height={350}>
                         <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -1158,7 +1351,7 @@ export default function BrandDashboard() {
                             hide={true}
                           />
                           <Tooltip 
-                            content={<CustomInventoryTooltip />}
+                            content={(props: any) => <CustomInventoryTooltip {...props} mode={inventoryChartMode} />}
                             contentStyle={{ 
                               backgroundColor: '#ffffff',
                               background: '#ffffff',
@@ -1176,43 +1369,74 @@ export default function BrandDashboard() {
                             }}
                           />
                           <Legend content={<CustomInventoryLegend />} />
-                          {/* 전년 스택형 막대 (먼저 그리기) */}
-                          <Bar yAxisId="left" dataKey="previousNextSeasonStock" stackId="py" name="전년-차기시즌" fill="#c4b5fd">
-                            <LabelList content={<CustomRatioLabel />} dataKey="previousNextSeasonRatio" />
-                          </Bar>
-                          <Bar yAxisId="left" dataKey="previousCurrentSeasonStock" stackId="py" name="전년-당시즌" fill="#93c5fd">
-                            <LabelList content={<CustomRatioLabel />} dataKey="previousCurrentSeasonRatio" />
-                          </Bar>
-                          <Bar yAxisId="left" dataKey="previousOldSeasonStock" stackId="py" name="전년-과시즌" fill="#cbd5e1">
-                            <LabelList content={<CustomRatioLabel />} dataKey="previousOldSeasonRatio" />
-                          </Bar>
-                          <Bar yAxisId="left" dataKey="previousStagnantStock" stackId="py" name="전년-정체재고" fill="#ec4899">
-                            <LabelList content={<CustomRatioLabel />} dataKey="previousStagnantRatio" />
-                          </Bar>
-                          {/* 당년 스택형 막대 (나중에 그리기) */}
-                          <Bar yAxisId="left" dataKey="nextSeasonStock" stackId="cy" name="당년-차기시즌" fill="#8b5cf6">
-                            <LabelList content={<CustomRatioLabel />} dataKey="nextSeasonRatio" />
-                          </Bar>
-                          <Bar yAxisId="left" dataKey="currentSeasonStock" stackId="cy" name="당년-당시즌" fill="#3b82f6">
-                            <LabelList content={<CustomRatioLabel />} dataKey="currentSeasonRatio" />
-                          </Bar>
-                          <Bar yAxisId="left" dataKey="oldSeasonStock" stackId="cy" name="당년-과시즌" fill="#94a3b8">
-                            <LabelList content={<CustomRatioLabel />} dataKey="oldSeasonRatio" />
-                          </Bar>
-                          <Bar yAxisId="left" dataKey="stagnantStock" stackId="cy" name="당년-정체재고" fill="#dc2626">
-                            <LabelList content={<CustomRatioLabel />} dataKey="stagnantRatio" />
-                          </Bar>
-                          {/* YOY 라인 (Y축 표시 없이) */}
-                          <Line 
-                            yAxisId="right"
-                            type="natural" 
-                            dataKey="stockYOY" 
-                            name="YOY" 
-                            stroke="#ef4444" 
-                            strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#ef4444' }}
-                            connectNulls={true}
-                          />
+                          {inventoryChartMode === 'sales' ? (
+                            <>
+                              {/* 매출액대비 모드: 당년 매출액 막대 (먼저 그리기) */}
+                              <Bar yAxisId="left" dataKey="nextSeasonSale" stackId="cy-sale" name="당년-차기시즌(매출)" fill="#c084fc" opacity={0.7}>
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="currentSeasonSale" stackId="cy-sale" name="당년-당시즌(매출)" fill="#60a5fa" opacity={0.7}>
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="oldSeasonSale" stackId="cy-sale" name="당년-과시즌(매출)" fill="#cbd5e1" opacity={0.7}>
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="stagnantSale" stackId="cy-sale" name="당년-정체재고(매출)" fill="#f87171" opacity={0.7}>
+                              </Bar>
+                              {/* 매출액대비 모드: 당년 재고택금액 막대 */}
+                              <Bar yAxisId="left" dataKey="nextSeasonStock" stackId="cy" name="당년-차기시즌" fill="#8b5cf6">
+                                <LabelList content={<CustomRatioLabel />} dataKey="nextSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="currentSeasonStock" stackId="cy" name="당년-당시즌" fill="#3b82f6">
+                                <LabelList content={<CustomRatioLabel />} dataKey="currentSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="oldSeasonStock" stackId="cy" name="당년-과시즌" fill="#94a3b8">
+                                <LabelList content={<CustomRatioLabel />} dataKey="oldSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="stagnantStock" stackId="cy" name="당년-정체재고" fill="#dc2626">
+                                <LabelList content={<CustomRatioLabel />} dataKey="stagnantRatio" />
+                              </Bar>
+                            </>
+                          ) : (
+                            <>
+                              {/* 전년대비 모드: 전년 스택형 막대 (재고택금액) */}
+                              <Bar yAxisId="left" dataKey="previousNextSeasonStock" stackId="py" name="전년-차기시즌" fill="#c4b5fd">
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousNextSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="previousCurrentSeasonStock" stackId="py" name="전년-당시즌" fill="#93c5fd">
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousCurrentSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="previousOldSeasonStock" stackId="py" name="전년-과시즌" fill="#cbd5e1">
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousOldSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="previousStagnantStock" stackId="py" name="전년-정체재고" fill="#ec4899">
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousStagnantRatio" />
+                              </Bar>
+                              {/* 전년대비 모드: 당년 스택형 막대 (재고택금액) */}
+                              <Bar yAxisId="left" dataKey="nextSeasonStock" stackId="cy" name="당년-차기시즌" fill="#8b5cf6">
+                                <LabelList content={<CustomRatioLabel />} dataKey="nextSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="currentSeasonStock" stackId="cy" name="당년-당시즌" fill="#3b82f6">
+                                <LabelList content={<CustomRatioLabel />} dataKey="currentSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="oldSeasonStock" stackId="cy" name="당년-과시즌" fill="#94a3b8">
+                                <LabelList content={<CustomRatioLabel />} dataKey="oldSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="left" dataKey="stagnantStock" stackId="cy" name="당년-정체재고" fill="#dc2626">
+                                <LabelList content={<CustomRatioLabel />} dataKey="stagnantRatio" />
+                              </Bar>
+                            </>
+                          )}
+                          {/* YOY 라인 (전년대비 모드일 때만 표시) */}
+                          {inventoryChartMode === 'yoy' && (
+                            <Line 
+                              yAxisId="right"
+                              type="natural" 
+                              dataKey="stockYOY" 
+                              name="YOY" 
+                              stroke="#ef4444" 
+                              strokeWidth={2.5}
+                              dot={{ r: 4, fill: '#ef4444' }}
+                              connectNulls={true}
+                            />
+                          )}
                         </ComposedChart>
                       </ResponsiveContainer>
                     </div>

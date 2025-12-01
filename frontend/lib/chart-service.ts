@@ -271,6 +271,19 @@ monthly_season_summary AS (
     GROUP BY yyyymm
 ),
 
+-- 월별 시즌별 매출액 집계
+monthly_season_sale_summary AS (
+    SELECT 
+        yyyymm,
+        SUM(CASE WHEN season_type = '당시즌' THEN tag_sale_amt ELSE 0 END) as current_season_sale,
+        SUM(CASE WHEN season_type = '차기시즌' THEN tag_sale_amt ELSE 0 END) as next_season_sale,
+        SUM(CASE WHEN season_type = '과시즌' THEN tag_sale_amt ELSE 0 END) as old_season_sale,
+        SUM(CASE WHEN season_type = '정체재고' THEN tag_sale_amt ELSE 0 END) as stagnant_sale,
+        SUM(tag_sale_amt) as total_sale
+    FROM monthly_classified_stock
+    GROUP BY yyyymm
+),
+
 -- 월별 재고주수 계산용 매출 (전체, 금액 또는 수량)
 monthly_sale AS (
     ${base === 'quantity'
@@ -373,10 +386,16 @@ SELECT
     ss.next_season_stock,
     ss.old_season_stock,
     ss.stagnant_stock,
-    ss.total_stock
+    ss.total_stock,
+    sss.current_season_sale,
+    sss.next_season_sale,
+    sss.old_season_sale,
+    sss.stagnant_sale,
+    sss.total_sale
 FROM monthly_season_summary ss
 LEFT JOIN monthly_avg_sale mas ON ss.yyyymm = mas.yyyymm
 LEFT JOIN monthly_normal_stock_weeks ns ON ss.yyyymm = ns.yyyymm
+LEFT JOIN monthly_season_sale_summary sss ON ss.yyyymm = sss.yyyymm
 ORDER BY ss.yyyymm
   `;
 }
@@ -418,6 +437,20 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
     const pyOldSeasonStock = Math.round((Number(py?.OLD_SEASON_STOCK || py?.old_season_stock) || 0) / divisor);
     const pyStagnantStock = Math.round((Number(py?.STAGNANT_STOCK || py?.stagnant_stock) || 0) / divisor);
     const pyTotalStock = Math.round((Number(py?.TOTAL_STOCK || py?.total_stock) || 0) / divisor);
+    
+    // 당년 시즌별 매출액 (금액: 백만원 단위)
+    const cyCurrentSeasonSale = Math.round((Number(cy.CURRENT_SEASON_SALE || cy.current_season_sale) || 0) / divisor);
+    const cyNextSeasonSale = Math.round((Number(cy.NEXT_SEASON_SALE || cy.next_season_sale) || 0) / divisor);
+    const cyOldSeasonSale = Math.round((Number(cy.OLD_SEASON_SALE || cy.old_season_sale) || 0) / divisor);
+    const cyStagnantSale = Math.round((Number(cy.STAGNANT_SALE || cy.stagnant_sale) || 0) / divisor);
+    const cyTotalSale = Math.round((Number(cy.TOTAL_SALE || cy.total_sale) || 0) / divisor);
+    
+    // 전년 시즌별 매출액 (금액: 백만원 단위)
+    const pyCurrentSeasonSale = Math.round((Number(py?.CURRENT_SEASON_SALE || py?.current_season_sale) || 0) / divisor);
+    const pyNextSeasonSale = Math.round((Number(py?.NEXT_SEASON_SALE || py?.next_season_sale) || 0) / divisor);
+    const pyOldSeasonSale = Math.round((Number(py?.OLD_SEASON_SALE || py?.old_season_sale) || 0) / divisor);
+    const pyStagnantSale = Math.round((Number(py?.STAGNANT_SALE || py?.stagnant_sale) || 0) / divisor);
+    const pyTotalSale = Math.round((Number(py?.TOTAL_SALE || py?.total_sale) || 0) / divisor);
     
     // YOY 계산 (당년 / 전년 * 100)
     const stockYOY = pyTotalStock !== 0 
@@ -483,6 +516,18 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       previousStagnantRatio: pyStagnantRatio,
       // YOY
       stockYOY: stockYOY,
+      // 당년 시즌별 매출액
+      currentSeasonSale: cyCurrentSeasonSale,
+      nextSeasonSale: cyNextSeasonSale,
+      oldSeasonSale: cyOldSeasonSale,
+      stagnantSale: cyStagnantSale,
+      totalSale: cyTotalSale,
+      // 전년 시즌별 매출액
+      previousCurrentSeasonSale: pyCurrentSeasonSale,
+      previousNextSeasonSale: pyNextSeasonSale,
+      previousOldSeasonSale: pyOldSeasonSale,
+      previousStagnantSale: pyStagnantSale,
+      previousTotalSale: pyTotalSale
     };
   });
   
