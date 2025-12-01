@@ -782,7 +782,7 @@ export default function BrandDashboard() {
                       {/* 4x4 그리드: 첫 번째 열은 행 라벨, 나머지 3개 열은 데이터 */}
                       <div className="space-y-0">
                         {/* 헤더 행 */}
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-4 gap-2 py-2 px-3">
                           <div className="text-xs font-medium text-slate-600"></div>
                           <div className="text-xs font-medium text-slate-600 text-center">재고주수</div>
                           <div className="text-xs font-medium text-slate-600 text-center">기말재고</div>

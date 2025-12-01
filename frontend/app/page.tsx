@@ -37,7 +37,15 @@ export default function Home() {
           totalWeeks: d.totalWeeks,
           accInventoryDetail: d.accInventoryDetail,
         })));
-        setDashboardData(data);
+        
+        // 빈 배열이면 샘플 데이터 사용
+        if (!data || data.length === 0) {
+          console.warn('⚠️ 데이터가 비어있음, 샘플 데이터 사용');
+          const sampleData = getSampleData(selectedMonth);
+          setDashboardData(sampleData);
+        } else {
+          setDashboardData(data);
+        }
       } catch (error) {
         console.error('❌ 데이터 로딩 실패, 샘플 데이터 사용:', error);
         const data = getSampleData(selectedMonth);

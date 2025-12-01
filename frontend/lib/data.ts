@@ -89,6 +89,12 @@ export async function getRealData(month: string = '2025-10'): Promise<BrandDashb
     const apiData = await fetchAllBrandsInventory(month);
     console.log('📊 API에서 받은 원본 데이터:', apiData);
     
+    // 빈 배열이거나 데이터가 없으면 샘플 데이터 사용
+    if (!apiData || apiData.length === 0) {
+      console.warn('⚠️ API 데이터가 비어있음, 샘플 데이터 사용');
+      return getSampleData(month);
+    }
+    
     // API 데이터를 프론트엔드 형식으로 변환
     const mappedData = apiData.map((data: ApiInventoryData) => {
       const brand = BRANDS.find(b => b.code === data.brandCode);
