@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select';
 import { BRANDS } from '@/lib/brands';
 import { getRealData, getSampleData, getMonthOptions, BrandDashboardData } from '@/lib/data';
-import { BarChart3, ChevronDown } from 'lucide-react';
+import { BarChart3, ChevronDown, AlertTriangle } from 'lucide-react';
 
 export default function Home() {
   const [selectedMonth, setSelectedMonth] = useState('2025-10');
@@ -55,6 +55,55 @@ export default function Home() {
   );
   
   console.log('📊 brandDataMap:', Array.from(brandDataMap.entries()));
+
+  // 재고주수가 가장 크게 악화된 두 브랜드 찾기 및 원인 분석
+  const worstBrandsAnalysis = useMemo(() => {
+    const brandWeeksDiff = dashboardData
+      .map((data) => {
+        const currentWeeks = data.totalWeeks || 0;
+        const previousWeeks = data.totalPreviousWeeks || 0;
+        const diff = currentWeeks - previousWeeks; // 악화는 양수
+        
+        // 재고주수 증가 원인 분석
+        // 재고주수 = 재고금액 / (평균 매출금액 / 30일 * 7일)
+        // 재고주수 증가 원인:
+        // 1. 재고 증가 효과: 재고가 증가하면 재고주수 증가
+        // 2. 매출 감소 효과: 매출이 감소하면 재고주수 증가
+        
+        const inventoryYOY = data.inventoryYOY || 100; // 재고 증가율 (%)
+        const salesYOY = data.salesYOY || 100; // 매출 증가율 (%)
+        
+        // 재고 증가 효과: 재고가 100%를 넘는 정도
+        const inventoryEffect = Math.max(0, inventoryYOY - 100); // 재고 증가율 (예: 110% → 10% 증가)
+        
+        // 매출 감소 효과: 매출이 100% 미만인 정도
+        const salesEffect = Math.max(0, 100 - salesYOY); // 매출 감소율 (예: 90% → 10% 감소)
+        
+        // 재고주수에 미치는 영향은 재고 증가율과 매출 감소율의 상대적 크기로 판단
+        // 재고 증가율이 더 크면 재고 문제, 매출 감소율이 더 크면 매출 문제
+        const isInventoryProblem = inventoryEffect > salesEffect;
+        
+        return {
+          brandId: data.brandId,
+          diff: diff,
+          isInventoryProblem: isInventoryProblem,
+        };
+      })
+      .filter((item) => item.diff > 0) // 악화된 브랜드만
+      .sort((a, b) => b.diff - a.diff) // 차이가 큰 순서로 정렬
+      .slice(0, 2); // 상위 2개만
+    
+    // 브랜드별 문제 원인 매핑
+    const problemMap = new Map<string, 'inventory' | 'sales'>();
+    brandWeeksDiff.forEach((item) => {
+      problemMap.set(item.brandId, item.isInventoryProblem ? 'inventory' : 'sales');
+    });
+    
+    return {
+      worstBrandIds: new Set(brandWeeksDiff.map((item) => item.brandId)),
+      problemMap: problemMap,
+    };
+  }, [dashboardData]);
 
   const formatNumber = (num: number) => {
     return new Intl.NumberFormat('ko-KR').format(num);
@@ -129,11 +178,25 @@ export default function Home() {
               totalWeeks: data.totalWeeks,
             });
 
+            const isWorstBrand = worstBrandsAnalysis.worstBrandIds.has(brand.id);
+            const problemType = worstBrandsAnalysis.problemMap.get(brand.id);
+            
             return (
               <Card
                 key={brand.id}
-                className="group overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-xl hover:border-slate-300 transition-all duration-300 flex flex-col h-full hover:-translate-y-1"
+                className={`group relative overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full hover:-translate-y-1 ${
+                  isWorstBrand 
+                    ? 'shadow-red-200/50 hover:shadow-red-300/50 bg-gradient-to-br from-white to-red-50/30' 
+                    : 'hover:border-slate-300'
+                }`}
               >
+                {/* 경고 배지 */}
+                {isWorstBrand && (
+                  <div className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg flex items-center gap-1 z-10 shadow-md">
+                    <AlertTriangle className="h-3 w-3" />
+                    <span>{problemType === 'inventory' ? '재고↑' : '매출↓'}</span>
+                  </div>
+                )}
                 <CardHeader className="pb-4">
                   {/* 브랜드 헤더 */}
                   <div className="flex items-center gap-3 mb-4">
@@ -206,14 +269,32 @@ export default function Home() {
 
                   {/* 핵심 지표 */}
                   <div className="grid grid-cols-2 gap-4 pt-2">
-                    <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 p-3 rounded-xl border-2 border-blue-200/50">
+                    <div className={`relative bg-gradient-to-br from-blue-50 to-blue-100/50 p-3 rounded-xl border-2 border-blue-200/50 ${
+                      problemType === 'inventory' 
+                        ? 'shadow-red-200/50 ring-2 ring-red-300/30' 
+                        : ''
+                    }`}>
+                      {problemType === 'inventory' && (
+                        <div className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 shadow-lg">
+                          <AlertTriangle className="h-3 w-3 text-white" />
+                        </div>
+                      )}
                       <p className="text-xs font-medium text-slate-600 mb-1">ACC 기말재고</p>
                       <p className="text-xl font-bold text-slate-900">
                         {formatNumber(data.accEndingInventory)}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">백만원</p>
                     </div>
-                    <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 p-3 rounded-xl border-2 border-purple-200/50">
+                    <div className={`relative bg-gradient-to-br from-purple-50 to-purple-100/50 p-3 rounded-xl border-2 border-purple-200/50 ${
+                      problemType === 'sales' 
+                        ? 'shadow-red-200/50 ring-2 ring-red-300/30' 
+                        : ''
+                    }`}>
+                      {problemType === 'sales' && (
+                        <div className="absolute -top-2 -right-2 bg-red-500 rounded-full p-1 shadow-lg">
+                          <AlertTriangle className="h-3 w-3 text-white" />
+                        </div>
+                      )}
                       <p className="text-xs font-medium text-slate-600 mb-1">ACC 판매액</p>
                       <p className="text-xl font-bold text-slate-900">
                         {formatNumber(data.accSalesAmount)}
@@ -273,8 +354,14 @@ export default function Home() {
                         </div>
                       </div>
                       
-                      <div className="grid grid-cols-4 gap-2 py-2 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors items-center">
-                        <div className="text-sm font-semibold text-slate-900">신발</div>
+                      {(() => {
+                        const shoesWeeksDiff = data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks;
+                        const isShoesWorse = shoesWeeksDiff > 0;
+                        return (
+                          <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${
+                            isShoesWorse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'
+                          }`}>
+                            <div className="text-sm font-semibold text-slate-900">신발</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.shoes.current)}</div>
                           <div className="text-slate-500">{data.accInventoryDetail.shoes.weeks.toFixed(1)}주</div>
@@ -290,9 +377,17 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                       
-                      <div className="grid grid-cols-4 gap-2 py-2 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors items-center">
-                        <div className="text-sm font-semibold text-slate-900">모자</div>
+                      {(() => {
+                        const hatWeeksDiff = data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks;
+                        const isHatWorse = hatWeeksDiff > 0;
+                        return (
+                          <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${
+                            isHatWorse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'
+                          }`}>
+                            <div className="text-sm font-semibold text-slate-900">모자</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.hat.current)}</div>
                           <div className="text-slate-500">{data.accInventoryDetail.hat.weeks.toFixed(1)}주</div>
@@ -308,9 +403,17 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                       
-                      <div className="grid grid-cols-4 gap-2 py-2 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors items-center">
-                        <div className="text-sm font-semibold text-slate-900">가방</div>
+                      {(() => {
+                        const bagWeeksDiff = data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks;
+                        const isBagWorse = bagWeeksDiff > 0;
+                        return (
+                          <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${
+                            isBagWorse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'
+                          }`}>
+                            <div className="text-sm font-semibold text-slate-900">가방</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.bag.current)}</div>
                           <div className="text-slate-500">{data.accInventoryDetail.bag.weeks.toFixed(1)}주</div>
@@ -326,9 +429,17 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                       
-                      <div className="grid grid-cols-4 gap-2 py-2 px-3 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors items-center">
-                        <div className="text-sm font-semibold text-slate-900">기타ACC</div>
+                      {(() => {
+                        const otherWeeksDiff = data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks;
+                        const isOtherWorse = otherWeeksDiff > 0;
+                        return (
+                          <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${
+                            isOtherWorse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'
+                          }`}>
+                            <div className="text-sm font-semibold text-slate-900">기타ACC</div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{formatNumber(data.accInventoryDetail.other.current)}</div>
                           <div className="text-slate-500">{data.accInventoryDetail.other.weeks.toFixed(1)}주</div>
@@ -344,6 +455,8 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                     </div>
                   </div>
 

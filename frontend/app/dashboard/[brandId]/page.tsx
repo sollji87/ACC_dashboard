@@ -790,7 +790,7 @@ export default function BrandDashboard() {
                         </div>
                         
                         {/* 당년 행 */}
-                        <div className="grid grid-cols-4 gap-2 items-center">
+                        <div className="grid grid-cols-4 gap-2 items-center py-2 px-3 rounded-lg bg-yellow-50">
                           <div className="text-xs font-medium text-slate-600">당년</div>
                           <div className="text-center">
                             <p className="text-sm font-bold text-slate-900">
@@ -798,7 +798,7 @@ export default function BrandDashboard() {
                             </p>
                           </div>
                           <div className="text-center">
-                            <p className="text-sm font-bold text-slate-900">
+                            <p className="text-sm font-bold text-blue-900">
                               {formatNumber(item.data.current)}
                             </p>
                             <p className="text-xs text-slate-400">백만원</p>
@@ -812,7 +812,7 @@ export default function BrandDashboard() {
                         </div>
                         
                         {/* 전년 행 */}
-                        <div className="grid grid-cols-4 gap-2 items-center">
+                        <div className="grid grid-cols-4 gap-2 items-center py-2 px-3">
                           <div className="text-xs font-medium text-slate-600">전년</div>
                           <div className="text-center">
                             <p className="text-sm font-semibold text-slate-700">
@@ -834,7 +834,7 @@ export default function BrandDashboard() {
                         </div>
                         
                         {/* YOY/개선 행 */}
-                        <div className="grid grid-cols-4 gap-2 items-center">
+                        <div className="grid grid-cols-4 gap-2 items-center py-2 px-3">
                           <div className="text-xs font-medium text-slate-600">YOY</div>
                           <div className="text-center">
                             <p className={`text-sm font-bold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
