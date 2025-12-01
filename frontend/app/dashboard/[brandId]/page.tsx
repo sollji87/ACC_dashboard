@@ -68,7 +68,7 @@ const CustomStockWeeksLegend = ({ payload }: any) => {
               className="w-3 h-3 rounded-full" 
               style={divStyle}
             />
-            <span className="text-xs text-slate-700" style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif', color: color }}>
+            <span className="text-xs text-slate-700" style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}>
               {entry.value}
             </span>
           </div>
@@ -1105,8 +1105,8 @@ export default function BrandDashboard() {
                     {/* 재고택금액 스택형 막대그래프 */}
                     <div>
                       <h3 className="text-sm font-semibold text-slate-700 mb-3">재고택금액 추이 (시즌별, 백만원)-당년/전년 비교</h3>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <ComposedChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <ResponsiveContainer width="100%" height={350}>
+                        <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis 
                             dataKey="month" 
