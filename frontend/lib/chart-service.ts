@@ -384,6 +384,34 @@ export function formatChartData(rows: any[]): any {
       ? Math.round((cyTotalStock / pyTotalStock) * 1000) / 10 
       : 0;
     
+    // 당년 비율 계산 (전체 재고 중 각 카테고리 비율)
+    const cyCurrentSeasonRatio = cyTotalStock > 0 
+      ? Math.round((cyCurrentSeasonStock / cyTotalStock) * 100) 
+      : 0;
+    const cyNextSeasonRatio = cyTotalStock > 0 
+      ? Math.round((cyNextSeasonStock / cyTotalStock) * 100) 
+      : 0;
+    const cyOldSeasonRatio = cyTotalStock > 0 
+      ? Math.round((cyOldSeasonStock / cyTotalStock) * 100) 
+      : 0;
+    const cyStagnantRatio = cyTotalStock > 0 
+      ? Math.round((cyStagnantStock / cyTotalStock) * 100) 
+      : 0;
+    
+    // 전년 비율 계산
+    const pyCurrentSeasonRatio = pyTotalStock > 0 
+      ? Math.round((pyCurrentSeasonStock / pyTotalStock) * 100) 
+      : 0;
+    const pyNextSeasonRatio = pyTotalStock > 0 
+      ? Math.round((pyNextSeasonStock / pyTotalStock) * 100) 
+      : 0;
+    const pyOldSeasonRatio = pyTotalStock > 0 
+      ? Math.round((pyOldSeasonStock / pyTotalStock) * 100) 
+      : 0;
+    const pyStagnantRatio = pyTotalStock > 0 
+      ? Math.round((pyStagnantStock / pyTotalStock) * 100) 
+      : 0;
+    
     return {
       month: `${year}-${monthStr}`,
       stockWeeks: Number(cy.STOCK_WEEKS || cy.stock_weeks) || 0,
@@ -403,6 +431,16 @@ export function formatChartData(rows: any[]): any {
       previousOldSeasonStock: pyOldSeasonStock,
       previousStagnantStock: pyStagnantStock,
       previousTotalStock: pyTotalStock,
+      // 당년 비율 (%)
+      currentSeasonRatio: cyCurrentSeasonRatio,
+      nextSeasonRatio: cyNextSeasonRatio,
+      oldSeasonRatio: cyOldSeasonRatio,
+      stagnantRatio: cyStagnantRatio,
+      // 전년 비율 (%)
+      previousCurrentSeasonRatio: pyCurrentSeasonRatio,
+      previousNextSeasonRatio: pyNextSeasonRatio,
+      previousOldSeasonRatio: pyOldSeasonRatio,
+      previousStagnantRatio: pyStagnantRatio,
       // YOY
       stockYOY: stockYOY,
     };

@@ -36,7 +36,7 @@ const saveAs = (blob: Blob, filename: string) => {
     }, 250);
   }, 0);
 };
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, TooltipProps } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, TooltipProps, LabelList } from 'recharts';
 
 // 재고주수 추이 차트용 커스텀 범례
 const CustomStockWeeksLegend = ({ payload }: any) => {
@@ -48,15 +48,25 @@ const CustomStockWeeksLegend = ({ payload }: any) => {
         const color = entry.color || '#64748b';
         const isDashed = entry.strokeDasharray;
         
+        const divStyle = isDashed 
+          ? {
+              backgroundColor: 'transparent',
+              borderWidth: '2px',
+              borderStyle: 'dashed' as const,
+              borderColor: color
+            }
+          : {
+              backgroundColor: color,
+              borderWidth: '2px',
+              borderStyle: 'solid' as const,
+              borderColor: color
+            };
+        
         return (
           <div key={index} className="flex items-center gap-2">
             <div 
               className="w-3 h-3 rounded-full" 
-              style={{ 
-                backgroundColor: isDashed ? 'transparent' : color,
-                border: `2px solid ${color}`,
-                borderStyle: isDashed ? 'dashed' : 'solid'
-              }}
+              style={divStyle}
             />
             <span className="text-xs text-slate-700" style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif', color: color }}>
               {entry.value}
@@ -198,6 +208,34 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
         </div>
       </div>
     </div>
+  );
+};
+
+// 재고택금액 차트용 커스텀 비율 Label
+const CustomRatioLabel = ({ x, y, width, height, value }: any) => {
+  // value는 비율 값 (%)
+  const ratio = typeof value === 'number' ? value : 0;
+  
+  // 비율이 0 이하이거나 막대가 너무 작으면 표시하지 않음
+  if (ratio <= 0 || height < 20) return null;
+  
+  // 막대의 중간 위치 계산
+  const labelX = x + width / 2;
+  const labelY = y + height / 2;
+  
+  return (
+    <text
+      x={labelX}
+      y={labelY}
+      fill="#ffffff"
+      textAnchor="middle"
+      dominantBaseline="middle"
+      fontSize={11}
+      fontWeight="bold"
+      style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}
+    >
+      {ratio}%
+    </text>
   );
 };
 
@@ -1047,18 +1085,18 @@ export default function BrandDashboard() {
                             type="natural" 
                             dataKey="stockWeeksNormal" 
                             name="당년(정상)" 
-                            stroke="#10b981" 
+                            stroke="#dc2626" 
                             strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#10b981' }}
+                            dot={{ r: 4, fill: '#dc2626' }}
                           />
                           <Line 
                             type="natural" 
                             dataKey="previousStockWeeksNormal" 
                             name="전년(정상)" 
-                            stroke="#86efac" 
+                            stroke="#ec4899" 
                             strokeWidth={2.5}
                             strokeDasharray="5 5"
-                            dot={{ r: 4, fill: '#86efac' }}
+                            dot={{ r: 4, fill: '#ec4899' }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -1115,15 +1153,31 @@ export default function BrandDashboard() {
                           />
                           <Legend content={<CustomInventoryLegend />} />
                           {/* 전년 스택형 막대 (먼저 그리기) */}
-                          <Bar yAxisId="left" dataKey="previousNextSeasonStock" stackId="py" name="전년-차기시즌" fill="#c4b5fd" />
-                          <Bar yAxisId="left" dataKey="previousCurrentSeasonStock" stackId="py" name="전년-당시즌" fill="#93c5fd" />
-                          <Bar yAxisId="left" dataKey="previousOldSeasonStock" stackId="py" name="전년-과시즌" fill="#cbd5e1" />
-                          <Bar yAxisId="left" dataKey="previousStagnantStock" stackId="py" name="전년-정체재고" fill="#fca5a5" />
+                          <Bar yAxisId="left" dataKey="previousNextSeasonStock" stackId="py" name="전년-차기시즌" fill="#c4b5fd">
+                            <LabelList content={<CustomRatioLabel />} dataKey="previousNextSeasonRatio" />
+                          </Bar>
+                          <Bar yAxisId="left" dataKey="previousCurrentSeasonStock" stackId="py" name="전년-당시즌" fill="#93c5fd">
+                            <LabelList content={<CustomRatioLabel />} dataKey="previousCurrentSeasonRatio" />
+                          </Bar>
+                          <Bar yAxisId="left" dataKey="previousOldSeasonStock" stackId="py" name="전년-과시즌" fill="#cbd5e1">
+                            <LabelList content={<CustomRatioLabel />} dataKey="previousOldSeasonRatio" />
+                          </Bar>
+                          <Bar yAxisId="left" dataKey="previousStagnantStock" stackId="py" name="전년-정체재고" fill="#ec4899">
+                            <LabelList content={<CustomRatioLabel />} dataKey="previousStagnantRatio" />
+                          </Bar>
                           {/* 당년 스택형 막대 (나중에 그리기) */}
-                          <Bar yAxisId="left" dataKey="nextSeasonStock" stackId="cy" name="당년-차기시즌" fill="#8b5cf6" />
-                          <Bar yAxisId="left" dataKey="currentSeasonStock" stackId="cy" name="당년-당시즌" fill="#3b82f6" />
-                          <Bar yAxisId="left" dataKey="oldSeasonStock" stackId="cy" name="당년-과시즌" fill="#94a3b8" />
-                          <Bar yAxisId="left" dataKey="stagnantStock" stackId="cy" name="당년-정체재고" fill="#ef4444" />
+                          <Bar yAxisId="left" dataKey="nextSeasonStock" stackId="cy" name="당년-차기시즌" fill="#8b5cf6">
+                            <LabelList content={<CustomRatioLabel />} dataKey="nextSeasonRatio" />
+                          </Bar>
+                          <Bar yAxisId="left" dataKey="currentSeasonStock" stackId="cy" name="당년-당시즌" fill="#3b82f6">
+                            <LabelList content={<CustomRatioLabel />} dataKey="currentSeasonRatio" />
+                          </Bar>
+                          <Bar yAxisId="left" dataKey="oldSeasonStock" stackId="cy" name="당년-과시즌" fill="#94a3b8">
+                            <LabelList content={<CustomRatioLabel />} dataKey="oldSeasonRatio" />
+                          </Bar>
+                          <Bar yAxisId="left" dataKey="stagnantStock" stackId="cy" name="당년-정체재고" fill="#dc2626">
+                            <LabelList content={<CustomRatioLabel />} dataKey="stagnantRatio" />
+                          </Bar>
                           {/* YOY 라인 (Y축 표시 없이) */}
                           <Line 
                             yAxisId="right"
