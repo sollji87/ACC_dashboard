@@ -610,8 +610,26 @@ export default function BrandDashboard() {
   const [productMonthlyTrend, setProductMonthlyTrend] = useState<any[]>([]); // 품번별 월별 추이 데이터
   const [isLoadingMonthlyTrend, setIsLoadingMonthlyTrend] = useState(false); // 월별 추이 로딩 상태
   const [excludeSeasonFilter, setExcludeSeasonFilter] = useState<'all' | 'excludeS' | 'excludeF'>('all'); // 시즌 제외 필터
+  const [dxMasterData, setDxMasterData] = useState<Record<string, string>>({}); // DX MASTER 품번별 서브카테고리 데이터
 
   const monthOptions = getMonthOptions();
+
+  // DX MASTER 데이터 로드 (디스커버리 브랜드용)
+  useEffect(() => {
+    async function loadDxMasterData() {
+      try {
+        const response = await fetch('/dx-master.json');
+        if (response.ok) {
+          const data = await response.json();
+          setDxMasterData(data);
+          console.log('📦 DX MASTER 데이터 로드 완료:', Object.keys(data).length, '개 품번');
+        }
+      } catch (error) {
+        console.error('DX MASTER 데이터 로드 실패:', error);
+      }
+    }
+    loadDxMasterData();
+  }, []);
 
   useEffect(() => {
     const foundBrand = getBrandById(brandId);
@@ -1734,12 +1752,24 @@ export default function BrandDashboard() {
                             // 시즌 제외 필터 (S시즌/F시즌 제외)
                             const season = product.season || '';
                             let matchesExcludeFilter = true;
+                            
+                            // 디스커버리(X) 브랜드인 경우 DX MASTER 서브카테고리도 참조
+                            // 품번에서 DX로 시작하는 부분 추출 (예: X25NDXSH1234 -> DXSH1234)
+                            const productCode = product.productCode || '';
+                            const dxCodeMatch = productCode.match(/DX[A-Z0-9]+/);
+                            const dxCode = dxCodeMatch ? dxCodeMatch[0] : '';
+                            const dxSubCategory = dxCode ? dxMasterData[dxCode] : null;
+                            
                             if (excludeSeasonFilter === 'excludeS') {
-                              // S시즌 제외 (예: 24S, 25S 등)
-                              matchesExcludeFilter = !season.includes('S');
+                              // S시즌 제외 (예: 24S, 25S 등) + 디스커버리 SUMMER 서브카테고리
+                              const isSSeason = season.includes('S');
+                              const isSummerSubCategory = brand?.code === 'X' && dxSubCategory === 'SUMMER';
+                              matchesExcludeFilter = !isSSeason && !isSummerSubCategory;
                             } else if (excludeSeasonFilter === 'excludeF') {
-                              // F시즌 제외 (예: 24F, 25F 등)
-                              matchesExcludeFilter = !season.includes('F');
+                              // F시즌 제외 (예: 24F, 25F 등) + 디스커버리 WINTER 서브카테고리
+                              const isFSeason = season.includes('F');
+                              const isWinterSubCategory = brand?.code === 'X' && dxSubCategory === 'WINTER';
+                              matchesExcludeFilter = !isFSeason && !isWinterSubCategory;
                             }
                             
                             return matchesSearch && matchesSeason && matchesExcludeFilter;
