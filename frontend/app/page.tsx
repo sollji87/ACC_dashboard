@@ -26,28 +26,16 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
-        console.log('🔄 메인 페이지 데이터 로드 시작:', selectedMonth);
         const data = await getRealData(selectedMonth);
-        console.log('✅ 메인 페이지 데이터 로드 완료:', data);
-        console.log('📊 데이터 상세:', data.map(d => ({
-          brandId: d.brandId,
-          brandName: d.brandName,
-          accEndingInventory: d.accEndingInventory,
-          accSalesAmount: d.accSalesAmount,
-          totalWeeks: d.totalWeeks,
-          accInventoryDetail: d.accInventoryDetail,
-        })));
-        
+
         // 빈 배열이면 샘플 데이터 사용
         if (!data || data.length === 0) {
-          console.warn('⚠️ 데이터가 비어있음, 샘플 데이터 사용');
           const sampleData = getSampleData(selectedMonth);
           setDashboardData(sampleData);
         } else {
           setDashboardData(data);
         }
-      } catch (error) {
-        console.error('❌ 데이터 로딩 실패, 샘플 데이터 사용:', error);
+      } catch {
         const data = getSampleData(selectedMonth);
         setDashboardData(data);
       } finally {
@@ -61,8 +49,6 @@ export default function Home() {
   const brandDataMap = new Map(
     dashboardData.map((data) => [data.brandId, data])
   );
-  
-  console.log('📊 brandDataMap:', Array.from(brandDataMap.entries()));
 
   // 재고주수가 가장 크게 악화된 두 브랜드 찾기 및 원인 분석
   const worstBrandsAnalysis = useMemo(() => {
@@ -177,14 +163,8 @@ export default function Home() {
           {BRANDS.map((brand) => {
             const data = brandDataMap.get(brand.id);
             if (!data) {
-              console.warn(`⚠️ 브랜드 ${brand.id} 데이터 없음`);
               return null;
             }
-            console.log(`📊 브랜드 ${brand.name} 렌더링:`, {
-              accEndingInventory: data.accEndingInventory,
-              accSalesAmount: data.accSalesAmount,
-              totalWeeks: data.totalWeeks,
-            });
 
             const isWorstBrand = worstBrandsAnalysis.worstBrandIds.has(brand.id);
             const problemType = worstBrandsAnalysis.problemMap.get(brand.id);
