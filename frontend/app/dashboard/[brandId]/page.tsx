@@ -1754,9 +1754,9 @@ export default function BrandDashboard() {
                             let matchesExcludeFilter = true;
                             
                             // 디스커버리(X) 브랜드인 경우 DX MASTER 서브카테고리도 참조
-                            // 품번에서 DX로 시작하는 부분 추출 (예: X25NDXSH1234 -> DXSH1234)
+                            // 품번에서 DX(성인) 또는 DK(키즈)로 시작하는 부분 추출 (예: X25NDXSH1234 -> DXSH1234, X25NDKSH7535N -> DKSH7535N)
                             const productCode = product.productCode || '';
-                            const dxCodeMatch = productCode.match(/DX[A-Z0-9]+/);
+                            const dxCodeMatch = productCode.match(/D[XK][A-Z0-9]+/);
                             const dxCode = dxCodeMatch ? dxCodeMatch[0] : '';
                             const dxSubCategory = dxCode ? dxMasterData[dxCode] : null;
                             
