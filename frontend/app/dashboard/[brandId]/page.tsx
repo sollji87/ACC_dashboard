@@ -1450,10 +1450,6 @@ export default function BrandDashboard() {
                                 />
                               );
                             }}
-                            strokeDasharray={(props: any) => {
-                              // 예측 구간은 점선으로 표시
-                              return undefined; // recharts는 개별 세그먼트 스타일을 지원하지 않으므로 전체적으로 처리
-                            }}
                             connectNulls
                           />
                           <Line 
