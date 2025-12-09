@@ -1788,10 +1788,10 @@ export default function BrandDashboard() {
                             
                             if (item.isActual === false) {
                               // 예측 구간: forecastIncomingAmounts에서 가져오기
-                              if (forecastIncomingAmounts && selectedItem !== 'all') {
+                              if (forecastIncomingAmounts && selectedItem && selectedItem !== 'all') {
                                 const monthData = forecastIncomingAmounts.find((d: any) => d.month === item.month);
                                 if (monthData) {
-                                  incomingAmount = Math.round((monthData[selectedItem] || 0) / 1000000);
+                                  incomingAmount = Math.round((monthData[selectedItem as keyof typeof monthData] || 0) / 1000000);
                                 }
                               }
                             } else {
