@@ -7,7 +7,6 @@ import {
   ForecastResult,
   OrderCapacity,
   CombinedChartData,
-  MonthlyGrowthRate,
   MonthlyIncomingAmount,
 } from './forecast-types';
 
