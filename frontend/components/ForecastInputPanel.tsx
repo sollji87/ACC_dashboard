@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   ForecastInput,
   ItemBaseStockWeeks,
+  ItemYoyRate,
   MonthlyItemIncomingAmount,
   OrderCapacity,
 } from '@/lib/forecast-types';
@@ -37,7 +38,12 @@ export default function ForecastInputPanel({
   onForecastCalculated,
 }: ForecastInputPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [yoyRate, setYoyRate] = useState<number>(100); // 전체 공통 YOY 성장률
+  const [yoyRate, setYoyRate] = useState<ItemYoyRate>({
+    shoes: 100,
+    hat: 100,
+    bag: 100,
+    other: 100,
+  }); // 중분류별 매출액 성장률 YOY
   const [baseStockWeeks, setBaseStockWeeks] = useState<ItemBaseStockWeeks>({
     shoes: 40,
     hat: 40,
@@ -64,7 +70,22 @@ export default function ForecastInputPanel({
       const savedData = localStorage.getItem(storageKey);
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        setYoyRate(parsed.yoyRate || 100);
+        // yoyRate가 숫자인 경우 (구버전) 중분류별 객체로 변환
+        if (typeof parsed.yoyRate === 'number') {
+          setYoyRate({
+            shoes: parsed.yoyRate,
+            hat: parsed.yoyRate,
+            bag: parsed.yoyRate,
+            other: parsed.yoyRate,
+          });
+        } else {
+          setYoyRate(parsed.yoyRate || {
+            shoes: 100,
+            hat: 100,
+            bag: 100,
+            other: 100,
+          });
+        }
         setBaseStockWeeks(parsed.baseStockWeeks || {
           shoes: 40,
           hat: 40,
@@ -132,7 +153,7 @@ export default function ForecastInputPanel({
           forecastResults,
           baseStockWeeks[selectedItem],
           weeksType,
-          yoyRate
+          yoyRate[selectedItem]
         );
         onForecastCalculated(forecastResults, orderCapacity);
         console.log(`✅ 저장된 설정으로 자동 예측 실행 완료 (${selectedItem})`);
@@ -240,7 +261,7 @@ export default function ForecastInputPanel({
         forecastResults,
         baseStockWeeks[selectedItem],
         weeksType,
-        yoyRate
+        yoyRate[selectedItem]
       );
 
       // 로컬 스토리지에 저장 (모든 중분류에 공통 적용)
@@ -294,8 +315,8 @@ export default function ForecastInputPanel({
             {!isExpanded && selectedItem !== 'all' && (
               <div className="ml-6 flex items-center gap-6 text-sm text-slate-600">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-blue-600">YOY:</span>
-                  <span className="font-bold text-blue-700">{yoyRate}%</span>
+                  <span className="font-semibold text-blue-600">매출YOY:</span>
+                  <span className="font-bold text-blue-700">{yoyRate[selectedItem]}%</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-purple-600">목표 재고주수:</span>
@@ -305,7 +326,7 @@ export default function ForecastInputPanel({
                 </div>
                 {isForecastReady && (
                   <div className="text-xs text-green-600">
-                    (저장된 설정 자동 적용 중 - 모든 중분류 공통)
+                    (저장된 설정 자동 적용 중)
                   </div>
                 )}
               </div>
@@ -337,19 +358,31 @@ export default function ForecastInputPanel({
         {/* 입력 폼 */}
         {isExpanded && (
           <div className="mt-4 space-y-4">
-            {/* 전체 공통 YOY 성장률 */}
-            <div className="flex items-center gap-4 p-3 bg-blue-50 rounded-lg">
-              <label className="text-sm font-semibold text-slate-700 w-40">
-                YOY 성장률 (전체):
-              </label>
-              <Input
-                type="number"
-                value={yoyRate}
-                onChange={(e) => setYoyRate(parseFloat(e.target.value) || 100)}
-                className="w-32 text-right"
-                step="0.1"
-              />
-              <span className="text-sm text-slate-600">%</span>
+            {/* 중분류별 매출액 성장률 YOY */}
+            <div className="p-3 bg-blue-50 rounded-lg space-y-2">
+              <h4 className="text-sm font-semibold text-slate-700 mb-2">
+                중분류별 매출액 성장률 YOY:
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {(Object.keys(yoyRate) as Array<keyof ItemYoyRate>).map((key) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <label className="text-xs text-slate-600 w-16">{itemNames[key]}:</label>
+                    <Input
+                      type="number"
+                      value={yoyRate[key]}
+                      onChange={(e) =>
+                        setYoyRate((prev) => ({
+                          ...prev,
+                          [key]: parseFloat(e.target.value) || 100,
+                        }))
+                      }
+                      className="w-20 text-right text-sm"
+                      step="0.1"
+                    />
+                    <span className="text-xs text-slate-600">%</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* 중분류별 기준재고주수 */}

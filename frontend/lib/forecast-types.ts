@@ -18,6 +18,16 @@ export interface ItemBaseStockWeeks {
 }
 
 /**
+ * 중분류별 매출액 성장률 YOY (%)
+ */
+export interface ItemYoyRate {
+  shoes: number; // 신발 (예: 105 = 105%)
+  hat: number; // 모자
+  bag: number; // 가방
+  other: number; // 기타ACC
+}
+
+/**
  * 월별 중분류별 입고예정금액
  */
 export interface MonthlyItemIncomingAmount {
@@ -34,7 +44,7 @@ export interface MonthlyItemIncomingAmount {
 export interface ForecastInput {
   brandCode: string; // 브랜드 코드
   brandName: string; // 브랜드명
-  yoyRate: number; // 전체 공통 YOY 성장률 (예: 105 = 105%)
+  yoyRate: ItemYoyRate; // 중분류별 매출액 성장률 YOY (예: 105 = 105%)
   baseStockWeeks: ItemBaseStockWeeks; // 중분류별 기준재고주수
   incomingAmounts: MonthlyItemIncomingAmount[]; // 월별 중분류별 입고예정금액
 }

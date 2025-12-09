@@ -107,7 +107,7 @@ export function calculateForecast(
   // 월별 예측 계산
   for (const monthlyIncoming of forecastInput.incomingAmounts) {
     const { month } = monthlyIncoming;
-    const yoyRate = forecastInput.yoyRate;
+    const yoyRate = forecastInput.yoyRate[selectedItem];
     
     // 전년 동월 데이터 찾기
     const previousYearMonth = getPreviousYearMonth(month);
