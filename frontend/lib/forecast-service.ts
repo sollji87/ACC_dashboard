@@ -443,16 +443,6 @@ export function generateForecastMonths(lastActualMonth: string, months: number =
 }
 
 /**
- * 기본 YOY 성장률 생성 (100% = 전년 동일)
- */
-export function generateDefaultGrowthRates(months: string[]): MonthlyGrowthRate[] {
-  return months.map((month) => ({
-    month,
-    yoyRate: 100, // 기본값 100%
-  }));
-}
-
-/**
  * 기본 입고예정금액 생성 (0원)
  */
 export function generateDefaultIncomingAmounts(months: string[]): MonthlyIncomingAmount[] {
