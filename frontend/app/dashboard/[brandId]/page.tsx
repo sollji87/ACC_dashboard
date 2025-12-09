@@ -297,6 +297,12 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
     const nextSeasonWeeks = calculateSeasonWeeks(data.nextSeasonStock || 0, data.nextSeasonSale || 0);
     const stagnantWeeks = calculateSeasonWeeks(data.stagnantStock || 0, data.stagnantSale || 0);
     
+    // 전년 시즌별 재고주수 계산
+    const prevOldSeasonWeeks = calculateSeasonWeeks(data.previousOldSeasonStock || 0, data.previousOldSeasonSale || 0);
+    const prevCurrentSeasonWeeks = calculateSeasonWeeks(data.previousCurrentSeasonStock || 0, data.previousCurrentSeasonSale || 0);
+    const prevNextSeasonWeeks = calculateSeasonWeeks(data.previousNextSeasonStock || 0, data.previousNextSeasonSale || 0);
+    const prevStagnantWeeks = calculateSeasonWeeks(data.previousStagnantStock || 0, data.previousStagnantSale || 0);
+    
     return (
       <div 
         className="border border-slate-200 rounded-lg shadow-lg p-4 min-w-[320px] bg-white" 
@@ -328,7 +334,12 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-slate-600">재고주수</span>
-            <span className="text-sm font-semibold text-slate-900">{formatWeeks(stockWeeks)}</span>
+            <span className="text-sm font-semibold text-slate-900">
+              {formatWeeks(stockWeeks)}
+              <span className="ml-2 text-xs text-slate-500">
+                (전년: {formatWeeks(data.previousStockWeeks || 0)})
+              </span>
+            </span>
           </div>
         </div>
 
@@ -342,9 +353,9 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#94a3b8' }} />
                   <span className="text-slate-600 font-medium">과시즌</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="grid grid-cols-4 gap-1 pl-5 text-xs">
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.oldSeasonStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -354,6 +365,10 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="flex flex-col">
                     <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
                     <span className="font-semibold text-slate-900">{formatWeeks(oldSeasonWeeks)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">전년주수</span>
+                    <span className="font-semibold text-slate-400">{formatWeeks(prevOldSeasonWeeks)}</span>
                   </div>
                 </div>
               </div>
@@ -366,9 +381,9 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#3b82f6' }} />
                   <span className="text-slate-600 font-medium">당시즌</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="grid grid-cols-4 gap-1 pl-5 text-xs">
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.currentSeasonStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -378,6 +393,10 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="flex flex-col">
                     <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
                     <span className="font-semibold text-slate-900">{formatWeeks(currentSeasonWeeks)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">전년주수</span>
+                    <span className="font-semibold text-slate-400">{formatWeeks(prevCurrentSeasonWeeks)}</span>
                   </div>
                 </div>
               </div>
@@ -390,9 +409,9 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#8b5cf6' }} />
                   <span className="text-slate-600 font-medium">차기시즌</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="grid grid-cols-4 gap-1 pl-5 text-xs">
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.nextSeasonStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -402,6 +421,10 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="flex flex-col">
                     <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
                     <span className="font-semibold text-slate-900">{formatWeeks(nextSeasonWeeks)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">전년주수</span>
+                    <span className="font-semibold text-slate-400">{formatWeeks(prevNextSeasonWeeks)}</span>
                   </div>
                 </div>
               </div>
@@ -414,9 +437,9 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#ef4444' }} />
                   <span className="text-slate-600 font-medium">정체재고</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 pl-5 text-xs">
+                <div className="grid grid-cols-4 gap-1 pl-5 text-xs">
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">재고택금액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">재고택</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.stagnantStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -426,6 +449,10 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                   <div className="flex flex-col">
                     <span className="text-slate-500 text-[10px] mb-0.5">재고주수</span>
                     <span className="font-semibold text-slate-900">{formatWeeks(stagnantWeeks)}</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-slate-500 text-[10px] mb-0.5">전년주수</span>
+                    <span className="font-semibold text-slate-400">{formatWeeks(prevStagnantWeeks)}</span>
                   </div>
                 </div>
               </div>
@@ -619,6 +646,7 @@ export default function BrandDashboard() {
   const [forecastResults, setForecastResults] = useState<any[]>([]); // 예측 결과
   const [orderCapacity, setOrderCapacity] = useState<OrderCapacity | null>(null); // 발주가능 금액
   const [combinedChartData, setCombinedChartData] = useState<any[]>([]); // 실적 + 예측 결합 데이터
+  const [forecastIncomingAmounts, setForecastIncomingAmounts] = useState<any[]>([]); // 입고예정금액
 
   const monthOptions = getMonthOptions();
 
@@ -766,6 +794,23 @@ export default function BrandDashboard() {
     console.log('✅ 예측 계산 완료:', results.length, '개 월');
     console.log('📊 발주가능 금액:', capacity);
   };
+
+  // 로컬 스토리지에서 입고예정금액 불러오기
+  useEffect(() => {
+    if (!brand) return;
+    try {
+      const storageKey = `forecast_${brand.code}`;
+      const savedData = localStorage.getItem(storageKey);
+      if (savedData) {
+        const parsed = JSON.parse(savedData);
+        if (parsed.incomingAmounts && parsed.incomingAmounts.length > 0) {
+          setForecastIncomingAmounts(parsed.incomingAmounts);
+        }
+      }
+    } catch (error) {
+      console.error('입고예정금액 로드 실패:', error);
+    }
+  }, [brand]);
 
   // 품번별 월별 추이 데이터 로드
   useEffect(() => {
@@ -1113,7 +1158,7 @@ export default function BrandDashboard() {
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm">
                           <div className="text-slate-500 text-xs mb-1">
-                            주간평균판매액
+                            주간평균 택판매액
                             <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
                               YOY {orderCapacity.yoyRate}%
                             </span>
@@ -1129,7 +1174,7 @@ export default function BrandDashboard() {
                           </div>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm">
-                          <div className="text-slate-500 text-xs mb-1">목표재고 ({orderCapacity.baseStockWeeks}주 × {orderCapacity.weeklyAvgSales.toLocaleString()})</div>
+                          <div className="text-slate-500 text-xs mb-1">목표재고 ({orderCapacity.baseStockWeeks}주 × {orderCapacity.weeklyAvgSales.toLocaleString()}백만원)</div>
                           <div className="font-bold text-blue-600 text-lg">
                             {orderCapacity.targetStock.toLocaleString()}백만원
                           </div>
@@ -1310,16 +1355,12 @@ export default function BrandDashboard() {
                     <span className="ml-3 text-slate-600">차트 데이터 로딩 중...</span>
                   </div>
                 ) : combinedChartData && combinedChartData.length > 0 ? (
+                  <>
                   <div className="space-y-6">
                     {/* 재고주수 꺾은선 그래프 */}
                     <div>
                       <h3 className="text-sm font-semibold text-slate-700 mb-3">
                         재고주수 추이 (당년/전년 × 전체/정상)
-                        {forecastResults.length > 0 && (
-                          <span className="ml-2 text-xs text-purple-600 font-normal">
-                            (실선: 실적, 점선: 예측)
-                          </span>
-                        )}
                       </h3>
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={combinedChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -1466,7 +1507,7 @@ export default function BrandDashboard() {
                         <h3 className="text-sm font-semibold text-slate-700">
                           {inventoryChartMode === 'yoy' 
                             ? '재고택금액 추이 (시즌별, 백만원)-당년/전년 비교'
-                            : '재고택금액 추이 (시즌별, 백만원)-당년재고/매출액 비교'
+                            : '재고택금액 추이 (시즌별, 백만원)-당년재고/택매출액 비교'
                           }
                         </h3>
                         <div className="flex items-center gap-1 bg-purple-50 rounded-lg p-0.5 border border-purple-200">
@@ -1670,6 +1711,124 @@ export default function BrandDashboard() {
                       </ResponsiveContainer>
                     </div>
                   </div>
+
+                  {/* 월별 재고,판매,입고 추이 테이블 */}
+                  <div className="mt-6 overflow-x-auto">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                      재고,판매,입고 추이 (백만원)
+                    </h3>
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50">
+                          <th className="px-2 py-2 text-left font-semibold text-slate-600 border-b border-slate-200 sticky left-0 bg-slate-50 min-w-[90px]">구분</th>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
+                            <th 
+                              key={item.month} 
+                              className={`px-2 py-2 text-center font-semibold border-b border-slate-200 min-w-[60px] ${
+                                item.isActual === false 
+                                  ? 'bg-blue-50 text-blue-700' 
+                                  : 'text-slate-600'
+                              }`}
+                            >
+                              {item.month.slice(2).replace('-', '.')}
+                              {item.isActual === false && <span className="ml-0.5 text-[9px]">(F)</span>}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* 기말재고자산 */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              재고자산
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
+                            <td 
+                              key={item.month} 
+                              className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                item.isActual === false 
+                                  ? 'bg-blue-50/50 text-blue-700' 
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              {(item.totalStock || 0).toLocaleString()}
+                            </td>
+                          ))}
+                        </tr>
+                        {/* 판매택매출 */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                              택매출액
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
+                            <td 
+                              key={item.month} 
+                              className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                item.isActual === false 
+                                  ? 'bg-blue-50/50 text-green-700' 
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              {(item.totalSale || 0).toLocaleString()}
+                            </td>
+                          ))}
+                        </tr>
+                        {/* 재고입고금액 */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                              입고금액
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
+                            let incomingAmount = 0;
+                            
+                            if (item.isActual === false) {
+                              // 예측 구간: forecastIncomingAmounts에서 가져오기
+                              if (forecastIncomingAmounts && selectedItem !== 'all') {
+                                const monthData = forecastIncomingAmounts.find((d: any) => d.month === item.month);
+                                if (monthData) {
+                                  incomingAmount = Math.round((monthData[selectedItem] || 0) / 1000000);
+                                }
+                              }
+                            } else {
+                              // 실적 구간: 입고금액 = 당월 기말재고 + 당월 택매출액 - 전월 기말재고
+                              const currentStock = item.totalStock || 0;
+                              const currentSale = item.totalSale || 0;
+                              const prevStock = item.previousMonthTotalStock || 0;
+                              
+                              incomingAmount = currentStock + currentSale - prevStock;
+                            }
+                            
+                            return (
+                              <td 
+                                key={item.month} 
+                                className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                  item.isActual === false 
+                                    ? 'bg-blue-50/50 text-purple-700' 
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                {incomingAmount.toLocaleString()}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                    <div className="mt-2 text-[10px] text-slate-500">
+                      <span className="bg-blue-50 px-1.5 py-0.5 rounded text-blue-600 mr-2">(F)</span>
+                      = 예측 구간 (Forecast)
+                    </div>
+                  </div>
+                  </>
                 ) : (
                   <div className="h-96 flex items-center justify-center border-2 border-dashed border-gray-200 rounded-lg">
                     <p className="text-gray-400">차트 데이터를 불러올 수 없습니다.</p>

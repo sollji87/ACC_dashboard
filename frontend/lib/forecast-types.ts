@@ -114,12 +114,12 @@ export interface OrderCapacity {
   targetMonth: string; // 목표 월 (4개월 후)
   baseStockWeeks: number; // 기준재고주수
   currentForecastStock: number; // 현재 예상재고
-  targetStock: number; // 목표재고 (기준재고주수 × 주간평균판매액)
+  targetStock: number; // 목표재고 (기준재고주수 × 주간평균 택판매액)
   orderCapacity: number; // 신규 발주가능 금액 (목표재고 - 현재 예상재고)
-  weeklyAvgSales: number; // 주간평균판매액
+  weeklyAvgSales: number; // 주간평균 택판매액 (백만원, 소수점 제거)
   // 추가 정보
   yoyRate: number; // YOY 성장률 (%)
-  monthlyAvgSales: number; // 월평균판매액 (백만원)
+  monthlyAvgSales: number; // 월평균 택판매액 (백만원, 소수점 제거)
   weeksType: '4weeks' | '8weeks' | '12weeks'; // 재고주수 계산 기준
 }
 

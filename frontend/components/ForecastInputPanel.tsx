@@ -49,17 +49,17 @@ export default function ForecastInputPanel({
   const [forecastMonths, setForecastMonths] = useState<string[]>([]);
   const [isForecastReady, setIsForecastReady] = useState(false); // 예측 설정 완료 여부
 
-  // 로컬 스토리지 키
-  const storageKey = `forecast_${brandCode}_${selectedItem}`;
+  // 로컬 스토리지 키 (브랜드별 공통 - 모든 중분류에 동일하게 적용)
+  const storageKey = `forecast_${brandCode}`;
 
-  // 로컬 스토리지에서 데이터 불러오기
+  // 로컬 스토리지에서 데이터 불러오기 (브랜드별 공통 - 모든 중분류에 적용)
   useEffect(() => {
     if (!lastActualMonth) return;
 
     const months = generateForecastMonths(lastActualMonth, 6);
     setForecastMonths(months);
     
-    // 로컬 스토리지에서 저장된 데이터 불러오기
+    // 로컬 스토리지에서 저장된 데이터 불러오기 (한 번 설정하면 모든 중분류에 적용)
     try {
       const savedData = localStorage.getItem(storageKey);
       if (savedData) {
@@ -112,9 +112,9 @@ export default function ForecastInputPanel({
         }))
       );
     }
-  }, [lastActualMonth, storageKey]);
+  }, [lastActualMonth, brandCode]); // brandCode 변경 시에도 다시 로드
 
-  // 저장된 데이터가 있으면 자동으로 예측 실행
+  // 저장된 데이터가 있거나 중분류가 변경되면 자동으로 예측 실행
   useEffect(() => {
     if (isForecastReady && actualData && actualData.length > 0 && selectedItem !== 'all') {
       const forecastInput: ForecastInput = {
@@ -135,7 +135,7 @@ export default function ForecastInputPanel({
           yoyRate
         );
         onForecastCalculated(forecastResults, orderCapacity);
-        console.log('✅ 저장된 설정으로 자동 예측 실행 완료');
+        console.log(`✅ 저장된 설정으로 자동 예측 실행 완료 (${selectedItem})`);
       } catch (error) {
         console.error('❌ 자동 예측 실행 실패:', error);
       }
@@ -194,7 +194,7 @@ export default function ForecastInputPanel({
     );
   };
 
-  // 로컬 스토리지에 저장
+  // 로컬 스토리지에 저장 (브랜드별 공통)
   const saveToLocalStorage = () => {
     try {
       const dataToSave = {
@@ -204,13 +204,13 @@ export default function ForecastInputPanel({
         savedAt: new Date().toISOString(),
       };
       localStorage.setItem(storageKey, JSON.stringify(dataToSave));
-      console.log('✅ 예측 설정 저장 완료:', storageKey);
+      console.log('✅ 예측 설정 저장 완료 (모든 중분류 공통):', storageKey);
     } catch (error) {
       console.error('❌ 로컬 스토리지 저장 실패:', error);
     }
   };
 
-  // 예측 계산 실행
+  // 예측 계산 실행 (한 번 실행하면 모든 중분류에 자동 적용)
   const handleCalculateForecast = () => {
     if (!actualData || actualData.length === 0) {
       alert('실적 데이터가 없습니다.');
@@ -243,14 +243,14 @@ export default function ForecastInputPanel({
         yoyRate
       );
 
-      // 로컬 스토리지에 저장
+      // 로컬 스토리지에 저장 (모든 중분류에 공통 적용)
       saveToLocalStorage();
       setIsForecastReady(true);
 
       // 부모 컴포넌트로 결과 전달
       onForecastCalculated(forecastResults, orderCapacity);
 
-      alert('예측 계산이 완료되었습니다.');
+      alert('✅ 예측 설정이 저장되었습니다.\n\n모든 중분류(신발/모자/가방/기타ACC)에 자동 적용됩니다.');
     } catch (error) {
       console.error('예측 계산 실패:', error);
       alert('예측 계산에 실패했습니다.');
@@ -305,7 +305,7 @@ export default function ForecastInputPanel({
                 </div>
                 {isForecastReady && (
                   <div className="text-xs text-green-600">
-                    (저장된 설정 적용 중)
+                    (저장된 설정 자동 적용 중 - 모든 중분류 공통)
                   </div>
                 )}
               </div>
@@ -482,11 +482,15 @@ export default function ForecastInputPanel({
                 disabled={selectedItem === 'all'}
                 className="bg-purple-600 hover:bg-purple-700 text-white font-semibold disabled:opacity-50"
               >
-                🔮 예측 계산 실행
+                🔮 예측 설정 저장 및 계산
               </Button>
-              {selectedItem === 'all' && (
+              {selectedItem === 'all' ? (
                 <span className="text-xs text-red-600 self-center">
                   * 중분류를 선택해주세요
+                </span>
+              ) : (
+                <span className="text-xs text-purple-600 self-center">
+                  ※ 설정은 모든 중분류(신발/모자/가방/기타ACC)에 자동 적용됩니다
                 </span>
               )}
             </div>

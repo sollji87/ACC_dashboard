@@ -45,18 +45,18 @@ function getPreviousYearMonth(monthStr: string): string {
 }
 
 /**
- * 최근 N개월 평균 판매액 계산
+ * 최근 N개월 평균 택판매액 계산
  * @param actualData 실적 데이터
  * @param targetMonth 목표 월
  * @param months 평균 계산 기간 (1, 2, 3개월)
  */
-function calculateAverageSales(
+function calculateAverageTagSales(
   actualData: any[],
   targetMonth: string,
   months: number = 1
 ): number {
   const targetDate = parseMonth(targetMonth);
-  const salesData: number[] = [];
+  const tagSalesData: number[] = [];
 
   for (let i = 0; i < months; i++) {
     const checkDate = new Date(targetDate);
@@ -65,15 +65,16 @@ function calculateAverageSales(
 
     const monthData = actualData.find((d) => d.month === checkMonth);
     if (monthData && monthData.totalSale) {
-      salesData.push(monthData.totalSale);
+      // totalSale은 택판매액 (백만원 단위)
+      tagSalesData.push(monthData.totalSale);
     }
   }
 
-  if (salesData.length === 0) return 0;
+  if (tagSalesData.length === 0) return 0;
 
-  const avgMonthlySales = salesData.reduce((sum, val) => sum + val, 0) / salesData.length;
-  // 주간 평균 = 월평균 / 30 * 7
-  return avgMonthlySales / 30 * 7;
+  const avgMonthlyTagSales = tagSalesData.reduce((sum, val) => sum + val, 0) / tagSalesData.length;
+  // 주간 평균 택판매액 = 월평균 택판매액 / 30 * 7
+  return avgMonthlyTagSales / 30 * 7;
 }
 
 /**
@@ -122,48 +123,49 @@ export function calculateForecast(
     const previousStockWeeks = previousYearData.stockWeeks || 0;
     const previousStockWeeksNormal = previousYearData.stockWeeksNormal || 0;
     
-    // 1. 판매택 계산 (전년 동월 판매택 × YOY 성장률)
-    // totalSale은 백만원 단위이므로 원 단위로 변환
-    const previousYearSales = (previousYearData.totalSale || 0) * 1000000;
-    const forecastSales = previousYearSales * (yoyRate / 100);
+    // 1. 택판매액 계산 (전년 동월 택판매액 × YOY 성장률)
+    // totalSale은 택판매액 (백만원 단위)이므로 원 단위로 변환
+    const previousYearTagSales = (previousYearData.totalSale || 0) * 1000000;
+    const forecastTagSales = previousYearTagSales * (yoyRate / 100);
     
-    // 예측 판매액 기록 (월별)
-    forecastSalesHistory.push(forecastSales);
+    // 예측 택판매액 기록 (월별)
+    forecastSalesHistory.push(forecastTagSales);
     
     // 2. 선택된 중분류의 입고예정금액 사용
     const incoming = monthlyIncoming[selectedItem] || 0;
     
     // 3. 기말재고택금액 계산
-    // 기말재고 = 전월 기말재고 + 입고예정금액 - 판매택
-    const endingInventory = previousEndingInventory + incoming - forecastSales;
+    // 기말재고 = 전월 기말재고 + 입고예정금액 - 택판매액
+    const endingInventory = previousEndingInventory + incoming - forecastTagSales;
     
-    // 4. 재고주수 계산 (YOY 반영된 예상 판매액 기준)
-    // 주간평균판매액 = 최근 N개월 예상 판매액 평균 / 30 * 7
-    let weeklyAvgSales: number;
+    // 4. 재고주수 계산 (YOY 반영된 예상 택판매액 기준)
+    // 주간평균 택판매액 = 최근 N개월 예상 택판매액 평균 / 30 * 7
+    let weeklyAvgTagSales: number;
     
     if (forecastSalesHistory.length >= monthsForAvg) {
-      // 예측 구간 데이터가 충분하면 예측 판매액만 사용
-      const recentSales = forecastSalesHistory.slice(-monthsForAvg);
-      const avgMonthlySales = recentSales.reduce((sum, val) => sum + val, 0) / recentSales.length;
-      weeklyAvgSales = avgMonthlySales / 30 * 7;
+      // 예측 구간 데이터가 충분하면 예측 택판매액만 사용
+      const recentTagSales = forecastSalesHistory.slice(-monthsForAvg);
+      const avgMonthlyTagSales = recentTagSales.reduce((sum, val) => sum + val, 0) / recentTagSales.length;
+      weeklyAvgTagSales = avgMonthlyTagSales / 30 * 7;
     } else {
       // 예측 구간 데이터가 부족하면 실적 + 예측 혼합
-      const actualSalesData: number[] = [];
+      const actualTagSalesData: number[] = [];
       for (let i = 1; i <= monthsForAvg - forecastSalesHistory.length; i++) {
         const checkMonth = addMonths(lastActualMonth, -i + 1);
         const monthData = actualData.find((d) => d.month === checkMonth);
         if (monthData && monthData.totalSale) {
-          actualSalesData.push(monthData.totalSale * 1000000); // 백만원 -> 원
+          // totalSale은 택판매액 (백만원 단위)
+          actualTagSalesData.push(monthData.totalSale * 1000000); // 백만원 -> 원
         }
       }
-      const combinedSales = [...actualSalesData, ...forecastSalesHistory];
-      const avgMonthlySales = combinedSales.length > 0 
-        ? combinedSales.reduce((sum, val) => sum + val, 0) / combinedSales.length 
+      const combinedTagSales = [...actualTagSalesData, ...forecastSalesHistory];
+      const avgMonthlyTagSales = combinedTagSales.length > 0 
+        ? combinedTagSales.reduce((sum, val) => sum + val, 0) / combinedTagSales.length 
         : 0;
-      weeklyAvgSales = avgMonthlySales / 30 * 7;
+      weeklyAvgTagSales = avgMonthlyTagSales / 30 * 7;
     }
     
-    const stockWeeks = weeklyAvgSales > 0 ? endingInventory / weeklyAvgSales : 0;
+    const stockWeeks = weeklyAvgTagSales > 0 ? endingInventory / weeklyAvgTagSales : 0;
     
     // 5. 시즌별 재고 예측 (전년 동월 비율 적용)
     const currentSeasonRatio = (previousYearData.currentSeasonStock || 0) / (previousYearData.totalStock || 1);
@@ -179,7 +181,7 @@ export function calculateForecast(
     
     // 백만원 단위로 변환
     const endingInventoryMillion = endingInventory / 1000000;
-    const forecastSalesMillion = forecastSales / 1000000;
+    const forecastTagSalesMillion = forecastTagSales / 1000000;
     
     // 비율 계산 (당년 예측)
     const cyCurrentSeasonRatio = endingInventoryMillion > 0 
@@ -215,12 +217,12 @@ export function calculateForecast(
       ? Math.round((endingInventoryMillion / pyTotalStock) * 1000) / 10 
       : 0;
     const saleYOY = (previousYearData.totalSale || 0) > 0 
-      ? Math.round((forecastSalesMillion / (previousYearData.totalSale || 1)) * 1000) / 10 
+      ? Math.round((forecastTagSalesMillion / (previousYearData.totalSale || 1)) * 1000) / 10 
       : 0;
     
     results.push({
       month,
-      forecastSales: forecastSalesMillion,
+      forecastSales: forecastTagSalesMillion, // 택판매액 (백만원 단위)
       endingInventory: endingInventoryMillion,
       stockWeeks: Math.round(stockWeeks * 10) / 10,
       stockWeeksNormal: Math.round(stockWeeks * (1 - stagnantRatio) * 10) / 10,
@@ -252,30 +254,30 @@ export function calculateForecast(
       // YOY
       stockYOY: stockYOY,
       saleYOY: saleYOY,
-      // 당년 예측 매출액 (시즌별, 전년 비중 × YOY)
-      currentSeasonSale: Math.round(forecastSalesMillion * currentSeasonSaleRatio),
-      nextSeasonSale: Math.round(forecastSalesMillion * nextSeasonSaleRatio),
-      oldSeasonSale: Math.round(forecastSalesMillion * oldSeasonSaleRatio),
-      stagnantSale: Math.round(forecastSalesMillion * stagnantSaleRatio),
-      totalSale: Math.round(forecastSalesMillion),
+      // 당년 예측 택판매액 (시즌별, 전년 비중 × YOY)
+      currentSeasonSale: Math.round(forecastTagSalesMillion * currentSeasonSaleRatio),
+      nextSeasonSale: Math.round(forecastTagSalesMillion * nextSeasonSaleRatio),
+      oldSeasonSale: Math.round(forecastTagSalesMillion * oldSeasonSaleRatio),
+      stagnantSale: Math.round(forecastTagSalesMillion * stagnantSaleRatio),
+      totalSale: Math.round(forecastTagSalesMillion),
       // 전년 동월 실적 매출액 (시즌별)
       previousCurrentSeasonSale: previousYearData.currentSeasonSale || 0,
       previousNextSeasonSale: previousYearData.nextSeasonSale || 0,
       previousOldSeasonSale: previousYearData.oldSeasonSale || 0,
       previousStagnantSale: previousYearData.stagnantSale || 0,
       previousTotalSale: previousYearData.totalSale || 0,
-      // 매출액 비율 (당년 예측)
-      currentSeasonSaleRatio: forecastSalesMillion > 0 
-        ? Math.round((Math.round(forecastSalesMillion * currentSeasonSaleRatio) / forecastSalesMillion) * 100) 
+      // 택판매액 비율 (당년 예측)
+      currentSeasonSaleRatio: forecastTagSalesMillion > 0 
+        ? Math.round((Math.round(forecastTagSalesMillion * currentSeasonSaleRatio) / forecastTagSalesMillion) * 100) 
         : 0,
-      nextSeasonSaleRatio: forecastSalesMillion > 0 
-        ? Math.round((Math.round(forecastSalesMillion * nextSeasonSaleRatio) / forecastSalesMillion) * 100) 
+      nextSeasonSaleRatio: forecastTagSalesMillion > 0 
+        ? Math.round((Math.round(forecastTagSalesMillion * nextSeasonSaleRatio) / forecastTagSalesMillion) * 100) 
         : 0,
-      oldSeasonSaleRatio: forecastSalesMillion > 0 
-        ? Math.round((Math.round(forecastSalesMillion * oldSeasonSaleRatio) / forecastSalesMillion) * 100) 
+      oldSeasonSaleRatio: forecastTagSalesMillion > 0 
+        ? Math.round((Math.round(forecastTagSalesMillion * oldSeasonSaleRatio) / forecastTagSalesMillion) * 100) 
         : 0,
-      stagnantSaleRatio: forecastSalesMillion > 0 
-        ? Math.round((Math.round(forecastSalesMillion * stagnantSaleRatio) / forecastSalesMillion) * 100) 
+      stagnantSaleRatio: forecastTagSalesMillion > 0 
+        ? Math.round((Math.round(forecastTagSalesMillion * stagnantSaleRatio) / forecastTagSalesMillion) * 100) 
         : 0,
     });
     
@@ -312,26 +314,26 @@ export function calculateOrderCapacity(
   // 재고주수 계산 기준
   const monthsForAvg = weeksType === '4weeks' ? 1 : weeksType === '8weeks' ? 2 : 3;
   
-  // 예측 판매액 기반 주간평균판매액 계산 (백만원 단위)
-  // 4개월 후 시점 기준 최근 N개월 예측 판매액 사용
-  let weeklyAvgSales: number;
-  let monthlyAvgSales: number;
+  // 예측 택판매액 기반 주간평균 택판매액 계산 (백만원 단위)
+  // 4개월 후 시점 기준 최근 N개월 예측 택판매액 사용
+  let weeklyAvgTagSales: number;
+  let monthlyAvgTagSales: number;
   
   if (forecastResults.length >= monthsForAvg) {
-    // 예측 데이터에서 최근 N개월 판매액 평균 계산
-    const recentSales = forecastResults.slice(0, 4).slice(-monthsForAvg);
-    monthlyAvgSales = recentSales.reduce((sum, f) => sum + (f.forecastSales || 0), 0) / recentSales.length;
-    weeklyAvgSales = monthlyAvgSales / 30 * 7; // 백만원 단위
+    // 예측 데이터에서 최근 N개월 택판매액 평균 계산 (forecastSales는 택판매액)
+    const recentTagSales = forecastResults.slice(0, 4).slice(-monthsForAvg);
+    monthlyAvgTagSales = recentTagSales.reduce((sum, f) => sum + (f.forecastSales || 0), 0) / recentTagSales.length;
+    weeklyAvgTagSales = monthlyAvgTagSales / 30 * 7; // 백만원 단위
   } else {
     // 실적 데이터 기반
     const lastActualMonth = actualData[actualData.length - 1]?.month;
     if (!lastActualMonth) return null;
-    weeklyAvgSales = calculateAverageSales(actualData, lastActualMonth, monthsForAvg); // 백만원 단위
-    monthlyAvgSales = weeklyAvgSales / 7 * 30; // 역산
+    weeklyAvgTagSales = calculateAverageTagSales(actualData, lastActualMonth, monthsForAvg); // 백만원 단위
+    monthlyAvgTagSales = weeklyAvgTagSales / 7 * 30; // 역산
   }
   
-  // 목표재고 = 기준재고주수 × 주간평균판매액 (백만원 단위)
-  const targetStock = baseStockWeeks * weeklyAvgSales;
+  // 목표재고 = 기준재고주수 × 주간평균 택판매액 (백만원 단위)
+  const targetStock = baseStockWeeks * weeklyAvgTagSales;
   
   // 현재 예상재고 (4개월 후, 백만원 단위)
   const currentForecastStock = fourMonthsLater.endingInventory;
@@ -342,13 +344,13 @@ export function calculateOrderCapacity(
   return {
     targetMonth: fourMonthsLater.month,
     baseStockWeeks,
-    currentForecastStock: Math.round(currentForecastStock), // 백만원 단위
-    targetStock: Math.round(targetStock), // 백만원 단위
-    orderCapacity: Math.round(orderCapacityAmt), // 백만원 단위
-    weeklyAvgSales: Math.round(weeklyAvgSales * 10) / 10, // 백만원 단위, 소수점 1자리
+    currentForecastStock: Math.round(currentForecastStock), // 백만원 단위, 소수점 제거
+    targetStock: Math.round(targetStock), // 백만원 단위, 소수점 제거
+    orderCapacity: Math.round(orderCapacityAmt), // 백만원 단위, 소수점 제거
+    weeklyAvgSales: Math.round(weeklyAvgTagSales), // 주간평균 택판매액 (백만원 단위), 소수점 제거
     // 추가 정보
     yoyRate: yoyRate,
-    monthlyAvgSales: Math.round(monthlyAvgSales), // 월평균판매액 (백만원)
+    monthlyAvgSales: Math.round(monthlyAvgTagSales), // 월평균 택판매액 (백만원), 소수점 제거
     weeksType: weeksType,
   };
 }

@@ -83,9 +83,9 @@ export function buildChartDataQuery(
 ): string {
   const { year, month } = parseYearMonth(yyyymm);
   
-  // 최근 12개월 목록 생성
+  // 최근 13개월 목록 생성 (입고금액 계산을 위해 한 달 더 이전 포함)
   const months: string[] = [];
-  for (let i = 11; i >= 0; i--) {
+  for (let i = 12; i >= 0; i--) {
     const date = new Date(year, month - 1 - i, 1);
     const yyyy = date.getFullYear();
     const mm = String(date.getMonth() + 1).padStart(2, '0');
@@ -409,19 +409,30 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
   const cyData = rows.filter(r => (r.DIV || r.div) === 'cy');
   const pyData = rows.filter(r => (r.DIV || r.div) === 'py');
   
-  // 월별로 매칭하여 차트 데이터 생성
-  const chartData = cyData.map(cy => {
+  // 월별로 매칭하여 차트 데이터 생성 (13개월 데이터, 첫 월은 전월 재고 계산용)
+  const chartData = cyData.map((cy, index, arr) => {
     const yyyymm = cy.YYYYMM || cy.yyyymm;
     const monthStr = yyyymm.substring(4, 6);
     const year = parseInt(yyyymm.substring(0, 4));
     
+    // 전월 데이터 찾기 (입고금액 계산용)
+    const prevMonthCy = index > 0 ? arr[index - 1] : null;
+    
     // 전년 동일 월 데이터 찾기
     const previousYear = year - 1;
     const previousYyyymm = `${previousYear}${monthStr}`;
-    const py = pyData.find(p => {
+    // pyData에서 먼저 찾고, 없으면 cyData에서 찾기 (months/pyMonths 중복 월 처리)
+    let py = pyData.find(p => {
       const pYyyymm = p.YYYYMM || p.yyyymm;
       return pYyyymm === previousYyyymm;
     });
+    if (!py) {
+      // 중복 월인 경우 cyData에서 찾기 (예: 2024-10이 cy와 py 양쪽에 있어야 하는 경우)
+      py = cyData.find(c => {
+        const cYyyymm = c.YYYYMM || c.yyyymm;
+        return cYyyymm === previousYyyymm;
+      });
+    }
     
     // 당년 시즌별 재고 (금액: 백만원 단위, 수량: 그대로)
     const divisor = base === 'quantity' ? 1 : 1000000;
@@ -430,6 +441,11 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
     const cyOldSeasonStock = Math.round((Number(cy.OLD_SEASON_STOCK || cy.old_season_stock) || 0) / divisor);
     const cyStagnantStock = Math.round((Number(cy.STAGNANT_STOCK || cy.stagnant_stock) || 0) / divisor);
     const cyTotalStock = Math.round((Number(cy.TOTAL_STOCK || cy.total_stock) || 0) / divisor);
+    
+    // 전월 재고 (입고금액 계산용)
+    const prevMonthTotalStock = prevMonthCy 
+      ? Math.round((Number(prevMonthCy.TOTAL_STOCK || prevMonthCy.total_stock) || 0) / divisor)
+      : 0;
     
     // 전년 시즌별 재고 (금액: 백만원 단위, 수량: 그대로)
     const pyCurrentSeasonStock = Math.round((Number(py?.CURRENT_SEASON_STOCK || py?.current_season_stock) || 0) / divisor);
@@ -517,6 +533,8 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       oldSeasonStock: cyOldSeasonStock,
       stagnantStock: cyStagnantStock,
       totalStock: cyTotalStock,
+      // 전월 재고 (입고금액 계산용)
+      previousMonthTotalStock: prevMonthTotalStock,
       // 전년 시즌별 재고택금액
       previousCurrentSeasonStock: pyCurrentSeasonStock,
       previousNextSeasonStock: pyNextSeasonStock,
@@ -556,5 +574,6 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
     };
   });
   
-  return chartData;
+  // 첫 월(13개월 전)은 전월 재고 계산용이므로 제외하고 12개월만 반환
+  return chartData.slice(1);
 }
