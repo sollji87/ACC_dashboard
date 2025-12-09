@@ -199,3 +199,56 @@ export async function fetchProductDetails(
   }
 }
 
+/**
+ * 입고예정금액 조회 (중분류별)
+ */
+export interface IncomingAmountData {
+  month: string; // 'YYYY-MM' 형식
+  shoes: number; // 신발 (원 단위)
+  hat: number; // 모자 (원 단위)
+  bag: number; // 가방 (원 단위)
+  other: number; // 기타ACC (원 단위)
+}
+
+export async function fetchIncomingAmounts(
+  brandCode: string,
+  startMonth: string,
+  endMonth: string
+): Promise<IncomingAmountData[]> {
+  try {
+    const apiUrl = `/api/dashboard/incoming-amounts?brandCode=${brandCode}&startMonth=${startMonth}&endMonth=${endMonth}`;
+    
+    console.log(`🔍 입고예정금액 조회 시작:`, apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📡 응답 상태 (입고예정금액):`, response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API 오류 응답 (입고예정금액):`, errorText);
+      throw new Error(`API 호출 실패: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'API 오류');
+    }
+
+    console.log(`✅ 입고예정금액 조회 성공 (${brandCode}, ${startMonth} ~ ${endMonth})`);
+    return result.data;
+  } catch (error) {
+    console.error('❌ 입고예정금액 조회 실패:', error);
+    console.error('❌ 에러 상세:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error;
+  }
+}

@@ -85,6 +85,43 @@ export class DashboardController {
   }
 
   /**
+   * 입고예정금액 조회
+   * GET /api/dashboard/incoming-amounts?brandCode=M&startMonth=2025-11&endMonth=2026-04
+   */
+  @Get('incoming-amounts')
+  async getIncomingAmounts(
+    @Query('brandCode') brandCode: string,
+    @Query('startMonth') startMonth: string,
+    @Query('endMonth') endMonth: string,
+  ) {
+    try {
+      if (!brandCode || !startMonth || !endMonth) {
+        return {
+          success: false,
+          error: 'brandCode, startMonth, endMonth 파라미터가 필요합니다.',
+        };
+      }
+
+      const data = await this.dashboardService.getIncomingAmounts(
+        brandCode,
+        startMonth,
+        endMonth,
+      );
+
+      return {
+        success: true,
+        data,
+      };
+    } catch (error) {
+      this.logger.error('입고예정금액 조회 실패:', error);
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
    * 현재 년월 반환 (YYYYMM 형식)
    */
   private getCurrentYearMonth(): string {

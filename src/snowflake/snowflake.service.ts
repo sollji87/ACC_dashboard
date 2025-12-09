@@ -79,6 +79,66 @@ export class SnowflakeService {
   }
 
   /**
+   * 입고예정금액 조회 (발주 데이터 기반)
+   * @param brandCode 브랜드 코드
+   * @param startMonth 시작 월 (YYYY-MM)
+   * @param endMonth 종료 월 (YYYY-MM)
+   */
+  async getIncomingAmounts(
+    brandCode: string,
+    startMonth: string,
+    endMonth: string,
+  ): Promise<any[]> {
+    // YYYY-MM 형식을 YYYYMM으로 변환 (모든 하이픈 제거)
+    const startYyyymm = startMonth.replace(/-/g, '');
+    const endYyyymm = endMonth.replace(/-/g, '');
+
+    const sqlText = `
+-- 발주 데이터 (합의납기연월 기준, 중분류별 집계)
+with base as (
+    select  a.brd_cd                              as brd_cd
+          , d.vtext2                              as mid_cat        -- 중분류
+          , to_char(a.indc_dt_cnfm, 'YYYY-MM')    as indc_yyyymm    -- 합의납기연월
+          , a.tag_price * a.ord_qty               as ord_amt        -- 발주금액
+    from prcs.dw_ord a
+    left join sap_fnf.mst_prdt d
+      on a.prdt_cd = d.prdt_cd
+    where 1 = 1
+      -- 브랜드 필터
+      and a.brd_cd = '${brandCode}'
+      -- 중분류 필터 (ACC만)
+      and d.vtext2 in ('Acc_etc', 'Bag', 'Headwear', 'Shoes')
+      -- PO_CLS_NM 필터
+      and a.PO_CLS_NM in (
+            '내수/원화/세금계산서/DDP',
+            '한국수입/외화/세금계산서/FOB',
+            '한국수입/외화/FOB'
+      )
+      -- 합의납기일 존재
+      and a.indc_dt_cnfm is not null
+      -- 합의납기연월이 범위 내에 있는 경우만
+      and to_char(a.indc_dt_cnfm, 'YYYYMM') between '${startYyyymm}' and '${endYyyymm}'
+)
+select  brd_cd                                as "브랜드"
+      , case 
+          when mid_cat = 'Shoes' then '신발'
+          when mid_cat = 'Headwear' then '모자'
+          when mid_cat = 'Bag' then '가방'
+          when mid_cat = 'Acc_etc' then '기타ACC'
+          else '기타ACC'
+        end                                   as "중분류"
+      , indc_yyyymm                           as "합의납기연월"
+      , sum(ord_amt)                          as "발주금액"
+from base
+group by brd_cd, mid_cat, indc_yyyymm
+order by brd_cd, indc_yyyymm, mid_cat
+;
+    `;
+
+    return this.executeQuery(sqlText);
+  }
+
+  /**
    * 연결 종료
    */
   async disconnect(): Promise<void> {

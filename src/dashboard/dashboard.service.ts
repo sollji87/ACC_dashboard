@@ -271,5 +271,97 @@ order by seq
     };
     return mapping[itemStd] || 'other';
   }
+
+  /**
+   * 입고예정금액 조회
+   * @param brandCode 브랜드 코드
+   * @param startMonth 시작 월 (YYYY-MM)
+   * @param endMonth 종료 월 (YYYY-MM)
+   */
+  async getIncomingAmounts(
+    brandCode: string,
+    startMonth: string,
+    endMonth: string,
+  ): Promise<any> {
+    try {
+      this.logger.log(
+        `입고예정금액 조회 시작 (브랜드: ${brandCode}, 기간: ${startMonth} ~ ${endMonth})`,
+      );
+      await this.snowflakeService.connect();
+
+      const rows = await this.snowflakeService.getIncomingAmounts(
+        brandCode,
+        startMonth,
+        endMonth,
+      );
+
+      await this.snowflakeService.disconnect();
+
+      // 월별로 집계
+      const monthlyData = this.aggregateIncomingAmountsByMonth(rows);
+
+      this.logger.log(`입고예정금액 조회 완료: ${monthlyData.length}개 월`);
+      return monthlyData;
+    } catch (error) {
+      this.logger.error('입고예정금액 조회 실패:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 입고예정금액을 월별 중분류별로 집계 (합의납기연월 기준)
+   */
+  private aggregateIncomingAmountsByMonth(rows: any[]): any[] {
+    // 월별 중분류별 집계 맵
+    const monthlyMap = new Map<
+      string,
+      { shoes: number; hat: number; bag: number; other: number }
+    >();
+
+    rows.forEach((row) => {
+      // 합의납기연월 기준으로 집계
+      const month = row['합의납기연월'];
+      const itemStd = row['중분류'];
+      if (!month || !itemStd) return;
+
+      const amount = Number(row['발주금액']) || 0;
+
+      // 월별 데이터 초기화
+      if (!monthlyMap.has(month)) {
+        monthlyMap.set(month, { shoes: 0, hat: 0, bag: 0, other: 0 });
+      }
+
+      const monthData = monthlyMap.get(month)!;
+
+      // 중분류별 금액 누적
+      switch (itemStd) {
+        case '신발':
+          monthData.shoes += amount;
+          break;
+        case '모자':
+          monthData.hat += amount;
+          break;
+        case '가방':
+          monthData.bag += amount;
+          break;
+        case '기타ACC':
+          monthData.other += amount;
+          break;
+      }
+    });
+
+    // 월별 데이터 배열로 변환 및 정렬
+    const result = Array.from(monthlyMap.entries())
+      .map(([month, amounts]) => ({
+        month,
+        shoes: Math.round(amounts.shoes), // 원 단위
+        hat: Math.round(amounts.hat),
+        bag: Math.round(amounts.bag),
+        other: Math.round(amounts.other),
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    return result;
+  }
 }
 

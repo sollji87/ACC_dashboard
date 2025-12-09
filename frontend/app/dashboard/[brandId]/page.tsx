@@ -37,6 +37,9 @@ const saveAs = (blob: Blob, filename: string) => {
   }, 0);
 };
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, TooltipProps, LabelList } from 'recharts';
+import ForecastInputPanel from '@/components/ForecastInputPanel';
+import { combineActualAndForecast } from '@/lib/forecast-service';
+import { OrderCapacity } from '@/lib/forecast-types';
 
 // 재고주수 추이 차트용 커스텀 범례
 const CustomStockWeeksLegend = ({ payload }: any) => {
@@ -611,6 +614,11 @@ export default function BrandDashboard() {
   const [isLoadingMonthlyTrend, setIsLoadingMonthlyTrend] = useState(false); // 월별 추이 로딩 상태
   const [excludeSeasonFilter, setExcludeSeasonFilter] = useState<'all' | 'excludeS' | 'excludeF'>('all'); // 시즌 제외 필터
   const [dxMasterData, setDxMasterData] = useState<Record<string, string>>({}); // DX MASTER 품번별 서브카테고리 데이터
+  
+  // 예측 관련 상태
+  const [forecastResults, setForecastResults] = useState<any[]>([]); // 예측 결과
+  const [orderCapacity, setOrderCapacity] = useState<OrderCapacity | null>(null); // 발주가능 금액
+  const [combinedChartData, setCombinedChartData] = useState<any[]>([]); // 실적 + 예측 결합 데이터
 
   const monthOptions = getMonthOptions();
 
@@ -733,6 +741,31 @@ export default function BrandDashboard() {
 
     loadChartData();
   }, [brand, selectedMonth, weeksType, selectedItemForChart, excludePurchase, chartBase]);
+
+  // 예측 데이터와 실적 데이터 결합
+  useEffect(() => {
+    if (!chartData || chartData.length === 0) {
+      setCombinedChartData([]);
+      return;
+    }
+
+    if (forecastResults.length === 0) {
+      // 예측 데이터가 없으면 실적 데이터만 사용
+      setCombinedChartData(chartData.map((d: any) => ({ ...d, isActual: true })));
+    } else {
+      // 예측 데이터와 결합
+      const combined = combineActualAndForecast(chartData, forecastResults);
+      setCombinedChartData(combined);
+    }
+  }, [chartData, forecastResults]);
+
+  // 예측 계산 완료 콜백
+  const handleForecastCalculated = (results: any[], capacity: OrderCapacity | null) => {
+    setForecastResults(results);
+    setOrderCapacity(capacity);
+    console.log('✅ 예측 계산 완료:', results.length, '개 월');
+    console.log('📊 발주가능 금액:', capacity);
+  };
 
   // 품번별 월별 추이 데이터 로드
   useEffect(() => {
@@ -1049,6 +1082,81 @@ export default function BrandDashboard() {
               })()}
             </div>
 
+            {/* 재고 예측 입력 패널 */}
+            {brand && chartData && chartData.length > 0 && (
+              <ForecastInputPanel
+                brandCode={brand.code}
+                brandName={brand.name}
+                lastActualMonth={selectedMonth}
+                actualData={chartData}
+                weeksType={weeksType}
+                selectedItem={selectedItemForChart}
+                onForecastCalculated={handleForecastCalculated}
+              />
+            )}
+
+            {/* 발주가능 금액 표시 */}
+            {orderCapacity && (
+              <Card className="mb-6 border-green-200 bg-green-50">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="w-full">
+                      <h3 className="text-lg font-bold text-green-800 mb-3">
+                        💰 신규 발주가능 금액 (4개월 후: {orderCapacity.targetMonth})
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+                        <div className="bg-white p-3 rounded-lg shadow-sm">
+                          <div className="text-slate-500 text-xs mb-1">기준재고주수</div>
+                          <div className="font-bold text-slate-800 text-lg">
+                            {orderCapacity.baseStockWeeks.toFixed(1)}주
+                          </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg shadow-sm">
+                          <div className="text-slate-500 text-xs mb-1">
+                            주간평균판매액
+                            <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
+                              YOY {orderCapacity.yoyRate}%
+                            </span>
+                            <span className="ml-1 px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">
+                              {orderCapacity.weeksType === '4weeks' ? '4주' : orderCapacity.weeksType === '8weeks' ? '8주' : '12주'}기준
+                            </span>
+                          </div>
+                          <div className="font-bold text-slate-800 text-lg">
+                            {orderCapacity.weeklyAvgSales.toLocaleString()}백만원
+                          </div>
+                          <div className="text-slate-400 text-xs mt-1">
+                            = {orderCapacity.monthlyAvgSales.toLocaleString()}백만원/월 ÷ 30 × 7
+                          </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg shadow-sm">
+                          <div className="text-slate-500 text-xs mb-1">목표재고 ({orderCapacity.baseStockWeeks}주 × {orderCapacity.weeklyAvgSales.toLocaleString()})</div>
+                          <div className="font-bold text-blue-600 text-lg">
+                            {orderCapacity.targetStock.toLocaleString()}백만원
+                          </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg shadow-sm">
+                          <div className="text-slate-500 text-xs mb-1">예상재고 ({orderCapacity.targetMonth})</div>
+                          <div className="font-bold text-slate-800 text-lg">
+                            {orderCapacity.currentForecastStock.toLocaleString()}백만원
+                          </div>
+                        </div>
+                        <div className={`p-3 rounded-lg shadow-sm ${
+                          orderCapacity.orderCapacity > 0 ? 'bg-green-100' : 'bg-red-100'
+                        }`}>
+                          <div className="text-slate-500 text-xs mb-1">발주가능 금액</div>
+                          <div className={`font-bold text-xl ${
+                            orderCapacity.orderCapacity > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {orderCapacity.orderCapacity > 0 ? '+' : ''}{orderCapacity.orderCapacity.toLocaleString()}백만원
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* 4주 / 8주 / 12주 재고주수 비교 */}
             <Card>
               <CardHeader>
@@ -1201,13 +1309,20 @@ export default function BrandDashboard() {
                     <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
                     <span className="ml-3 text-slate-600">차트 데이터 로딩 중...</span>
                   </div>
-                ) : chartData && chartData.length > 0 ? (
+                ) : combinedChartData && combinedChartData.length > 0 ? (
                   <div className="space-y-6">
                     {/* 재고주수 꺾은선 그래프 */}
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-700 mb-3">재고주수 추이 (당년/전년 × 전체/정상)</h3>
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3">
+                        재고주수 추이 (당년/전년 × 전체/정상)
+                        {forecastResults.length > 0 && (
+                          <span className="ml-2 text-xs text-purple-600 font-normal">
+                            (실선: 실적, 점선: 예측)
+                          </span>
+                        )}
+                      </h3>
                       <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                        <LineChart data={combinedChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis 
                             dataKey="month" 
@@ -1228,9 +1343,9 @@ export default function BrandDashboard() {
                             tickFormatter={(value) => new Intl.NumberFormat('ko-KR').format(value)}
                             width={60}
                             domain={(() => {
-                              // chartData에서 모든 재고주수 값 수집 (전체 + 당시즌)
+                              // combinedChartData에서 모든 재고주수 값 수집 (전체 + 당시즌)
                               const allValues: number[] = [];
-                              chartData.forEach((item: any) => {
+                              combinedChartData.forEach((item: any) => {
                                 if (item.stockWeeks != null && item.stockWeeks !== undefined) {
                                   allValues.push(item.stockWeeks);
                                 }
@@ -1280,7 +1395,25 @@ export default function BrandDashboard() {
                             name="당년(전체)" 
                             stroke="#1e3a8a" 
                             strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#1e3a8a' }}
+                            dot={(props: any) => {
+                              const { cx, cy, payload } = props;
+                              const isActual = payload.isActual !== false;
+                              return (
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={isActual ? 4 : 3}
+                                  fill={isActual ? '#1e3a8a' : '#ffffff'}
+                                  stroke="#1e3a8a"
+                                  strokeWidth={isActual ? 0 : 2}
+                                />
+                              );
+                            }}
+                            strokeDasharray={(props: any) => {
+                              // 예측 구간은 점선으로 표시
+                              return undefined; // recharts는 개별 세그먼트 스타일을 지원하지 않으므로 전체적으로 처리
+                            }}
+                            connectNulls
                           />
                           <Line 
                             type="natural" 
@@ -1298,7 +1431,21 @@ export default function BrandDashboard() {
                             name="당년(정상)" 
                             stroke="#f97316" 
                             strokeWidth={2.5}
-                            dot={{ r: 4, fill: '#f97316' }}
+                            dot={(props: any) => {
+                              const { cx, cy, payload } = props;
+                              const isActual = payload.isActual !== false;
+                              return (
+                                <circle
+                                  cx={cx}
+                                  cy={cy}
+                                  r={isActual ? 4 : 3}
+                                  fill={isActual ? '#f97316' : '#ffffff'}
+                                  stroke="#f97316"
+                                  strokeWidth={isActual ? 0 : 2}
+                                />
+                              );
+                            }}
+                            connectNulls
                           />
                           <Line 
                             type="natural" 
@@ -1348,7 +1495,7 @@ export default function BrandDashboard() {
                       {/* 하나의 ComposedChart에 stacked bar + YOY line */}
                       <ResponsiveContainer width="100%" height={350}>
                         <ComposedChart 
-                          data={chartData} 
+                          data={combinedChartData} 
                           margin={{ top: 20, right: 60, left: 20, bottom: 10 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -1377,9 +1524,9 @@ export default function BrandDashboard() {
                             hide={true}
                             domain={(() => {
                               // 재고택금액 최대값의 50%를 매출액 Y축 최대값으로 설정
-                              if (!chartData || chartData.length === 0) return [0, 'auto'];
+                              if (!combinedChartData || combinedChartData.length === 0) return [0, 'auto'];
                               const maxStock = Math.max(
-                                ...chartData.map((item: any) => item.totalStock || 0)
+                                ...combinedChartData.map((item: any) => item.totalStock || 0)
                               );
                               const maxSaleAxis = Math.ceil(maxStock * 0.5 / 1000) * 1000; // 천 단위 반올림
                               return [0, maxSaleAxis];
@@ -1395,10 +1542,10 @@ export default function BrandDashboard() {
                             width={60}
                             domain={(() => {
                               // YOY 데이터 범위를 동적으로 계산 (라인이 상단에 보이도록 -200부터 시작)
-                              if (!chartData || chartData.length === 0) return [-200, 150];
+                              if (!combinedChartData || combinedChartData.length === 0) return [-200, 150];
                               
                               const yoyKey = inventoryChartMode === 'yoy' ? 'stockYOY' : 'saleYOY';
-                              const yoyValues = chartData
+                              const yoyValues = combinedChartData
                                 .map((item: any) => item[yoyKey])
                                 .filter((val: any) => val !== null && val !== undefined && !isNaN(val) && val > 0);
                               
