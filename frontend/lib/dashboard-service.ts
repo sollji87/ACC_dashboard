@@ -520,7 +520,7 @@ export function getItemNameFromKey(itemKey: string): string {
 /**
  * 품번별 재고주수 쿼리 생성 (당월 + 누적 데이터 포함 + 정체재고 판별)
  */
-export function buildProductDetailQuery(brandCode: string, itemStd: string, yyyymm: string): string {
+export function buildProductDetailQuery(brandCode: string, itemStd: string, yyyymm: string, excludePurchase: boolean = false): string {
   const pyYyyymm = getPreviousYearMonth(yyyymm);
   const { year, month } = parseYearMonth(yyyymm);
   const pyYear = year - 1;
@@ -528,6 +528,9 @@ export function buildProductDetailQuery(brandCode: string, itemStd: string, yyyy
   // 누적 범위: 1월부터 해당월까지
   const cyAccumStart = `${year}01`;
   const pyAccumStart = `${pyYear}01`;
+  
+  // 사입제외 조건 (chnl_cd = '8' 이 사입)
+  const excludePurchaseCondition = excludePurchase ? "AND c.chnl_cd <> '8'" : '';
 
   return `
 -- item: item 기준 (특정 아이템만)
@@ -605,6 +608,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월 기준 
     group by b.prdt_cd
@@ -621,6 +625,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 당월 기준
     group by b.prdt_cd
@@ -639,6 +644,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
     group by b.prdt_cd
@@ -655,6 +661,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}'  -- 1월부터 해당월까지 누적
     group by b.prdt_cd
@@ -673,6 +680,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월
     group by b.prdt_cd
@@ -689,6 +697,7 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
+        ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}' -- 당월
     group by b.prdt_cd

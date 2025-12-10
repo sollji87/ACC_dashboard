@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const itemStd = searchParams.get('itemStd') || '신발';
     const month = searchParams.get('month');
     const yyyymm = month || getCurrentYearMonth();
+    const excludePurchase = searchParams.get('excludePurchase') === 'true';
 
     // SQL 인젝션 방지: brandCode 검증
     if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    console.log(`📊 브랜드 ${brandCode} ${itemStd} 품번별 재고주수 조회 시작 (${yyyymm})`);
+    console.log(`📊 브랜드 ${brandCode} ${itemStd} 품번별 재고주수 조회 시작 (${yyyymm}, 사입제외: ${excludePurchase})`);
 
     let connection: any = null;
     let retryCount = 0;
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
         connection = await connectToSnowflake();
 
         // 쿼리 생성 및 실행
-        const query = buildProductDetailQuery(brandCode, itemStd, yyyymm);
+        const query = buildProductDetailQuery(brandCode, itemStd, yyyymm, excludePurchase);
         const rows = await executeQuery(query, connection);
         
         // 데이터 포맷팅 (시즌 정보를 위해 yyyymm 전달)

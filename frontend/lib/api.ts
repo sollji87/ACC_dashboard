@@ -162,12 +162,13 @@ export interface ProductDetailResponse {
 export async function fetchProductDetails(
   brandCode: string,
   itemStd: string,
-  month: string
+  month: string,
+  excludePurchase: boolean = false
 ): Promise<ProductDetailResponse> {
   try {
     // YYYY-MM 형식을 YYYYMM 형식으로 변환
     const yyyymm = month.replace(/-/g, '');
-    const apiUrl = `/api/dashboard/inventory/detail?brandCode=${brandCode}&itemStd=${encodeURIComponent(itemStd)}&month=${yyyymm}`;
+    const apiUrl = `/api/dashboard/inventory/detail?brandCode=${brandCode}&itemStd=${encodeURIComponent(itemStd)}&month=${yyyymm}&excludePurchase=${excludePurchase}`;
     
     console.log(`🔍 품번별 데이터 조회 시작:`, apiUrl);
     

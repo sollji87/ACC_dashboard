@@ -714,7 +714,7 @@ export default function BrandDashboard() {
       setIsLoadingDetails(true);
       try {
         const itemStd = getItemNameFromKey(selectedItem);
-        const data = await fetchProductDetails(brand.code, itemStd, selectedMonth);
+        const data = await fetchProductDetails(brand.code, itemStd, selectedMonth, excludePurchase);
         setProductDetails(data);
       } catch (error) {
         console.error('품번별 데이터 로드 실패:', error);
@@ -725,7 +725,7 @@ export default function BrandDashboard() {
     };
 
     loadProductDetails();
-  }, [selectedItem, brand, selectedMonth]);
+  }, [selectedItem, brand, selectedMonth, excludePurchase]);
 
   // 차트 데이터 로드
   useEffect(() => {
