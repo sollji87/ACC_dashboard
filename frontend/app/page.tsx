@@ -16,7 +16,7 @@ import { getRealData, getSampleData, getMonthOptions, BrandDashboardData } from 
 import { BarChart3, ChevronDown, AlertTriangle } from 'lucide-react';
 
 export default function Home() {
-  const [selectedMonth, setSelectedMonth] = useState('2025-10');
+  const [selectedMonth, setSelectedMonth] = useState('2025-11');
   const [dashboardData, setDashboardData] = useState<BrandDashboardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const monthOptions = getMonthOptions();

@@ -614,7 +614,7 @@ export default function BrandDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const brandId = params.brandId as string;
-  const monthFromUrl = searchParams.get('month') || '2025-10';
+  const monthFromUrl = searchParams.get('month') || '2025-11';
   
   const [brand, setBrand] = useState(getBrandById(brandId));
   const [selectedMonth, setSelectedMonth] = useState(monthFromUrl);
