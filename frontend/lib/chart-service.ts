@@ -143,13 +143,14 @@ monthly_threshold AS (
     GROUP BY a.yyyymm
 ),
 
--- 월별 품번별 판매 (금액 또는 수량)
+-- 월별 품번별 판매 (금액 또는 수량 + 실판매액)
 monthly_sale_by_product AS (
     ${base === 'quantity' 
       ? `SELECT 
         TO_CHAR(a.pst_dt, 'YYYYMM') as yyyymm,
         a.prdt_cd,
-        SUM(a.${saleColumn}) as tag_sale_amt
+        SUM(a.${saleColumn}) as tag_sale_amt,
+        SUM(a.sale_amt) as act_sale_amt
     FROM sap_fnf.dw_copa_d a
     JOIN item b ON a.prdt_cd = b.prdt_cd
     LEFT JOIN sap_fnf.mst_shop c
@@ -164,7 +165,8 @@ monthly_sale_by_product AS (
       : `SELECT 
         a.pst_yyyymm as yyyymm,
         a.prdt_cd,
-        SUM(a.${saleColumn}) as tag_sale_amt
+        SUM(a.${saleColumn}) as tag_sale_amt,
+        SUM(a.act_sale_amt) as act_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
     LEFT JOIN sap_fnf.mst_shop c
@@ -179,13 +181,14 @@ monthly_sale_by_product AS (
     }
 ),
 
--- 월별 품번별 재고 (금액 또는 수량)
+-- 월별 품번별 재고 (금액 및 수량)
 monthly_stock_by_product AS (
     SELECT 
         a.yyyymm,
         a.prdt_cd,
         b.sesn,
-        SUM(a.${stockColumn}) as end_stock_tag_amt
+        SUM(a.${stockColumn}) as end_stock_tag_amt,
+        SUM(a.end_stock_qty) as end_stock_qty
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
     WHERE a.brd_cd = '${brandCode}'
@@ -201,7 +204,9 @@ monthly_classified_stock AS (
         s.prdt_cd,
         s.sesn,
         s.end_stock_tag_amt,
+        s.end_stock_qty,
         COALESCE(p.tag_sale_amt, 0) as tag_sale_amt,
+        COALESCE(p.act_sale_amt, 0) as act_sale_amt,
         t.threshold_amt,
         CAST(SUBSTRING(s.yyyymm, 1, 4) AS INT) as data_year,
         CAST(SUBSTRING(s.yyyymm, 5, 2) AS INT) as data_month,
@@ -258,7 +263,7 @@ monthly_classified_stock AS (
     LEFT JOIN monthly_sale_by_product p ON s.yyyymm = p.yyyymm AND s.prdt_cd = p.prdt_cd
 ),
 
--- 월별 시즌별 재고 집계
+-- 월별 시즌별 재고 집계 (금액 및 수량)
 monthly_season_summary AS (
     SELECT 
         yyyymm,
@@ -266,12 +271,17 @@ monthly_season_summary AS (
         SUM(CASE WHEN season_type = '차기시즌' THEN end_stock_tag_amt ELSE 0 END) as next_season_stock,
         SUM(CASE WHEN season_type = '과시즌' THEN end_stock_tag_amt ELSE 0 END) as old_season_stock,
         SUM(CASE WHEN season_type = '정체재고' THEN end_stock_tag_amt ELSE 0 END) as stagnant_stock,
-        SUM(end_stock_tag_amt) as total_stock
+        SUM(end_stock_tag_amt) as total_stock,
+        SUM(CASE WHEN season_type = '당시즌' THEN end_stock_qty ELSE 0 END) as current_season_stock_qty,
+        SUM(CASE WHEN season_type = '차기시즌' THEN end_stock_qty ELSE 0 END) as next_season_stock_qty,
+        SUM(CASE WHEN season_type = '과시즌' THEN end_stock_qty ELSE 0 END) as old_season_stock_qty,
+        SUM(CASE WHEN season_type = '정체재고' THEN end_stock_qty ELSE 0 END) as stagnant_stock_qty,
+        SUM(end_stock_qty) as total_stock_qty
     FROM monthly_classified_stock
     GROUP BY yyyymm
 ),
 
--- 월별 시즌별 매출액 집계
+-- 월별 시즌별 매출액 집계 (택판매 및 실판매)
 monthly_season_sale_summary AS (
     SELECT 
         yyyymm,
@@ -279,7 +289,12 @@ monthly_season_sale_summary AS (
         SUM(CASE WHEN season_type = '차기시즌' THEN tag_sale_amt ELSE 0 END) as next_season_sale,
         SUM(CASE WHEN season_type = '과시즌' THEN tag_sale_amt ELSE 0 END) as old_season_sale,
         SUM(CASE WHEN season_type = '정체재고' THEN tag_sale_amt ELSE 0 END) as stagnant_sale,
-        SUM(tag_sale_amt) as total_sale
+        SUM(tag_sale_amt) as total_sale,
+        SUM(CASE WHEN season_type = '당시즌' THEN act_sale_amt ELSE 0 END) as current_season_act_sale,
+        SUM(CASE WHEN season_type = '차기시즌' THEN act_sale_amt ELSE 0 END) as next_season_act_sale,
+        SUM(CASE WHEN season_type = '과시즌' THEN act_sale_amt ELSE 0 END) as old_season_act_sale,
+        SUM(CASE WHEN season_type = '정체재고' THEN act_sale_amt ELSE 0 END) as stagnant_act_sale,
+        SUM(act_sale_amt) as total_act_sale
     FROM monthly_classified_stock
     GROUP BY yyyymm
 ),
@@ -387,11 +402,21 @@ SELECT
     ss.old_season_stock,
     ss.stagnant_stock,
     ss.total_stock,
+    ss.current_season_stock_qty,
+    ss.next_season_stock_qty,
+    ss.old_season_stock_qty,
+    ss.stagnant_stock_qty,
+    ss.total_stock_qty,
     sss.current_season_sale,
     sss.next_season_sale,
     sss.old_season_sale,
     sss.stagnant_sale,
-    sss.total_sale
+    sss.total_sale,
+    sss.current_season_act_sale,
+    sss.next_season_act_sale,
+    sss.old_season_act_sale,
+    sss.stagnant_act_sale,
+    sss.total_act_sale
 FROM monthly_season_summary ss
 LEFT JOIN monthly_avg_sale mas ON ss.yyyymm = mas.yyyymm
 LEFT JOIN monthly_normal_stock_weeks ns ON ss.yyyymm = ns.yyyymm
@@ -467,6 +492,34 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
     const pyOldSeasonSale = Math.round((Number(py?.OLD_SEASON_SALE || py?.old_season_sale) || 0) / divisor);
     const pyStagnantSale = Math.round((Number(py?.STAGNANT_SALE || py?.stagnant_sale) || 0) / divisor);
     const pyTotalSale = Math.round((Number(py?.TOTAL_SALE || py?.total_sale) || 0) / divisor);
+    
+    // 당년 시즌별 재고 수량
+    const cyCurrentSeasonStockQty = Number(cy.CURRENT_SEASON_STOCK_QTY || cy.current_season_stock_qty) || 0;
+    const cyNextSeasonStockQty = Number(cy.NEXT_SEASON_STOCK_QTY || cy.next_season_stock_qty) || 0;
+    const cyOldSeasonStockQty = Number(cy.OLD_SEASON_STOCK_QTY || cy.old_season_stock_qty) || 0;
+    const cyStagnantStockQty = Number(cy.STAGNANT_STOCK_QTY || cy.stagnant_stock_qty) || 0;
+    const cyTotalStockQty = Number(cy.TOTAL_STOCK_QTY || cy.total_stock_qty) || 0;
+    
+    // 전년 시즌별 재고 수량
+    const pyCurrentSeasonStockQty = Number(py?.CURRENT_SEASON_STOCK_QTY || py?.current_season_stock_qty) || 0;
+    const pyNextSeasonStockQty = Number(py?.NEXT_SEASON_STOCK_QTY || py?.next_season_stock_qty) || 0;
+    const pyOldSeasonStockQty = Number(py?.OLD_SEASON_STOCK_QTY || py?.old_season_stock_qty) || 0;
+    const pyStagnantStockQty = Number(py?.STAGNANT_STOCK_QTY || py?.stagnant_stock_qty) || 0;
+    const pyTotalStockQty = Number(py?.TOTAL_STOCK_QTY || py?.total_stock_qty) || 0;
+    
+    // 당년 시즌별 실판매액 (금액: 백만원 단위)
+    const cyCurrentSeasonActSale = Math.round((Number(cy.CURRENT_SEASON_ACT_SALE || cy.current_season_act_sale) || 0) / divisor);
+    const cyNextSeasonActSale = Math.round((Number(cy.NEXT_SEASON_ACT_SALE || cy.next_season_act_sale) || 0) / divisor);
+    const cyOldSeasonActSale = Math.round((Number(cy.OLD_SEASON_ACT_SALE || cy.old_season_act_sale) || 0) / divisor);
+    const cyStagnantActSale = Math.round((Number(cy.STAGNANT_ACT_SALE || cy.stagnant_act_sale) || 0) / divisor);
+    const cyTotalActSale = Math.round((Number(cy.TOTAL_ACT_SALE || cy.total_act_sale) || 0) / divisor);
+    
+    // 전년 시즌별 실판매액 (금액: 백만원 단위)
+    const pyCurrentSeasonActSale = Math.round((Number(py?.CURRENT_SEASON_ACT_SALE || py?.current_season_act_sale) || 0) / divisor);
+    const pyNextSeasonActSale = Math.round((Number(py?.NEXT_SEASON_ACT_SALE || py?.next_season_act_sale) || 0) / divisor);
+    const pyOldSeasonActSale = Math.round((Number(py?.OLD_SEASON_ACT_SALE || py?.old_season_act_sale) || 0) / divisor);
+    const pyStagnantActSale = Math.round((Number(py?.STAGNANT_ACT_SALE || py?.stagnant_act_sale) || 0) / divisor);
+    const pyTotalActSale = Math.round((Number(py?.TOTAL_ACT_SALE || py?.total_act_sale) || 0) / divisor);
     
     // 재고택금액 YOY 계산 (당년 / 전년 * 100)
     const stockYOY = pyTotalStock !== 0 
@@ -570,7 +623,31 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       currentSeasonSaleRatio: cyCurrentSeasonSaleRatio,
       nextSeasonSaleRatio: cyNextSeasonSaleRatio,
       oldSeasonSaleRatio: cyOldSeasonSaleRatio,
-      stagnantSaleRatio: cyStagnantSaleRatio
+      stagnantSaleRatio: cyStagnantSaleRatio,
+      // 당년 시즌별 재고 수량
+      currentSeasonStockQty: cyCurrentSeasonStockQty,
+      nextSeasonStockQty: cyNextSeasonStockQty,
+      oldSeasonStockQty: cyOldSeasonStockQty,
+      stagnantStockQty: cyStagnantStockQty,
+      totalStockQty: cyTotalStockQty,
+      // 전년 시즌별 재고 수량
+      previousCurrentSeasonStockQty: pyCurrentSeasonStockQty,
+      previousNextSeasonStockQty: pyNextSeasonStockQty,
+      previousOldSeasonStockQty: pyOldSeasonStockQty,
+      previousStagnantStockQty: pyStagnantStockQty,
+      previousTotalStockQty: pyTotalStockQty,
+      // 당년 시즌별 실판매액
+      currentSeasonActSale: cyCurrentSeasonActSale,
+      nextSeasonActSale: cyNextSeasonActSale,
+      oldSeasonActSale: cyOldSeasonActSale,
+      stagnantActSale: cyStagnantActSale,
+      totalActSale: cyTotalActSale,
+      // 전년 시즌별 실판매액
+      previousCurrentSeasonActSale: pyCurrentSeasonActSale,
+      previousNextSeasonActSale: pyNextSeasonActSale,
+      previousOldSeasonActSale: pyOldSeasonActSale,
+      previousStagnantActSale: pyStagnantActSale,
+      previousTotalActSale: pyTotalActSale
     };
   });
   

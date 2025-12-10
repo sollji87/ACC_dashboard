@@ -947,6 +947,9 @@ export function formatProductDetailData(
       // 정체재고 판별은 택판매출 기준
       const seasonCategory = getSeasonCategory(getVal(row, 'PRDT_CD'), getVal(row, 'SESN'), cyTagSale, thresholdAmt);
       
+      // 전년 택판매출도 가져오기
+      const pyTagSale = Number(getVal(row, 'PY_TAG_SALE_AMT')) || 0;
+      
       return {
         productCode: getVal(row, 'PRDT_CD'),
         productName: getVal(row, 'PRODUCT_NAME') || getVal(row, 'PRDT_CD'),
@@ -958,8 +961,13 @@ export function formatProductDetailData(
         endingInventoryQty: cyEndStockQty,
         previousEndingInventoryQty: pyEndStockQty,
         endingInventory: Math.round(cyEndStock / 1000000),
+        endingInventoryRaw: cyEndStock,  // 원본 금액 (합계 계산용)
         previousEndingInventory: Math.round(pyEndStock / 1000000),
+        tagSalesAmount: Math.round(cyTagSale / 1000000),
+        tagSalesAmountRaw: cyTagSale,  // 원본 금액 (합계 계산용)
+        previousTagSalesAmount: Math.round(pyTagSale / 1000000),
         salesAmount: Math.round(cySale / 1000000),
+        salesAmountRaw: cySale,  // 원본 금액 (합계 계산용)
         previousSalesAmount: Math.round(pySale / 1000000),
         inventoryYOY: pyEndStock > 0 ? Math.round((cyEndStock / pyEndStock) * 100) : 0,
         salesYOY: pySale > 0 ? Math.round((cySale / pySale) * 100) : 0,
@@ -982,6 +990,7 @@ export function formatProductDetailData(
       const cySale = Number(getVal(row, 'CY_ACT_SALE_AMT')) || 0;  // 실판매출 (화면 표시용)
       const pySale = Number(getVal(row, 'PY_ACT_SALE_AMT')) || 0;
       const cyTagSale = Number(getVal(row, 'CY_TAG_SALE_AMT')) || 0;  // 택판매출 (정체재고 판별용)
+      const pyTagSale = Number(getVal(row, 'PY_TAG_SALE_AMT')) || 0;  // 전년 택판매출
       const thresholdAmt = Number(getVal(row, 'THRESHOLD_AMT')) || 0;
       const tagPriceRaw = getVal(row, 'TAG_PRICE');
       const tagPrice = tagPriceRaw != null && tagPriceRaw !== '' ? Number(tagPriceRaw) : null;
@@ -1000,8 +1009,13 @@ export function formatProductDetailData(
         endingInventoryQty: cyEndStockQty,
         previousEndingInventoryQty: pyEndStockQty,
         endingInventory: Math.round(cyEndStock / 1000000),
+        endingInventoryRaw: cyEndStock,  // 원본 금액 (합계 계산용)
         previousEndingInventory: Math.round(pyEndStock / 1000000),
+        tagSalesAmount: Math.round(cyTagSale / 1000000),
+        tagSalesAmountRaw: cyTagSale,  // 원본 금액 (합계 계산용)
+        previousTagSalesAmount: Math.round(pyTagSale / 1000000),
         salesAmount: Math.round(cySale / 1000000),
+        salesAmountRaw: cySale,  // 원본 금액 (합계 계산용)
         previousSalesAmount: Math.round(pySale / 1000000),
         inventoryYOY: pyEndStock > 0 ? Math.round((cyEndStock / pyEndStock) * 100) : 0,
         salesYOY: pySale > 0 ? Math.round((cySale / pySale) * 100) : 0,

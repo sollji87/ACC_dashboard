@@ -140,8 +140,13 @@ export interface ProductDetailData {
   endingInventoryQty: number; // 기말재고 수량
   previousEndingInventoryQty: number;
   endingInventory: number; // 기말재고택(V+) 백만원
+  endingInventoryRaw: number; // 기말재고택 원본 (원 단위, 합계 계산용)
   previousEndingInventory: number;
+  tagSalesAmount: number; // 택판매액(V+) 백만원
+  tagSalesAmountRaw: number; // 택판매액 원본 (원 단위, 합계 계산용)
+  previousTagSalesAmount: number;
   salesAmount: number; // 실판매액(V+) 백만원
+  salesAmountRaw: number; // 실판매액 원본 (원 단위, 합계 계산용)
   previousSalesAmount: number;
   inventoryYOY: number;
   salesYOY: number;
