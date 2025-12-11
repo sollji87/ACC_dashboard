@@ -10,7 +10,8 @@ export interface BrandDashboardData {
   salesYOY: number; // 매출액 YOY (%) - 기본값 (당월)
   inventoryYOY: number; // 기말재고 YOY (%) - 기본값 (당월)
   accEndingInventory: number; // ACC 기말재고 (백만원) - 기본값 (당월)
-  accSalesAmount: number; // ACC 판매액 (백만원) - 기본값 (당월)
+  accSalesAmount: number; // ACC 실판매액 (백만원) - 기본값 (당월)
+  accTagSalesAmount?: number; // ACC 택판매액 (백만원) - 기본값 (당월)
   totalWeeks?: number; // 전체 재고주수 (당년) - 기본값 (당월)
   totalPreviousWeeks?: number; // 전체 재고주수 (전년) - 기본값 (당월)
   accInventoryDetail: { // 기본값 (당월)
@@ -53,6 +54,7 @@ export interface BrandDashboardData {
     inventoryYOY: number;
     accEndingInventory: number;
     accSalesAmount: number;
+    accTagSalesAmount?: number;
     totalWeeks?: number;
     totalPreviousWeeks?: number;
     accInventoryDetail: {
@@ -67,6 +69,7 @@ export interface BrandDashboardData {
     inventoryYOY: number;
     accEndingInventory: number;
     accSalesAmount: number;
+    accTagSalesAmount?: number;
     totalWeeks?: number;
     totalPreviousWeeks?: number;
     accInventoryDetail: {
@@ -119,6 +122,7 @@ export async function getRealData(month: string = '2025-11'): Promise<BrandDashb
         inventoryYOY: data.inventoryYOY || 0,
         accEndingInventory: data.accEndingInventory || 0,
         accSalesAmount: data.accSalesAmount || 0,
+        accTagSalesAmount: data.accTagSalesAmount || 0,
         totalWeeks: data.totalWeeks || 0,
         totalPreviousWeeks: data.totalPreviousWeeks || 0,
         accInventoryDetail: data.accInventoryDetail || {},
@@ -129,6 +133,7 @@ export async function getRealData(month: string = '2025-11'): Promise<BrandDashb
         inventoryYOY: data.inventoryYOY || 0,
         accEndingInventory: data.accEndingInventory || 0,
         accSalesAmount: data.accSalesAmount || 0,
+        accTagSalesAmount: data.accTagSalesAmount || 0,
         totalWeeks: data.totalWeeks || 0,
         totalPreviousWeeks: data.totalPreviousWeeks || 0,
         accInventoryDetail: data.accInventoryDetail || {},
@@ -154,6 +159,7 @@ export async function getRealData(month: string = '2025-11'): Promise<BrandDashb
         inventoryYOY: monthlyData.inventoryYOY,
         accEndingInventory: monthlyData.accEndingInventory,
         accSalesAmount: monthlyData.accSalesAmount,
+        accTagSalesAmount: monthlyData.accTagSalesAmount || data.accTagSalesAmount || 0,
         totalWeeks: monthlyData.totalWeeks,
         totalPreviousWeeks: monthlyData.totalPreviousWeeks,
         accInventoryDetail: ensureInventoryDetail(monthlyData.accInventoryDetail),

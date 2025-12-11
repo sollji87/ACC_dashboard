@@ -324,7 +324,7 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
             <span className="text-sm font-semibold text-slate-900">{formatNumber(totalStock)}</span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-sm text-slate-600">당년 매출액</span>
+            <span className="text-sm text-slate-600">당년 택매출액</span>
             <span className="text-sm font-semibold text-slate-900">
               {formatNumber(totalSale)}
               {data.saleYOY > 0 && (
@@ -359,7 +359,7 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                     <span className="font-semibold text-slate-900">{formatNumber(data.oldSeasonStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">택매출액</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.oldSeasonSale || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -387,7 +387,7 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                     <span className="font-semibold text-slate-900">{formatNumber(data.currentSeasonStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">택매출액</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.currentSeasonSale || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -415,7 +415,7 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                     <span className="font-semibold text-slate-900">{formatNumber(data.nextSeasonStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">택매출액</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.nextSeasonSale || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -443,7 +443,7 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
                     <span className="font-semibold text-slate-900">{formatNumber(data.stagnantStock || 0)}</span>
                   </div>
                   <div className="flex flex-col">
-                    <span className="text-slate-500 text-[10px] mb-0.5">매출액</span>
+                    <span className="text-slate-500 text-[10px] mb-0.5">택매출액</span>
                     <span className="font-semibold text-slate-900">{formatNumber(data.stagnantSale || 0)}</span>
                   </div>
                   <div className="flex flex-col">
@@ -613,7 +613,7 @@ export default function BrandDashboard() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const brandId = params.brandId as string;
+  const brandId = (params?.brandId as string) || '';
   const monthFromUrl = searchParams.get('month') || '2025-11';
   
   const [brand, setBrand] = useState(getBrandById(brandId));
@@ -631,7 +631,7 @@ export default function BrandDashboard() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // 정렬 방향
   const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('4weeks'); // 4주/8주/12주 토글
   const [selectedItemForChart, setSelectedItemForChart] = useState<'all' | 'shoes' | 'hat' | 'bag' | 'other'>('all'); // 차트용 아이템 선택
-  const [excludePurchase, setExcludePurchase] = useState<boolean>(false); // 사입제외 옵션
+  const [excludePurchase, setExcludePurchase] = useState<boolean>(true); // 사입제외 옵션 (기본값: 사입제외)
   const [chartBase, setChartBase] = useState<'amount' | 'quantity'>('amount'); // 금액기준/수량기준 토글
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태
@@ -1052,7 +1052,7 @@ export default function BrandDashboard() {
                           <div className="text-xs font-medium text-slate-600"></div>
                           <div className="text-xs font-medium text-slate-600 text-center">재고주수</div>
                           <div className="text-xs font-medium text-slate-600 text-center">기말재고</div>
-                          <div className="text-xs font-medium text-slate-600 text-center">판매액</div>
+                          <div className="text-xs font-medium text-slate-600 text-center">택판매액</div>
                         </div>
                         
                         {/* 당년 행 */}

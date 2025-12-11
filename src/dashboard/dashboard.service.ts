@@ -9,6 +9,8 @@ interface InventoryWeeksData {
   PY_END_STOCK_TAG_AMT: number;
   CY_ACT_SALE_AMT: number;
   PY_ACT_SALE_AMT: number;
+  CY_TAG_SALE_AMT: number;
+  PY_TAG_SALE_AMT: number;
   SEQ: number;
 }
 
@@ -158,6 +160,8 @@ select '전체' as item_std
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
         , sum(case when a.div='cy' then d.act_sale_amt else 0 end) as cy_act_sale_amt
         , sum(case when a.div='py' then d.act_sale_amt else 0 end) as py_act_sale_amt
+        , sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) as cy_tag_sale_amt
+        , sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) as py_tag_sale_amt
         , 0 as seq
 from cm_stock a 
 join c6m_sale b
@@ -178,6 +182,8 @@ select a.item_std
         , sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) as py_end_stock_tag_amt
         , sum(case when a.div='cy' then d.act_sale_amt else 0 end) as cy_act_sale_amt
         , sum(case when a.div='py' then d.act_sale_amt else 0 end) as py_act_sale_amt
+        , sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) as cy_tag_sale_amt
+        , sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) as py_tag_sale_amt
         , c.seq
 from cm_stock a 
 join c6m_sale b
@@ -236,10 +242,16 @@ order by seq
       };
     });
 
-    // 매출액 YOY 계산 (실판매출 기준)
+    // 실판매액 (기존 로직 유지)
     const totalCySale = itemRows.reduce((sum, row) => sum + (row.CY_ACT_SALE_AMT || 0), 0);
     const totalPySale = itemRows.reduce((sum, row) => sum + (row.PY_ACT_SALE_AMT || 0), 0);
-    const salesYOY = totalPySale > 0 ? Math.round((totalCySale / totalPySale) * 100) : 0;
+    
+    // 택판매액 (추가)
+    const totalCyTagSale = itemRows.reduce((sum, row) => sum + (row.CY_TAG_SALE_AMT || 0), 0);
+    const totalPyTagSale = itemRows.reduce((sum, row) => sum + (row.PY_TAG_SALE_AMT || 0), 0);
+    
+    // 매출액 YOY 계산 (택판매액 기준)
+    const salesYOY = totalPyTagSale > 0 ? Math.round((totalCyTagSale / totalPyTagSale) * 100) : 0;
 
     // 기말재고 YOY 계산
     const totalCyStock = itemRows.reduce((sum, row) => sum + (row.CY_END_STOCK_TAG_AMT || 0), 0);
@@ -252,7 +264,8 @@ order by seq
       salesYOY,
       inventoryYOY,
       accEndingInventory: Math.round(totalCyStock / 1000000), // 백만원
-      accSalesAmount: Math.round(totalCySale / 1000000), // 백만원
+      accSalesAmount: Math.round(totalCySale / 1000000), // 백만원 (실판매액)
+      accTagSalesAmount: Math.round(totalCyTagSale / 1000000), // 백만원 (택판매액)
       totalWeeks: totalRow?.CY_STOCK_WEEK_CNT || 0, // 전체 재고주수 (당년)
       totalPreviousWeeks: totalRow?.PY_STOCK_WEEK_CNT || 0, // 전체 재고주수 (전년)
       accInventoryDetail,

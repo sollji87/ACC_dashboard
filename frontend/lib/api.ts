@@ -9,7 +9,8 @@ export interface ApiInventoryData {
   salesYOY: number; // 기본값 (당월, 호환성 유지)
   inventoryYOY: number; // 기본값 (당월, 호환성 유지)
   accEndingInventory: number; // 기본값 (당월, 호환성 유지)
-  accSalesAmount: number; // 기본값 (당월, 호환성 유지)
+  accSalesAmount: number; // 실판매액 - 기본값 (당월, 호환성 유지)
+  accTagSalesAmount?: number; // 택판매액 - 기본값 (당월)
   totalWeeks?: number; // 기본값 (당월, 호환성 유지)
   totalPreviousWeeks?: number; // 기본값 (당월, 호환성 유지)
   accInventoryDetail: any; // 기본값 (당월, 호환성 유지)
@@ -19,6 +20,7 @@ export interface ApiInventoryData {
     inventoryYOY: number;
     accEndingInventory: number;
     accSalesAmount: number;
+    accTagSalesAmount?: number;
     totalWeeks?: number;
     totalPreviousWeeks?: number;
     accInventoryDetail: any;
@@ -28,6 +30,7 @@ export interface ApiInventoryData {
     inventoryYOY: number;
     accEndingInventory: number;
     accSalesAmount: number;
+    accTagSalesAmount?: number;
     totalWeeks?: number;
     totalPreviousWeeks?: number;
     accInventoryDetail: any;

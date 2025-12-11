@@ -197,12 +197,15 @@ export default function Home() {
                       <CardTitle className="text-xl font-bold text-slate-900 truncate">
                         {brand.name}
                       </CardTitle>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded whitespace-nowrap">
                           매출 {data.salesYOY}%
                         </span>
-                        <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                        <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded whitespace-nowrap">
                           재고 {data.inventoryYOY}%
+                        </span>
+                        <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded whitespace-nowrap">
+                          사입제외, 4주 기준
                         </span>
                       </div>
                     </div>
@@ -283,9 +286,9 @@ export default function Home() {
                           <AlertTriangle className="h-3 w-3 text-white" />
                         </div>
                       )}
-                      <p className="text-xs font-medium text-slate-600 mb-1">ACC 판매액</p>
+                      <p className="text-xs font-medium text-slate-600 mb-1">ACC 택판매액</p>
                       <p className="text-xl font-bold text-slate-900">
-                        {formatNumber(data.accSalesAmount)}
+                        {formatNumber(data.accTagSalesAmount || data.accSalesAmount)}
                       </p>
                       <p className="text-xs text-slate-500 mt-0.5">백만원</p>
                     </div>
