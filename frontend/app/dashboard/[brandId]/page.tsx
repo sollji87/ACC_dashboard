@@ -214,6 +214,60 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+// 선택한 월을 강조하는 커스텀 X축 Tick 컴포넌트
+const CustomXAxisTick = ({ x, y, payload, selectedMonth }: any) => {
+  const month = payload.value;
+  const isSelected = month === selectedMonth;
+  
+  // 월 형식 변환 (2025-11 -> 25년 11월 또는 11월)
+  const formattedMonth = String(month).replace(/(\d{4})-(\d{2})/, (match: string, year: string, m: string) => {
+    const shortYear = year.substring(2);
+    return `${shortYear}년 ${parseInt(m)}월`;
+  });
+  
+  if (isSelected) {
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <rect
+          x={-30}
+          y={2}
+          width={60}
+          height={22}
+          rx={6}
+          ry={6}
+          fill="#1e293b"
+        />
+        <text
+          x={0}
+          y={16}
+          textAnchor="middle"
+          fill="#ffffff"
+          fontSize={11}
+          fontWeight="bold"
+          style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}
+        >
+          {formattedMonth}
+        </text>
+      </g>
+    );
+  }
+  
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0}
+        y={12}
+        textAnchor="middle"
+        fill="#64748b"
+        fontSize={11}
+        style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}
+      >
+        {formattedMonth}
+      </text>
+    </g>
+  );
+};
+
 // 재고택금액 차트용 커스텀 비율 Label
 const CustomRatioLabel = ({ x, y, width, height, value }: any) => {
   // value는 비율 값 (%)
@@ -1369,7 +1423,7 @@ export default function BrandDashboard() {
                             dataKey="month" 
                             stroke="#64748b"
                             fontSize={12}
-                            tick={{ fill: '#64748b' }}
+                            tick={(props: any) => <CustomXAxisTick {...props} selectedMonth={selectedMonth} />}
                             domain={['dataMin', 'dataMax']}
                             padding={{ left: 0, right: 0 }}
                             angle={0}
@@ -1540,7 +1594,8 @@ export default function BrandDashboard() {
                             dataKey="month" 
                             stroke="#64748b"
                             fontSize={12}
-                            tick={{ fill: '#64748b' }}
+                            tick={(props: any) => <CustomXAxisTick {...props} selectedMonth={selectedMonth} />}
+                            height={40}
                           />
                           <YAxis 
                             yAxisId="left"
@@ -1721,9 +1776,11 @@ export default function BrandDashboard() {
                             <th 
                               key={item.month} 
                               className={`px-2 py-2 text-center font-semibold border-b border-slate-200 min-w-[60px] ${
-                                item.isActual === false 
-                                  ? 'bg-blue-50 text-blue-700' 
-                                  : 'text-slate-600'
+                                item.month === selectedMonth
+                                  ? 'bg-slate-800 text-white rounded-md'
+                                  : item.isActual === false 
+                                    ? 'bg-blue-50 text-blue-700' 
+                                    : 'text-slate-600'
                               }`}
                             >
                               {item.month.slice(2).replace('-', '.')}
@@ -2798,8 +2855,26 @@ export default function BrandDashboard() {
                         <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                         <XAxis 
                           dataKey="month" 
-                          tick={{ fontSize: 9, fill: '#64748b' }} 
-                          tickFormatter={(value) => value.substring(5)} // MM만 표시
+                          tick={(props: any) => {
+                            const { x, y, payload } = props;
+                            const month = payload.value;
+                            const isSelected = month === selectedMonth;
+                            const displayMonth = month.substring(5); // MM만 표시
+                            
+                            if (isSelected) {
+                              return (
+                                <g transform={`translate(${x},${y})`}>
+                                  <rect x={-12} y={2} width={24} height={14} rx={4} ry={4} fill="#1e293b" />
+                                  <text x={0} y={12} textAnchor="middle" fill="#ffffff" fontSize={9} fontWeight="bold">{displayMonth}</text>
+                                </g>
+                              );
+                            }
+                            return (
+                              <g transform={`translate(${x},${y})`}>
+                                <text x={0} y={12} textAnchor="middle" fill="#64748b" fontSize={9}>{displayMonth}</text>
+                              </g>
+                            );
+                          }}
                         />
                         <YAxis 
                           yAxisId="left"
