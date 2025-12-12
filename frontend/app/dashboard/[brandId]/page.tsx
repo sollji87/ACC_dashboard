@@ -842,9 +842,13 @@ export default function BrandDashboard() {
   }, [chartData, forecastResults]);
 
   // 예측 계산 완료 콜백
-  const handleForecastCalculated = (results: any[], capacity: OrderCapacity | null) => {
+  const handleForecastCalculated = (results: any[], capacity: OrderCapacity | null, incomingAmounts?: any[]) => {
     setForecastResults(results);
     setOrderCapacity(capacity);
+    if (incomingAmounts && incomingAmounts.length > 0) {
+      setForecastIncomingAmounts(incomingAmounts);
+      console.log('📦 입고예정금액 업데이트:', incomingAmounts);
+    }
     console.log('✅ 예측 계산 완료:', results.length, '개 월');
     console.log('📊 발주가능 금액:', capacity);
   };
@@ -1845,10 +1849,19 @@ export default function BrandDashboard() {
                             
                             if (item.isActual === false) {
                               // 예측 구간: forecastIncomingAmounts에서 가져오기
-                              if (forecastIncomingAmounts && selectedItem && selectedItem !== 'all') {
+                              if (forecastIncomingAmounts && forecastIncomingAmounts.length > 0) {
                                 const monthData = forecastIncomingAmounts.find((d: any) => d.month === item.month);
                                 if (monthData) {
-                                  incomingAmount = Math.round((monthData[selectedItem as keyof typeof monthData] || 0) / 1000000);
+                                  if (selectedItemForChart === 'all') {
+                                    // 전체: 모든 중분류 합계
+                                    const shoes = Number(monthData.shoes) || 0;
+                                    const hat = Number(monthData.hat) || 0;
+                                    const bag = Number(monthData.bag) || 0;
+                                    const other = Number(monthData.other) || 0;
+                                    incomingAmount = Math.round((shoes + hat + bag + other) / 1000000);
+                                  } else {
+                                    incomingAmount = Math.round((Number(monthData[selectedItemForChart]) || 0) / 1000000);
+                                  }
                                 }
                               }
                             } else {

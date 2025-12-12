@@ -25,7 +25,7 @@ interface ForecastInputPanelProps {
   actualData: any[]; // 실적 차트 데이터
   weeksType: '4weeks' | '8weeks' | '12weeks';
   selectedItem: 'all' | 'shoes' | 'hat' | 'bag' | 'other'; // 선택된 중분류
-  onForecastCalculated: (forecastResults: any[], orderCapacity: OrderCapacity | null) => void;
+  onForecastCalculated: (forecastResults: any[], orderCapacity: OrderCapacity | null, incomingAmounts?: any[]) => void;
 }
 
 export default function ForecastInputPanel({
@@ -155,7 +155,7 @@ export default function ForecastInputPanel({
           weeksType,
           yoyRate[selectedItem]
         );
-        onForecastCalculated(forecastResults, orderCapacity);
+        onForecastCalculated(forecastResults, orderCapacity, incomingAmounts);
         console.log(`✅ 저장된 설정으로 자동 예측 실행 완료 (${selectedItem})`);
       } catch (error) {
         console.error('❌ 자동 예측 실행 실패:', error);
@@ -268,8 +268,8 @@ export default function ForecastInputPanel({
       saveToLocalStorage();
       setIsForecastReady(true);
 
-      // 부모 컴포넌트로 결과 전달
-      onForecastCalculated(forecastResults, orderCapacity);
+      // 부모 컴포넌트로 결과 전달 (입고예정금액 포함)
+      onForecastCalculated(forecastResults, orderCapacity, incomingAmounts);
 
       alert('✅ 예측 설정이 저장되었습니다.\n\n모든 중분류(신발/모자/가방/기타ACC)에 자동 적용됩니다.');
     } catch (error) {
