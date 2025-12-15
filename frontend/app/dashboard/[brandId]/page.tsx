@@ -1815,12 +1815,12 @@ export default function BrandDashboard() {
                             </td>
                           ))}
                         </tr>
-                        {/* 판매택매출 */}
+                        {/* 택매출액(사입제외) */}
                         <tr className="hover:bg-slate-50 transition-colors">
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                              택매출액
+                              택매출액(사입제외)
                             </span>
                           </td>
                           {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
@@ -1832,7 +1832,28 @@ export default function BrandDashboard() {
                                   : 'text-slate-700'
                               }`}
                             >
-                              {(item.totalSale || 0).toLocaleString()}
+                              {(item.totalSaleExPurchase || 0).toLocaleString()}
+                            </td>
+                          ))}
+                        </tr>
+                        {/* 택매출액(사입) */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                              택매출액(사입)
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
+                            <td 
+                              key={item.month} 
+                              className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                item.isActual === false 
+                                  ? 'bg-blue-50/50 text-emerald-600' 
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              {(item.totalSalePurchase || 0).toLocaleString()}
                             </td>
                           ))}
                         </tr>

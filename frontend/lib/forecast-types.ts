@@ -44,7 +44,9 @@ export interface MonthlyItemIncomingAmount {
 export interface ForecastInput {
   brandCode: string; // 브랜드 코드
   brandName: string; // 브랜드명
-  yoyRate: ItemYoyRate; // 중분류별 매출액 성장률 YOY (예: 105 = 105%)
+  yoyRate: ItemYoyRate; // 중분류별 매출액 성장률 YOY (하위호환용, 전체 = 사입제외 기준)
+  yoyRateExPurchase: ItemYoyRate; // 중분류별 사입제외 매출액 성장률 YOY (예: 105 = 105%)
+  yoyRatePurchase: ItemYoyRate; // 중분류별 사입 매출액 성장률 YOY (예: 105 = 105%)
   baseStockWeeks: ItemBaseStockWeeks; // 중분류별 기준재고주수
   incomingAmounts: MonthlyItemIncomingAmount[]; // 월별 중분류별 입고예정금액
 }
@@ -97,6 +99,12 @@ export interface ForecastResult {
   previousOldSeasonSale?: number;
   previousStagnantSale?: number;
   previousTotalSale?: number;
+  // 당년 사입제외/사입 택매출액
+  totalSaleExPurchase?: number;
+  totalSalePurchase?: number;
+  // 전년 동월 사입제외/사입 택매출액
+  previousTotalSaleExPurchase?: number;
+  previousTotalSalePurchase?: number;
   // 당년 예측 비율
   currentSeasonRatio?: number;
   nextSeasonRatio?: number;

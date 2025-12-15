@@ -107,7 +107,8 @@ export function calculateForecast(
   // 월별 예측 계산
   for (const monthlyIncoming of forecastInput.incomingAmounts) {
     const { month } = monthlyIncoming;
-    const yoyRate = forecastInput.yoyRate[selectedItem];
+    const yoyRateExPurchase = forecastInput.yoyRateExPurchase?.[selectedItem] || forecastInput.yoyRate[selectedItem];
+    const yoyRatePurchase = forecastInput.yoyRatePurchase?.[selectedItem] || forecastInput.yoyRate[selectedItem];
     
     // 전년 동월 데이터 찾기
     const previousYearMonth = getPreviousYearMonth(month);
@@ -122,10 +123,15 @@ export function calculateForecast(
     const previousStockWeeks = previousYearData.stockWeeks || 0;
     const previousStockWeeksNormal = previousYearData.stockWeeksNormal || 0;
     
-    // 1. 택판매액 계산 (전년 동월 택판매액 × YOY 성장률)
-    // totalSale은 택판매액 (백만원 단위)이므로 원 단위로 변환
-    const previousYearTagSales = (previousYearData.totalSale || 0) * 1000000;
-    const forecastTagSales = previousYearTagSales * (yoyRate / 100);
+    // 1. 사입제외/사입 택판매액 각각 계산
+    const previousYearSaleExPurchase = (previousYearData.totalSaleExPurchase || 0) * 1000000;
+    const previousYearSalePurchase = (previousYearData.totalSalePurchase || 0) * 1000000;
+    
+    const forecastSaleExPurchase = previousYearSaleExPurchase * (yoyRateExPurchase / 100);
+    const forecastSalePurchase = previousYearSalePurchase * (yoyRatePurchase / 100);
+    
+    // 전체 택판매액 (사입제외 + 사입)
+    const forecastTagSales = forecastSaleExPurchase + forecastSalePurchase;
     
     // 예측 택판매액 기록 (월별)
     forecastSalesHistory.push(forecastTagSales);
@@ -259,6 +265,12 @@ export function calculateForecast(
       oldSeasonSale: Math.round(forecastTagSalesMillion * oldSeasonSaleRatio),
       stagnantSale: Math.round(forecastTagSalesMillion * stagnantSaleRatio),
       totalSale: Math.round(forecastTagSalesMillion),
+      // 당년 사입제외/사입 택매출액 (각각 YOY 적용)
+      totalSaleExPurchase: Math.round(forecastSaleExPurchase / 1000000),
+      totalSalePurchase: Math.round(forecastSalePurchase / 1000000),
+      // 전년 동월 사입제외/사입 택매출액
+      previousTotalSaleExPurchase: previousYearData.totalSaleExPurchase || 0,
+      previousTotalSalePurchase: previousYearData.totalSalePurchase || 0,
       // 전년 동월 실적 매출액 (시즌별)
       previousCurrentSeasonSale: previousYearData.currentSeasonSale || 0,
       previousNextSeasonSale: previousYearData.nextSeasonSale || 0,
@@ -400,6 +412,12 @@ export function combineActualAndForecast(
       oldSeasonSale: forecast.oldSeasonSale || 0,
       stagnantSale: forecast.stagnantSale || 0,
       totalSale: forecast.totalSale || 0,
+      // 당년 사입제외/사입 택매출액
+      totalSaleExPurchase: forecast.totalSaleExPurchase || 0,
+      totalSalePurchase: forecast.totalSalePurchase || 0,
+      // 전년 동월 사입제외/사입 택매출액
+      previousTotalSaleExPurchase: forecast.previousTotalSaleExPurchase || 0,
+      previousTotalSalePurchase: forecast.previousTotalSalePurchase || 0,
       // 전년 동월 실적 매출액
       previousCurrentSeasonSale: forecast.previousCurrentSeasonSale || 0,
       previousNextSeasonSale: forecast.previousNextSeasonSale || 0,

@@ -143,12 +143,14 @@ monthly_threshold AS (
     GROUP BY a.yyyymm
 ),
 
--- 월별 품번별 판매 (금액 또는 수량 + 실판매액)
+-- 월별 품번별 판매 (금액 또는 수량 + 실판매액 + 사입제외/사입 분리)
 monthly_sale_by_product AS (
     ${base === 'quantity' 
       ? `SELECT 
         TO_CHAR(a.pst_dt, 'YYYYMM') as yyyymm,
         a.prdt_cd,
+        SUM(CASE WHEN c.chnl_cd <> '8' THEN a.${saleColumn} ELSE 0 END) as tag_sale_amt_ex_purchase,
+        SUM(CASE WHEN c.chnl_cd = '8' THEN a.${saleColumn} ELSE 0 END) as tag_sale_amt_purchase,
         SUM(a.${saleColumn}) as tag_sale_amt,
         SUM(a.sale_amt) as act_sale_amt
     FROM sap_fnf.dw_copa_d a
@@ -160,11 +162,12 @@ monthly_sale_by_product AS (
       AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
       AND c.chnl_cd <> '9'
-      ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
     GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM'), a.prdt_cd`
       : `SELECT 
         a.pst_yyyymm as yyyymm,
         a.prdt_cd,
+        SUM(CASE WHEN c.chnl_cd <> '8' THEN a.${saleColumn} ELSE 0 END) as tag_sale_amt_ex_purchase,
+        SUM(CASE WHEN c.chnl_cd = '8' THEN a.${saleColumn} ELSE 0 END) as tag_sale_amt_purchase,
         SUM(a.${saleColumn}) as tag_sale_amt,
         SUM(a.act_sale_amt) as act_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
@@ -176,7 +179,6 @@ monthly_sale_by_product AS (
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
       AND c.chnl_cd <> '9'
-      ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
     GROUP BY a.pst_yyyymm, a.prdt_cd`
     }
 ),
@@ -205,6 +207,8 @@ monthly_classified_stock AS (
         s.sesn,
         s.end_stock_tag_amt,
         s.end_stock_qty,
+        COALESCE(p.tag_sale_amt_ex_purchase, 0) as tag_sale_amt_ex_purchase,
+        COALESCE(p.tag_sale_amt_purchase, 0) as tag_sale_amt_purchase,
         COALESCE(p.tag_sale_amt, 0) as tag_sale_amt,
         COALESCE(p.act_sale_amt, 0) as act_sale_amt,
         t.threshold_amt,
@@ -281,7 +285,7 @@ monthly_season_summary AS (
     GROUP BY yyyymm
 ),
 
--- 월별 시즌별 매출액 집계 (택판매 및 실판매)
+-- 월별 시즌별 매출액 집계 (택판매 및 실판매 + 사입제외/사입 분리)
 monthly_season_sale_summary AS (
     SELECT 
         yyyymm,
@@ -290,6 +294,8 @@ monthly_season_sale_summary AS (
         SUM(CASE WHEN season_type = '과시즌' THEN tag_sale_amt ELSE 0 END) as old_season_sale,
         SUM(CASE WHEN season_type = '정체재고' THEN tag_sale_amt ELSE 0 END) as stagnant_sale,
         SUM(tag_sale_amt) as total_sale,
+        SUM(tag_sale_amt_ex_purchase) as total_sale_ex_purchase,
+        SUM(tag_sale_amt_purchase) as total_sale_purchase,
         SUM(CASE WHEN season_type = '당시즌' THEN act_sale_amt ELSE 0 END) as current_season_act_sale,
         SUM(CASE WHEN season_type = '차기시즌' THEN act_sale_amt ELSE 0 END) as next_season_act_sale,
         SUM(CASE WHEN season_type = '과시즌' THEN act_sale_amt ELSE 0 END) as old_season_act_sale,
@@ -412,6 +418,8 @@ SELECT
     sss.old_season_sale,
     sss.stagnant_sale,
     sss.total_sale,
+    sss.total_sale_ex_purchase,
+    sss.total_sale_purchase,
     sss.current_season_act_sale,
     sss.next_season_act_sale,
     sss.old_season_act_sale,
@@ -485,6 +493,14 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
     const cyOldSeasonSale = Math.round((Number(cy.OLD_SEASON_SALE || cy.old_season_sale) || 0) / divisor);
     const cyStagnantSale = Math.round((Number(cy.STAGNANT_SALE || cy.stagnant_sale) || 0) / divisor);
     const cyTotalSale = Math.round((Number(cy.TOTAL_SALE || cy.total_sale) || 0) / divisor);
+    
+    // 당년 사입제외/사입 택매출액 (금액: 백만원 단위)
+    const cyTotalSaleExPurchase = Math.round((Number(cy.TOTAL_SALE_EX_PURCHASE || cy.total_sale_ex_purchase) || 0) / divisor);
+    const cyTotalSalePurchase = Math.round((Number(cy.TOTAL_SALE_PURCHASE || cy.total_sale_purchase) || 0) / divisor);
+    
+    // 전년 사입제외/사입 택매출액 (금액: 백만원 단위)
+    const pyTotalSaleExPurchase = Math.round((Number(py?.TOTAL_SALE_EX_PURCHASE || py?.total_sale_ex_purchase) || 0) / divisor);
+    const pyTotalSalePurchase = Math.round((Number(py?.TOTAL_SALE_PURCHASE || py?.total_sale_purchase) || 0) / divisor);
     
     // 전년 시즌별 매출액 (금액: 백만원 단위)
     const pyCurrentSeasonSale = Math.round((Number(py?.CURRENT_SEASON_SALE || py?.current_season_sale) || 0) / divisor);
@@ -613,6 +629,12 @@ export function formatChartData(rows: any[], base: 'amount' | 'quantity' = 'amou
       oldSeasonSale: cyOldSeasonSale,
       stagnantSale: cyStagnantSale,
       totalSale: cyTotalSale,
+      // 당년 사입제외/사입 택매출액
+      totalSaleExPurchase: cyTotalSaleExPurchase,
+      totalSalePurchase: cyTotalSalePurchase,
+      // 전년 사입제외/사입 택매출액
+      previousTotalSaleExPurchase: pyTotalSaleExPurchase,
+      previousTotalSalePurchase: pyTotalSalePurchase,
       // 전년 시즌별 매출액
       previousCurrentSeasonSale: pyCurrentSeasonSale,
       previousNextSeasonSale: pyNextSeasonSale,

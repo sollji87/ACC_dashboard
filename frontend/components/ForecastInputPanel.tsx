@@ -38,12 +38,18 @@ export default function ForecastInputPanel({
   onForecastCalculated,
 }: ForecastInputPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [yoyRate, setYoyRate] = useState<ItemYoyRate>({
+  const [yoyRateExPurchase, setYoyRateExPurchase] = useState<ItemYoyRate>({
     shoes: 100,
     hat: 100,
     bag: 100,
     other: 100,
-  }); // 중분류별 매출액 성장률 YOY
+  }); // 중분류별 사입제외 매출액 성장률 YOY
+  const [yoyRatePurchase, setYoyRatePurchase] = useState<ItemYoyRate>({
+    shoes: 100,
+    hat: 100,
+    bag: 100,
+    other: 100,
+  }); // 중분류별 사입 매출액 성장률 YOY
   const [baseStockWeeks, setBaseStockWeeks] = useState<ItemBaseStockWeeks>({
     shoes: 40,
     hat: 40,
@@ -70,22 +76,27 @@ export default function ForecastInputPanel({
       const savedData = localStorage.getItem(storageKey);
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        // yoyRate가 숫자인 경우 (구버전) 중분류별 객체로 변환
-        if (typeof parsed.yoyRate === 'number') {
-          setYoyRate({
+        const defaultYoy = { shoes: 100, hat: 100, bag: 100, other: 100 };
+        
+        // 사입제외 YOY (구버전 호환: yoyRate가 있으면 사입제외로 사용)
+        if (parsed.yoyRateExPurchase) {
+          setYoyRateExPurchase(parsed.yoyRateExPurchase);
+        } else if (typeof parsed.yoyRate === 'number') {
+          setYoyRateExPurchase({
             shoes: parsed.yoyRate,
             hat: parsed.yoyRate,
             bag: parsed.yoyRate,
             other: parsed.yoyRate,
           });
+        } else if (parsed.yoyRate) {
+          setYoyRateExPurchase(parsed.yoyRate);
         } else {
-          setYoyRate(parsed.yoyRate || {
-            shoes: 100,
-            hat: 100,
-            bag: 100,
-            other: 100,
-          });
+          setYoyRateExPurchase(defaultYoy);
         }
+        
+        // 사입 YOY
+        setYoyRatePurchase(parsed.yoyRatePurchase || defaultYoy);
+        
         setBaseStockWeeks(parsed.baseStockWeeks || {
           shoes: 40,
           hat: 40,
@@ -141,7 +152,9 @@ export default function ForecastInputPanel({
       const forecastInput: ForecastInput = {
         brandCode,
         brandName,
-        yoyRate,
+        yoyRate: yoyRateExPurchase, // 하위호환용
+        yoyRateExPurchase,
+        yoyRatePurchase,
         baseStockWeeks,
         incomingAmounts,
       };
@@ -153,7 +166,7 @@ export default function ForecastInputPanel({
           forecastResults,
           baseStockWeeks[selectedItem],
           weeksType,
-          yoyRate[selectedItem]
+          yoyRateExPurchase[selectedItem]
         );
         onForecastCalculated(forecastResults, orderCapacity, incomingAmounts);
         console.log(`✅ 저장된 설정으로 자동 예측 실행 완료 (${selectedItem})`);
@@ -219,7 +232,9 @@ export default function ForecastInputPanel({
   const saveToLocalStorage = () => {
     try {
       const dataToSave = {
-        yoyRate,
+        yoyRateExPurchase,
+        yoyRatePurchase,
+        yoyRate: yoyRateExPurchase, // 하위호환용
         baseStockWeeks,
         incomingAmounts,
         savedAt: new Date().toISOString(),
@@ -246,7 +261,9 @@ export default function ForecastInputPanel({
     const forecastInput: ForecastInput = {
       brandCode,
       brandName,
-      yoyRate,
+      yoyRate: yoyRateExPurchase, // 하위호환용 (재고주수 계산에 사용)
+      yoyRateExPurchase,
+      yoyRatePurchase,
       baseStockWeeks,
       incomingAmounts,
     };
@@ -255,13 +272,13 @@ export default function ForecastInputPanel({
       // 선택된 중분류에 대한 예측 계산
       const forecastResults = calculateForecast(actualData, forecastInput, weeksType, selectedItem);
 
-      // 4개월 후 발주가능 금액 계산
+      // 4개월 후 발주가능 금액 계산 (사입제외 YOY 기준)
       const orderCapacity = calculateOrderCapacity(
         actualData,
         forecastResults,
         baseStockWeeks[selectedItem],
         weeksType,
-        yoyRate[selectedItem]
+        yoyRateExPurchase[selectedItem]
       );
 
       // 로컬 스토리지에 저장 (모든 중분류에 공통 적용)
@@ -315,8 +332,12 @@ export default function ForecastInputPanel({
             {!isExpanded && selectedItem !== 'all' && (
               <div className="ml-6 flex items-center gap-6 text-sm text-slate-600">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-blue-600">매출YOY:</span>
-                  <span className="font-bold text-blue-700">{yoyRate[selectedItem]}%</span>
+                  <span className="font-semibold text-blue-600">사입제외YOY:</span>
+                  <span className="font-bold text-blue-700">{yoyRateExPurchase[selectedItem]}%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-emerald-600">사입YOY:</span>
+                  <span className="font-bold text-emerald-700">{yoyRatePurchase[selectedItem]}%</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="font-semibold text-purple-600">목표 재고주수:</span>
@@ -358,20 +379,47 @@ export default function ForecastInputPanel({
         {/* 입력 폼 */}
         {isExpanded && (
           <div className="mt-4 space-y-4">
-            {/* 중분류별 매출액 성장률 YOY */}
+            {/* 중분류별 매출액 성장률 YOY (사입제외) */}
             <div className="p-3 bg-blue-50 rounded-lg space-y-2">
               <h4 className="text-sm font-semibold text-slate-700 mb-2">
-                중분류별 매출액 성장률 YOY:
+                중분류별 매출액 성장률 YOY <span className="text-green-600">(사입제외)</span>:
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {(Object.keys(yoyRate) as Array<keyof ItemYoyRate>).map((key) => (
+                {(Object.keys(yoyRateExPurchase) as Array<keyof ItemYoyRate>).map((key) => (
                   <div key={key} className="flex items-center gap-2">
                     <label className="text-xs text-slate-600 w-16">{itemNames[key]}:</label>
                     <Input
                       type="number"
-                      value={yoyRate[key]}
+                      value={yoyRateExPurchase[key]}
                       onChange={(e) =>
-                        setYoyRate((prev) => ({
+                        setYoyRateExPurchase((prev) => ({
+                          ...prev,
+                          [key]: parseFloat(e.target.value) || 100,
+                        }))
+                      }
+                      className="w-20 text-right text-sm"
+                      step="0.1"
+                    />
+                    <span className="text-xs text-slate-600">%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 중분류별 매출액 성장률 YOY (사입) */}
+            <div className="p-3 bg-emerald-50 rounded-lg space-y-2">
+              <h4 className="text-sm font-semibold text-slate-700 mb-2">
+                중분류별 매출액 성장률 YOY <span className="text-emerald-600">(사입)</span>:
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {(Object.keys(yoyRatePurchase) as Array<keyof ItemYoyRate>).map((key) => (
+                  <div key={key} className="flex items-center gap-2">
+                    <label className="text-xs text-slate-600 w-16">{itemNames[key]}:</label>
+                    <Input
+                      type="number"
+                      value={yoyRatePurchase[key]}
+                      onChange={(e) =>
+                        setYoyRatePurchase((prev) => ({
                           ...prev,
                           [key]: parseFloat(e.target.value) || 100,
                         }))
