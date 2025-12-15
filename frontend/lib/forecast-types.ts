@@ -176,6 +176,11 @@ export interface CombinedChartData {
   oldSeasonSale?: number;
   stagnantSale?: number;
   totalSale?: number;
+  // 사입제외/사입 택매출액
+  totalSaleExPurchase?: number;
+  totalSalePurchase?: number;
+  previousTotalSaleExPurchase?: number;
+  previousTotalSalePurchase?: number;
   previousCurrentSeasonSale?: number;
   previousNextSeasonSale?: number;
   previousOldSeasonSale?: number;
