@@ -5,14 +5,19 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { getBrandById, BRANDS } from '@/lib/brands';
-import { getRealData, getSampleData, getMonthOptions, BrandDashboardData } from '@/lib/data';
+import { getRealData, getSampleData, BrandDashboardData } from '@/lib/data';
 import { fetchProductDetails, ProductDetailResponse } from '@/lib/api';
 import { getItemNameFromKey } from '@/lib/dashboard-service';
-import { ArrowLeft, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Search, ArrowUp, ArrowDown, Download } from 'lucide-react';
-import DataSourceToggle from '@/components/DataSourceToggle';
-import { DataSourceType, getCurrentWeekValue } from '@/lib/week-utils';
+import { ArrowLeft, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Search, ArrowUp, ArrowDown, Download, Clock } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { getCurrentWeekValue, getWeekOptions } from '@/lib/week-utils';
 
 // 커스텀 saveAs 함수 (file-saver 대체)
 const saveAs = (blob: Blob, filename: string) => {
@@ -33,7 +38,7 @@ const saveAs = (blob: Blob, filename: string) => {
   }, 0);
 };
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, TooltipProps, LabelList } from 'recharts';
-import ForecastInputPanel from '@/components/ForecastInputPanel';
+import WeeklyForecastInputPanel from '@/components/WeeklyForecastInputPanel';
 import { combineActualAndForecast } from '@/lib/forecast-service';
 import { OrderCapacity } from '@/lib/forecast-types';
 
@@ -117,12 +122,8 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
   const data = payload[0]?.payload;
   if (!data) return null;
 
-  // 월 형식 변환 (2024-11 -> 24년 11월)
-  const monthLabel = typeof label === 'string' ? label : (data.month || '');
-  const formattedMonth = String(monthLabel).replace(/(\d{4})-(\d{2})/, (match: string, year: string, month: string) => {
-    const shortYear = year.substring(2);
-    return `${shortYear}년 ${parseInt(month)}월`;
-  });
+  // 주차 라벨 (예: 2025년 51주차)
+  const weekLabel = data.month || label || '';
 
   // 전체 재고주수
   const stockWeeks = data.stockWeeks || 0;
@@ -148,7 +149,7 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
       }}
     >
       <div className="font-semibold text-slate-900 mb-3 pb-2 border-b border-slate-200">
-        {formattedMonth}
+        {weekLabel}
       </div>
       
       <div className="space-y-3">
@@ -210,25 +211,22 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-// 선택한 월을 강조하는 커스텀 X축 Tick 컴포넌트
-const CustomXAxisTick = ({ x, y, payload, selectedMonth }: any) => {
-  const month = payload.value;
-  const isSelected = month === selectedMonth;
+// 선택한 주차를 강조하는 커스텀 X축 Tick 컴포넌트
+const CustomXAxisTick = ({ x, y, payload, selectedWeek }: any) => {
+  const weekLabel = payload.value;
+  const isSelected = weekLabel === selectedWeek;
   
-  // 월 형식 변환 (2025-11 -> 25년 11월 또는 11월)
-  const formattedMonth = String(month).replace(/(\d{4})-(\d{2})/, (match: string, year: string, m: string) => {
-    const shortYear = year.substring(2);
-    return `${shortYear}년 ${parseInt(m)}월`;
-  });
+  // 주차 라벨에서 주차 번호만 추출 (2025년 51주차 -> 51주차)
+  const shortLabel = String(weekLabel).replace(/\d{4}년\s*/, '');
   
   if (isSelected) {
     return (
       <g transform={`translate(${x},${y})`}>
         <rect
-          x={-30}
+          x={-28}
           y={2}
-          width={60}
-          height={22}
+          width={56}
+          height={20}
           rx={6}
           ry={6}
           fill="#1e293b"
@@ -242,7 +240,7 @@ const CustomXAxisTick = ({ x, y, payload, selectedMonth }: any) => {
           fontWeight="bold"
           style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}
         >
-          {formattedMonth}
+          {shortLabel}
         </text>
       </g>
     );
@@ -252,13 +250,13 @@ const CustomXAxisTick = ({ x, y, payload, selectedMonth }: any) => {
     <g transform={`translate(${x},${y})`}>
       <text
         x={0}
-        y={12}
+        y={14}
         textAnchor="middle"
         fill="#64748b"
         fontSize={11}
         style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}
       >
-        {formattedMonth}
+        {shortLabel}
       </text>
     </g>
   );
@@ -322,8 +320,8 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
 
   // 당년 합계
   const totalStock = data.totalStock || 0;
-  // 전년 합계
-  const previousTotalStock = data.previousTotalStock || 0;
+  // 전년 합계 (prevTotalStock 또는 previousTotalStock)
+  const previousTotalStock = data.prevTotalStock || data.previousTotalStock || 0;
   // YOY
   const stockYOY = data.stockYOY || 0;
   // 당년 매출액
@@ -664,15 +662,15 @@ export default function BrandDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const brandId = (params?.brandId as string) || '';
-  const monthFromUrl = searchParams.get('month') || '2025-11';
-  const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'monthly';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
   
   const [brand, setBrand] = useState(getBrandById(brandId));
-  const [dataSource, setDataSource] = useState<DataSourceType>(dataSourceFromUrl);
-  const [selectedMonth, setSelectedMonth] = useState(monthFromUrl);
   const [selectedWeek, setSelectedWeek] = useState(weekFromUrl);
+  const weekOptions = getWeekOptions();
+  const selectedWeekData = weekOptions.find(w => w.value === selectedWeek);
   const [brandData, setBrandData] = useState<BrandDashboardData | null>(null);
+  const [weeklyData, setWeeklyData] = useState<any>(null); // 주차별 데이터
+  const [isLoadingWeekly, setIsLoadingWeekly] = useState(true); // 주차별 데이터 로딩 상태
   const [isLoading, setIsLoading] = useState(true);
   const [periodType, setPeriodType] = useState<'monthly' | 'accumulated'>('monthly'); // 당월/누적 토글
   const [selectedItem, setSelectedItem] = useState<string | null>(null); // 선택된 아이템 (shoes, hat, bag, other)
@@ -702,7 +700,32 @@ export default function BrandDashboard() {
   const [combinedChartData, setCombinedChartData] = useState<any[]>([]); // 실적 + 예측 결합 데이터
   const [forecastIncomingAmounts, setForecastIncomingAmounts] = useState<any[]>([]); // 입고예정금액
 
-  const monthOptions = getMonthOptions();
+  // 주차별 재고 데이터 로드
+  useEffect(() => {
+    async function loadWeeklyData() {
+      if (!brand) return;
+      
+      setIsLoadingWeekly(true);
+      try {
+        const response = await fetch(`/api/dashboard-weekly?week=${selectedWeek}&brandCode=${brand.code}`);
+        if (response.ok) {
+          const result = await response.json();
+          console.log('[Weekly Dashboard] Data loaded:', result.data);
+          setWeeklyData(result.data);
+        } else {
+          console.error('[Weekly Dashboard] API error:', response.status);
+          setWeeklyData(null);
+        }
+      } catch (error) {
+        console.error('[Weekly Dashboard] Error loading weekly data:', error);
+        setWeeklyData(null);
+      } finally {
+        setIsLoadingWeekly(false);
+      }
+    }
+    
+    loadWeeklyData();
+  }, [selectedWeek, brand]);
 
   // DX MASTER 데이터 로드 (디스커버리 브랜드용)
   useEffect(() => {
@@ -734,12 +757,12 @@ export default function BrandDashboard() {
     async function loadBrandSpecificData() {
       setIsLoading(true);
       try {
-        const allData = await getRealData(selectedMonth);
+        const allData = await getRealData(selectedWeek);
         const data = allData.find((d) => d.brandId === brandId);
         setBrandData(data || null);
       } catch (error) {
         console.error(`브랜드 ${brandId} 데이터 로딩 실패, 샘플 데이터 사용:`, error);
-        const allData = getSampleData(selectedMonth);
+        const allData = getSampleData(selectedWeek);
         const data = allData.find((d) => d.brandId === brandId);
         setBrandData(data || null);
       } finally {
@@ -747,7 +770,7 @@ export default function BrandDashboard() {
       }
     }
     loadBrandSpecificData();
-  }, [selectedMonth, brandId]);
+  }, [selectedWeek, brandId]);
 
   // 선택된 아이템 변경 시 품번별 데이터 조회 및 자동 펼치기
   useEffect(() => {
@@ -768,7 +791,7 @@ export default function BrandDashboard() {
       setIsLoadingDetails(true);
       try {
         const itemStd = getItemNameFromKey(selectedItem);
-        const data = await fetchProductDetails(brand.code, itemStd, selectedMonth, excludePurchase);
+        const data = await fetchProductDetails(brand.code, itemStd, selectedWeek, excludePurchase);
         setProductDetails(data);
       } catch (error) {
         console.error('품번별 데이터 로드 실패:', error);
@@ -779,38 +802,87 @@ export default function BrandDashboard() {
     };
 
     loadProductDetails();
-  }, [selectedItem, brand, selectedMonth, excludePurchase]);
+  }, [selectedItem, brand, selectedWeek, excludePurchase]);
 
-  // 차트 데이터 로드
+  // 주차별 차트 데이터 로드
   useEffect(() => {
     if (!brand) return;
 
     const loadChartData = async () => {
       setIsLoadingChart(true);
       try {
-        const yyyymm = selectedMonth.replace(/-/g, '');
-        const itemStd = selectedItemForChart === 'all' ? 'all' : getItemNameFromKey(selectedItemForChart);
-        const url = `/api/dashboard/chart?brandCode=${encodeURIComponent(brand.code)}&yyyymm=${yyyymm}&weeksType=${weeksType}&itemStd=${encodeURIComponent(itemStd)}&excludePurchase=${excludePurchase}&base=${chartBase}`;
-        console.log('📊 차트 데이터 요청 URL:', url);
+        // 주차별 API 호출
+        const weeksForSale = weeksType === '4weeks' ? 4 : weeksType === '8weeks' ? 8 : 12;
+        const url = `/api/weekly-chart?brandId=${encodeURIComponent(brand.id)}&weeksForSale=${weeksForSale}&selectedItem=${selectedItemForChart}`;
+        console.log('📊 주차별 차트 데이터 요청 URL:', url);
         
         const response = await fetch(url);
-        console.log('📊 차트 데이터 응답 상태:', response.status);
+        console.log('📊 주차별 차트 데이터 응답 상태:', response.status);
         
         const result = await response.json();
-        console.log('📊 차트 데이터 응답:', result);
+        console.log('📊 주차별 차트 데이터 응답:', result);
         
         if (!response.ok) {
           throw new Error(result.error || `HTTP ${response.status}: 차트 데이터를 불러올 수 없습니다.`);
         }
         
         if (result.success && result.data) {
-          console.log('✅ 차트 데이터 로드 성공:', result.data.length, '개 월');
-          setChartData(result.data);
+          console.log('✅ 주차별 차트 데이터 로드 성공:', result.data.length, '개 주');
+          // 기존 차트 형식에 맞게 변환 (당년/전년 + 시즌별 포함)
+          const formattedData = result.data.map((item: any) => ({
+            month: item.weekLabel,
+            dateRange: item.dateRange,
+            weekKey: item.weekKey,
+            asofDate: item.asofDate,
+            totalStock: item.totalStock || item.stockAmount,
+            tagSaleExcludePurchase: item.saleAmount,
+            stockWeeks: item.weeks,
+            // 전년 데이터
+            previousStockWeeks: item.prevWeeks,
+            prevTotalStock: item.prevTotalStock || item.prevStockAmount,
+            // 시즌별 당년 재고금액 (백만원)
+            currentSeasonStock: item.currentSeasonStock,
+            nextSeasonStock: item.nextSeasonStock,
+            oldSeasonStock: item.oldSeasonStock,
+            stagnantStock: item.stagnantStock,
+            // 시즌별 전년 재고금액 (백만원)
+            previousCurrentSeasonStock: item.previousCurrentSeasonStock,
+            previousNextSeasonStock: item.previousNextSeasonStock,
+            previousOldSeasonStock: item.previousOldSeasonStock,
+            previousStagnantStock: item.previousStagnantStock,
+            // 시즌별 비율 (%)
+            currentSeasonRatio: item.currentSeasonRatio,
+            nextSeasonRatio: item.nextSeasonRatio,
+            oldSeasonRatio: item.oldSeasonRatio,
+            stagnantRatio: item.stagnantRatio,
+            previousCurrentSeasonRatio: item.previousCurrentSeasonRatio,
+            previousNextSeasonRatio: item.previousNextSeasonRatio,
+            previousOldSeasonRatio: item.previousOldSeasonRatio,
+            previousStagnantRatio: item.previousStagnantRatio,
+            // YOY
+            stockYOY: item.stockYOY,
+            // 아이템별 당년 재고주수
+            shoesWeeks: item.shoesWeeks,
+            hatWeeks: item.hatWeeks,
+            bagWeeks: item.bagWeeks,
+            otherWeeks: item.otherWeeks,
+            // 아이템별 전년 재고주수
+            prevShoesWeeks: item.prevShoesWeeks,
+            prevHatWeeks: item.prevHatWeeks,
+            prevBagWeeks: item.prevBagWeeks,
+            prevOtherWeeks: item.prevOtherWeeks,
+            // 아이템별 재고금액
+            shoesStock: item.shoesStock,
+            hatStock: item.hatStock,
+            bagStock: item.bagStock,
+            otherStock: item.otherStock,
+          }));
+          setChartData(formattedData);
         } else {
           throw new Error(result.error || '차트 데이터를 불러올 수 없습니다.');
         }
       } catch (error) {
-        console.error('❌ 차트 데이터 로드 실패:', error);
+        console.error('❌ 주차별 차트 데이터 로드 실패:', error);
         console.error('❌ 에러 상세:', {
           message: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
@@ -822,7 +894,8 @@ export default function BrandDashboard() {
     };
 
     loadChartData();
-  }, [brand, selectedMonth, weeksType, selectedItemForChart, excludePurchase, chartBase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brand?.id, weeksType, selectedItemForChart]);
 
   // 예측 데이터와 실적 데이터 결합
   useEffect(() => {
@@ -880,7 +953,7 @@ export default function BrandDashboard() {
     const loadMonthlyTrend = async () => {
       setIsLoadingMonthlyTrend(true);
       try {
-        const yyyymm = selectedMonth.replace(/-/g, '');
+        const yyyymm = selectedWeek.replace(/-/g, '');
         const url = `/api/dashboard/product/monthly-trend?brandCode=${encodeURIComponent(brand.code)}&productCode=${encodeURIComponent(selectedProductForDetail.productCode)}&endMonth=${yyyymm}`;
         console.log('📊 품번 월별 추이 요청:', url);
         
@@ -903,7 +976,7 @@ export default function BrandDashboard() {
     };
 
     loadMonthlyTrend();
-  }, [selectedProductForDetail, brand, selectedMonth]);
+  }, [selectedProductForDetail, brand, selectedWeek]);
 
   if (!brand) {
     return (
@@ -957,57 +1030,111 @@ export default function BrandDashboard() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
-                    {brand.name} 재고주수 대시보드
+                    {brand.name} 주차별 대시보드
                   </h1>
+                  <p className="text-xs text-amber-600 font-medium mt-0.5">주차별 데이터 (Beta)</p>
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* 당월/누적 토글 */}
-              <div className="flex items-center gap-1 bg-blue-50 rounded-lg p-0.5 border border-blue-200">
-                <button
-                  onClick={() => setPeriodType('monthly')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
-                    periodType === 'monthly'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-blue-600 hover:bg-blue-100'
-                  }`}
-                >
-                  당월
-                </button>
-                <button
-                  onClick={() => setPeriodType('accumulated')}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
-                    periodType === 'accumulated'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-blue-600 hover:bg-blue-100'
-                  }`}
-                >
-                  누적
-                </button>
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                  <Clock className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-700">주차별</span>
+                </div>
+                <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                  <SelectTrigger className="w-[200px] border-slate-300 shadow-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {weekOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        <div className="flex flex-col">
+                          <span>{option.label}</span>
+                          <span className="text-xs text-slate-500">{option.dateRange}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isLoadingWeekly ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="h-2 w-2 bg-blue-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-blue-700">데이터 로딩중...</span>
+                  </div>
+                ) : weeklyData ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg">
+                    <div className="h-2 w-2 bg-emerald-500 rounded-full"></div>
+                    <span className="text-xs font-medium text-emerald-700">데이터 로드 완료</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-lg">
+                    <div className="h-2 w-2 bg-amber-500 rounded-full"></div>
+                    <span className="text-xs font-medium text-amber-700">데이터 없음</span>
+                  </div>
+                )}
               </div>
-              <DataSourceToggle
-                dataSource={dataSource}
-                onDataSourceChange={setDataSource}
-                selectedMonth={selectedMonth}
-                onMonthChange={setSelectedMonth}
-                selectedWeek={selectedWeek}
-                onWeekChange={setSelectedWeek}
-              />
-            </div>
           </div>
         </div>
       </header>
 
       {/* 메인 컨텐츠 */}
       <main className="container mx-auto px-6 py-8">
+        {/* 로딩 중 표시 */}
+        {isLoadingWeekly && !weeklyData && (
+          <div className="mb-6 p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
+            <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent mx-auto mb-3"></div>
+            <p className="text-slate-600">주차별 재고 데이터 로딩 중...</p>
+          </div>
+        )}
+
+        {/* 데이터 없음 표시 */}
+        {!isLoadingWeekly && !weeklyData && (
+          <div className="mb-6 p-8 text-center bg-amber-50 rounded-xl border border-amber-200">
+            <p className="text-amber-700 font-medium">해당 주차의 재고 데이터가 없습니다</p>
+            <p className="text-sm text-amber-600 mt-1">다른 주차를 선택해보세요</p>
+          </div>
+        )}
+
         {brandData ? (
           <div className="space-y-6">
-            {/* 아이템별 KPI 카드 */}
+            {/* 아이템별 KPI 카드 (주차별 데이터) */}
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               {(() => {
-                const periodData = periodType === 'accumulated' ? brandData.accumulated : brandData.monthly || brandData;
-                const detail = periodData?.accInventoryDetail || brandData.accInventoryDetail;
+                // 주차별 데이터 사용
+                const detail = weeklyData ? {
+                  shoes: {
+                    current: weeklyData.shoes?.current || 0,
+                    previous: weeklyData.shoes?.previous || 0,
+                    weeks: weeklyData.shoesDetail?.weeks || 0,
+                    previousWeeks: weeklyData.shoesDetail?.previousWeeks || 0,
+                    salesCurrent: weeklyData.shoesDetail?.saleCurrent || 0,
+                    salesPrevious: weeklyData.shoesDetail?.salePrevious || 0,
+                  },
+                  hat: {
+                    current: weeklyData.hat?.current || 0,
+                    previous: weeklyData.hat?.previous || 0,
+                    weeks: weeklyData.hatDetail?.weeks || 0,
+                    previousWeeks: weeklyData.hatDetail?.previousWeeks || 0,
+                    salesCurrent: weeklyData.hatDetail?.saleCurrent || 0,
+                    salesPrevious: weeklyData.hatDetail?.salePrevious || 0,
+                  },
+                  bag: {
+                    current: weeklyData.bag?.current || 0,
+                    previous: weeklyData.bag?.previous || 0,
+                    weeks: weeklyData.bagDetail?.weeks || 0,
+                    previousWeeks: weeklyData.bagDetail?.previousWeeks || 0,
+                    salesCurrent: weeklyData.bagDetail?.saleCurrent || 0,
+                    salesPrevious: weeklyData.bagDetail?.salePrevious || 0,
+                  },
+                  other: {
+                    current: weeklyData.other?.current || 0,
+                    previous: weeklyData.other?.previous || 0,
+                    weeks: weeklyData.otherDetail?.weeks || 0,
+                    previousWeeks: weeklyData.otherDetail?.previousWeeks || 0,
+                    salesCurrent: weeklyData.otherDetail?.saleCurrent || 0,
+                    salesPrevious: weeklyData.otherDetail?.salePrevious || 0,
+                  },
+                } : null;
                 
                 const items = [
                   { 
@@ -1181,16 +1308,13 @@ export default function BrandDashboard() {
               })()}
             </div>
 
-            {/* 재고 예측 입력 패널 */}
-            {brand && chartData && chartData.length > 0 && (
-              <ForecastInputPanel
+            {/* 재고 예측 입력 패널 (주차별) */}
+            {brand && (
+              <WeeklyForecastInputPanel
                 brandCode={brand.code}
                 brandName={brand.name}
-                lastActualMonth={selectedMonth}
-                actualData={chartData}
-                weeksType={weeksType}
+                currentWeek={selectedWeek}
                 selectedItem={selectedItemForChart}
-                onForecastCalculated={handleForecastCalculated}
               />
             )}
 
@@ -1256,14 +1380,14 @@ export default function BrandDashboard() {
               </Card>
             )}
 
-            {/* 4주 / 8주 / 12주 재고주수 비교 */}
+            {/* 주차별 재고주수 추이 */}
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>4주 / 8주 / 12주 재고주수 비교</CardTitle>
+                    <CardTitle>주차별 재고주수 추이</CardTitle>
                     <CardDescription>
-                      최근 12개월 재고주수 및 재고택금액 추이
+                      최근 12주 재고주수 추이 (4주/8주/12주 매출 기준 선택)
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-4">
@@ -1353,29 +1477,6 @@ export default function BrandDashboard() {
                         12주
                       </button>
                     </div>
-                    {/* 사입제외 필터 */}
-                    <div className="flex items-center gap-1 bg-orange-50 rounded-lg p-0.5 border border-orange-200">
-                      <button
-                        onClick={() => setExcludePurchase(false)}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
-                          !excludePurchase
-                            ? 'bg-orange-600 text-white shadow-sm'
-                            : 'text-orange-600 hover:bg-orange-100'
-                        }`}
-                      >
-                        전체
-                      </button>
-                      <button
-                        onClick={() => setExcludePurchase(true)}
-                        className={`px-3 py-1.5 text-xs font-semibold rounded transition-all ${
-                          excludePurchase
-                            ? 'bg-orange-600 text-white shadow-sm'
-                            : 'text-orange-600 hover:bg-orange-100'
-                        }`}
-                      >
-                        사입제외
-                      </button>
-                    </div>
                     {/* 금액/수량 기준 필터 */}
                     <div className="flex items-center gap-1 bg-purple-50 rounded-lg p-0.5 border border-purple-200">
                       <button
@@ -1423,11 +1524,11 @@ export default function BrandDashboard() {
                             dataKey="month" 
                             stroke="#64748b"
                             fontSize={12}
-                            tick={(props: any) => <CustomXAxisTick {...props} selectedMonth={selectedMonth} />}
+                            tick={(props: any) => <CustomXAxisTick {...props} selectedWeek={selectedWeek} />}
                             domain={['dataMin', 'dataMax']}
                             padding={{ left: 0, right: 0 }}
                             angle={0}
-                            height={60}
+                            height={40}
                             xAxisId={0}
                             allowDuplicatedCategory={false}
                           />
@@ -1594,7 +1695,7 @@ export default function BrandDashboard() {
                             dataKey="month" 
                             stroke="#64748b"
                             fontSize={12}
-                            tick={(props: any) => <CustomXAxisTick {...props} selectedMonth={selectedMonth} />}
+                            tick={(props: any) => <CustomXAxisTick {...props} selectedWeek={selectedWeek} />}
                             height={40}
                           />
                           <YAxis 
@@ -1776,7 +1877,7 @@ export default function BrandDashboard() {
                             <th 
                               key={item.month} 
                               className={`px-2 py-2 text-center font-semibold border-b border-slate-200 min-w-[60px] ${
-                                item.month === selectedMonth
+                                item.month === selectedWeek
                                   ? 'bg-slate-800 text-white rounded-md'
                                   : item.isActual === false 
                                     ? 'bg-blue-50 text-blue-700' 
@@ -1981,13 +2082,13 @@ export default function BrandDashboard() {
                           </div>
                         </div>
                         <CardDescription>
-                          {selectedMonth} 기준 품번별 재고 및 판매 현황
+                          {selectedWeek} 기준 품번별 재고 및 판매 현황
                         </CardDescription>
                         {/* 시즌 정의 - 한 줄 */}
                         <div className="mt-1.5 text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           {(() => {
-                            const month = parseInt(selectedMonth.split('-')[1]);
-                            const year = parseInt(selectedMonth.split('-')[0]);
+                            const month = parseInt(selectedWeek.split('-')[1]);
+                            const year = parseInt(selectedWeek.split('-')[0]);
                             const yy = year % 100;
                             const isFW = month >= 9 || month <= 2;
                             const thresholdText = productDetails && productDetails.thresholdAmt > 0 
@@ -2055,7 +2156,7 @@ export default function BrandDashboard() {
                           const itemCode = selectedItem === 'shoes' ? 'shoes' : 
                                           selectedItem === 'hat' ? 'hat' : 
                                           selectedItem === 'bag' ? 'bag' : 'etc';
-                          const monthCode = selectedMonth.replace(/-/g, '');
+                          const monthCode = selectedWeek.replace(/-/g, '');
                           const periodCode = periodType === 'monthly' ? 'monthly' : 'accumulated';
                           const fileName = `MLB_ACC_${itemCode}_${monthCode}_${periodCode}.csv`;
                           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -2246,7 +2347,7 @@ export default function BrandDashboard() {
                             const totalSalesYOY = totalPreviousSalesAmount > 0 ? Math.round((totalSalesAmount / totalPreviousSalesAmount) * 100) : 0;
                             
                             // chartData에서 시즌별 데이터 가져오기 (막대그래프와 동일한 계산)
-                            const currentMonthChartData = chartData?.find((d: any) => d.month === selectedMonth);
+                            const currentMonthChartData = chartData?.find((d: any) => d.month === selectedWeek);
                             let currentSeasonStock = 0;
                             let currentSeasonSale = 0;
                             let previousSeasonStock = 0;
@@ -2485,8 +2586,8 @@ export default function BrandDashboard() {
                             );
                           };
 
-                          const month = parseInt(selectedMonth.split('-')[1]);
-                          const year = parseInt(selectedMonth.split('-')[0]);
+                          const month = parseInt(selectedWeek.split('-')[1]);
+                          const year = parseInt(selectedWeek.split('-')[0]);
                           const yy = year % 100;
                           const isFW = month >= 9 || month <= 2;
                           
@@ -2573,7 +2674,7 @@ export default function BrandDashboard() {
                               {/* 시즌별 요약 카드 */}
                               {/* chartData에서 현재 월의 시즌별 전년 데이터 가져오기 */}
                               {(() => {
-                                const currentMonthChartData = chartData?.find((d: any) => d.month === selectedMonth);
+                                const currentMonthChartData = chartData?.find((d: any) => d.month === selectedWeek);
                                 const pyCurrentSeasonStock = currentMonthChartData?.previousCurrentSeasonStock || 0;
                                 const pyNextSeasonStock = currentMonthChartData?.previousNextSeasonStock || 0;
                                 const pyOldSeasonStock = currentMonthChartData?.previousOldSeasonStock || 0;
@@ -2584,7 +2685,7 @@ export default function BrandDashboard() {
                               <div className="grid grid-cols-4 gap-3">
                                 {seasonSummary.map((season) => {
                                   // chartData에서 현재 월의 시즌별 데이터 사용 (막대그래프와 동일한 계산)
-                                  const currentMonthChartData = chartData?.find((d: any) => d.month === selectedMonth);
+                                  const currentMonthChartData = chartData?.find((d: any) => d.month === selectedWeek);
                                   let previousSeasonStock = 0;
                                   let currentSeasonSale = 0;
                                   let previousSeasonSale = 0;
@@ -2888,7 +2989,7 @@ export default function BrandDashboard() {
                           tick={(props: any) => {
                             const { x, y, payload } = props;
                             const month = payload.value;
-                            const isSelected = month === selectedMonth;
+                            const isSelected = month === selectedWeek;
                             const displayMonth = month.substring(5); // MM만 표시
                             
                             if (isSelected) {
