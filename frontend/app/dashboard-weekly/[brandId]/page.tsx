@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getBrandById, BRANDS } from '@/lib/brands';
 import { getRealData, getSampleData, BrandDashboardData } from '@/lib/data';
-import { fetchProductDetails, ProductDetailResponse } from '@/lib/api';
+import { fetchWeeklyProductDetails, WeeklyProductDetailResponse, WeeklyProductDetailData } from '@/lib/api';
 import { getItemNameFromKey } from '@/lib/dashboard-service';
 import { ArrowLeft, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Search, ArrowUp, ArrowDown, Download, Clock } from 'lucide-react';
 import {
@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getCurrentWeekValue, getWeekOptions } from '@/lib/week-utils';
+import { getCurrentWeekValue, getWeekOptions, DataSourceType } from '@/lib/week-utils';
+import DataSourceToggle from '@/components/DataSourceToggle';
 
 // 커스텀 saveAs 함수 (file-saver 대체)
 const saveAs = (blob: Blob, filename: string) => {
@@ -214,7 +215,13 @@ const CustomStockWeeksTooltip = ({ active, payload, label }: any) => {
 // 선택한 주차를 강조하는 커스텀 X축 Tick 컴포넌트
 const CustomXAxisTick = ({ x, y, payload, selectedWeek }: any) => {
   const weekLabel = payload.value;
-  const isSelected = weekLabel === selectedWeek;
+  
+  // 주차 라벨에서 주차 번호만 추출 (51주차 -> 51)
+  const weekNumFromLabel = String(weekLabel).replace(/[^0-9]/g, '');
+  // selectedWeek에서 주차 번호 추출 (2025-51 -> 51)
+  const weekNumFromSelected = String(selectedWeek).split('-').pop() || '';
+  
+  const isSelected = weekNumFromLabel === weekNumFromSelected;
   
   // 주차 라벨에서 주차 번호만 추출 (2025년 51주차 -> 51주차)
   const shortLabel = String(weekLabel).replace(/\d{4}년\s*/, '');
@@ -663,9 +670,13 @@ export default function BrandDashboard() {
   const searchParams = useSearchParams();
   const brandId = (params?.brandId as string) || '';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
+  const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'weekly';
+  const monthFromUrl = searchParams.get('month') || '2025-11';
   
   const [brand, setBrand] = useState(getBrandById(brandId));
+  const [dataSource, setDataSource] = useState<DataSourceType>(dataSourceFromUrl);
   const [selectedWeek, setSelectedWeek] = useState(weekFromUrl);
+  const [selectedMonth, setSelectedMonth] = useState(monthFromUrl);
   const weekOptions = getWeekOptions();
   const selectedWeekData = weekOptions.find(w => w.value === selectedWeek);
   const [brandData, setBrandData] = useState<BrandDashboardData | null>(null);
@@ -674,7 +685,7 @@ export default function BrandDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [periodType, setPeriodType] = useState<'monthly' | 'accumulated'>('monthly'); // 당월/누적 토글
   const [selectedItem, setSelectedItem] = useState<string | null>(null); // 선택된 아이템 (shoes, hat, bag, other)
-  const [productDetails, setProductDetails] = useState<ProductDetailResponse | null>(null); // 품번별 세부 데이터
+  const [productDetails, setProductDetails] = useState<WeeklyProductDetailResponse | null>(null); // 품번별 세부 데이터 (스타일&컬러 기준)
   const [isLoadingDetails, setIsLoadingDetails] = useState(false); // 품번별 데이터 로딩 상태
   const [isDetailExpanded, setIsDetailExpanded] = useState<{ [key: string]: boolean }>({}); // 품번별 세부 내역 접기/펼치기 상태
   const [searchFilter, setSearchFilter] = useState<string>(''); // 검색 필터 (품번/품명)
@@ -703,7 +714,8 @@ export default function BrandDashboard() {
   // 주차별 재고 데이터 로드
   useEffect(() => {
     async function loadWeeklyData() {
-      if (!brand) return;
+      // 월결산 모드로 리다이렉트 중이면 로드 스킵
+      if (!brand || dataSource === 'monthly') return;
       
       setIsLoadingWeekly(true);
       try {
@@ -725,7 +737,7 @@ export default function BrandDashboard() {
     }
     
     loadWeeklyData();
-  }, [selectedWeek, brand]);
+  }, [selectedWeek, brand, dataSource]);
 
   // DX MASTER 데이터 로드 (디스커버리 브랜드용)
   useEffect(() => {
@@ -752,6 +764,13 @@ export default function BrandDashboard() {
     }
     setBrand(foundBrand);
   }, [brandId, router]);
+
+  // 월결산 모드 선택 시 월결산 대시보드로 이동
+  useEffect(() => {
+    if (dataSource === 'monthly') {
+      router.push(`/dashboard/${brandId}?month=${selectedMonth}&dataSource=monthly`);
+    }
+  }, [dataSource, brandId, selectedMonth, router]);
 
   useEffect(() => {
     async function loadBrandSpecificData() {
@@ -791,7 +810,8 @@ export default function BrandDashboard() {
       setIsLoadingDetails(true);
       try {
         const itemStd = getItemNameFromKey(selectedItem);
-        const data = await fetchProductDetails(brand.code, itemStd, selectedWeek, excludePurchase);
+        // 주차별 품번별 데이터 조회 (스타일&컬러 기준)
+        const data = await fetchWeeklyProductDetails(brand.code, itemStd, selectedWeek);
         setProductDetails(data);
       } catch (error) {
         console.error('품번별 데이터 로드 실패:', error);
@@ -802,11 +822,12 @@ export default function BrandDashboard() {
     };
 
     loadProductDetails();
-  }, [selectedItem, brand, selectedWeek, excludePurchase]);
+  }, [selectedItem, brand, selectedWeek]);
 
   // 주차별 차트 데이터 로드
   useEffect(() => {
-    if (!brand) return;
+    // 월결산 모드로 리다이렉트 중이면 차트 로드 스킵
+    if (!brand || dataSource === 'monthly') return;
 
     const loadChartData = async () => {
       setIsLoadingChart(true);
@@ -834,9 +855,40 @@ export default function BrandDashboard() {
             dateRange: item.dateRange,
             weekKey: item.weekKey,
             asofDate: item.asofDate,
+            // 금액기준 데이터
             totalStock: item.totalStock || item.stockAmount,
             tagSaleExcludePurchase: item.saleAmount,
             stockWeeks: item.weeks,
+            weeks: item.weeks,
+            prevWeeks: item.prevWeeks,
+            // 정상재고 재고주수 (정체재고 제외)
+            stockWeeksNormal: item.stockWeeksNormal,
+            previousStockWeeksNormal: item.previousStockWeeksNormal,
+            // 수량기준 데이터
+            stockQty: item.stockQty,
+            prevStockQty: item.prevStockQty,
+            saleQty: item.saleQty,
+            prevSaleQty: item.prevSaleQty,
+            weeksQty: item.weeksQty,
+            prevWeeksQty: item.prevWeeksQty,
+            // 매출 데이터 (차트용)
+            saleAmount: item.saleAmount,
+            prevSaleAmount: item.prevSaleAmount,
+            // 시즌별 당년 매출 (백만원)
+            currentSeasonSale: item.currentSeasonSale,
+            nextSeasonSale: item.nextSeasonSale,
+            oldSeasonSale: item.oldSeasonSale,
+            stagnantSale: item.stagnantSale,
+            // 시즌별 전년 매출 (백만원)
+            previousCurrentSeasonSale: item.previousCurrentSeasonSale,
+            previousNextSeasonSale: item.previousNextSeasonSale,
+            previousOldSeasonSale: item.previousOldSeasonSale,
+            previousStagnantSale: item.previousStagnantSale,
+            // 시즌별 매출 비율 (%)
+            currentSeasonSaleRatio: item.currentSeasonSaleRatio,
+            nextSeasonSaleRatio: item.nextSeasonSaleRatio,
+            oldSeasonSaleRatio: item.oldSeasonSaleRatio,
+            stagnantSaleRatio: item.stagnantSaleRatio,
             // 전년 데이터
             previousStockWeeks: item.prevWeeks,
             prevTotalStock: item.prevTotalStock || item.prevStockAmount,
@@ -861,6 +913,7 @@ export default function BrandDashboard() {
             previousStagnantRatio: item.previousStagnantRatio,
             // YOY
             stockYOY: item.stockYOY,
+            saleYOY: item.saleYOY,
             // 아이템별 당년 재고주수
             shoesWeeks: item.shoesWeeks,
             hatWeeks: item.hatWeeks,
@@ -895,24 +948,50 @@ export default function BrandDashboard() {
 
     loadChartData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brand?.id, weeksType, selectedItemForChart]);
+  }, [brand?.id, weeksType, selectedItemForChart, dataSource]);
 
-  // 예측 데이터와 실적 데이터 결합
+  // 예측 데이터와 실적 데이터 결합 + 금액/수량 기준 적용
   useEffect(() => {
     if (!chartData || chartData.length === 0) {
       setCombinedChartData([]);
       return;
     }
 
+    // chartBase에 따라 금액 또는 수량 필드 선택
+    const transformedData = chartData.map((d: any) => {
+      if (chartBase === 'quantity') {
+        // 수량기준: 수량 필드 사용
+        return {
+          ...d,
+          isActual: true,
+          // 재고주수 - 수량기준
+          stockWeeks: d.weeksQty || d.weeks || 0,
+          previousStockWeeks: d.prevWeeksQty || d.prevWeeks || 0,
+          // 재고수량
+          totalStock: d.stockQty || 0,
+          prevTotalStock: d.prevStockQty || 0,
+          // 매출수량
+          saleAmount: d.saleQty || 0,
+          prevSaleAmount: d.prevSaleQty || 0,
+        };
+      } else {
+        // 금액기준: 원래 필드 그대로
+        return {
+          ...d,
+          isActual: true,
+        };
+      }
+    });
+
     if (forecastResults.length === 0) {
-      // 예측 데이터가 없으면 실적 데이터만 사용
-      setCombinedChartData(chartData.map((d: any) => ({ ...d, isActual: true })));
+      // 예측 데이터가 없으면 변환된 실적 데이터만 사용
+      setCombinedChartData(transformedData);
     } else {
       // 예측 데이터와 결합
-      const combined = combineActualAndForecast(chartData, forecastResults);
+      const combined = combineActualAndForecast(transformedData, forecastResults);
       setCombinedChartData(combined);
     }
-  }, [chartData, forecastResults]);
+  }, [chartData, forecastResults, chartBase]);
 
   // 예측 계산 완료 콜백
   const handleForecastCalculated = (results: any[], capacity: OrderCapacity | null, incomingAmounts?: any[]) => {
@@ -1315,6 +1394,9 @@ export default function BrandDashboard() {
                 brandName={brand.name}
                 currentWeek={selectedWeek}
                 selectedItem={selectedItemForChart}
+                actualData={chartData || []}
+                weeksType={weeksType}
+                onForecastCalculated={handleForecastCalculated}
               />
             )}
 
@@ -1515,7 +1597,7 @@ export default function BrandDashboard() {
                     {/* 재고주수 꺾은선 그래프 */}
                     <div>
                       <h3 className="text-sm font-semibold text-slate-700 mb-3">
-                        재고주수 추이 (당년/전년 × 전체/정상)
+                        재고주수 추이 ({chartBase === 'quantity' ? '수량기준' : '금액기준'}) (당년/전년 × 전체/정상)
                       </h3>
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart data={combinedChartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -1657,8 +1739,8 @@ export default function BrandDashboard() {
                       <div className="flex items-center justify-between mb-3">
                         <h3 className="text-sm font-semibold text-slate-700">
                           {inventoryChartMode === 'yoy' 
-                            ? '재고택금액 추이 (시즌별, 백만원)-당년/전년 비교'
-                            : '재고택금액 추이 (시즌별, 백만원)-당년재고/택매출액 비교'
+                            ? `재고택${chartBase === 'quantity' ? '수량' : '금액'} 추이 (시즌별, ${chartBase === 'quantity' ? '개' : '백만원'})-당년/전년 비교`
+                            : `재고택${chartBase === 'quantity' ? '수량' : '금액'} 추이 (시즌별, ${chartBase === 'quantity' ? '개' : '백만원'})-당년재고/택매출 비교`
                           }
                         </h3>
                         <div className="flex items-center gap-1 bg-purple-50 rounded-lg p-0.5 border border-purple-200">
@@ -1709,20 +1791,32 @@ export default function BrandDashboard() {
                           <YAxis 
                             yAxisId="sale"
                             orientation="right"
-                            stroke="#64748b"
+                            stroke="#22c55e"
                             fontSize={12}
-                            tick={{ fill: '#64748b' }}
+                            tick={{ fill: '#22c55e' }}
                             tickFormatter={(value) => new Intl.NumberFormat('ko-KR').format(value)}
                             width={60}
-                            hide={true}
+                            hide={false}
                             domain={(() => {
-                              // 재고택금액 최대값의 50%를 매출액 Y축 최대값으로 설정
+                              // 매출액 최대값 기준으로 Y축 설정 (재고택금액의 40% 높이로 표시되도록)
                               if (!combinedChartData || combinedChartData.length === 0) return [0, 'auto'];
+                              
+                              // 실제 매출 최대값 계산
+                              const maxSale = Math.max(
+                                ...combinedChartData.map((item: any) => (item.saleAmount || 0) + (item.prevSaleAmount || 0))
+                              );
+                              
+                              // 재고택금액 최대값
                               const maxStock = Math.max(
                                 ...combinedChartData.map((item: any) => item.totalStock || 0)
                               );
-                              const maxSaleAxis = Math.ceil(maxStock * 0.5 / 1000) * 1000; // 천 단위 반올림
-                              return [0, maxSaleAxis];
+                              
+                              // 매출 막대가 재고 막대의 약 40% 높이가 되도록 Y축 스케일 조정
+                              // Y축 최대값 = 매출최대값 * (재고최대값 / 매출최대값) * 0.4의 역수
+                              const targetHeight = 0.4; // 재고 막대 높이의 40%
+                              const saleAxisMax = maxSale > 0 ? Math.ceil(maxSale / targetHeight / 1000) * 1000 : Math.ceil(maxStock * 0.5 / 1000) * 1000;
+                              
+                              return [0, saleAxisMax];
                             })()}
                           />
                           <YAxis 
@@ -1789,7 +1883,17 @@ export default function BrandDashboard() {
                                 activeDot={{ r: 6 }}
                                 connectNulls={true}
                               />
-                              {/* 매출액대비 모드: 당년 매출액 막대 (별도 Y축 사용, 재고택금액의 50% 높이) */}
+                              {/* 매출액대비 모드: 전년 시즌별 택매출액 막대 */}
+                              <Bar yAxisId="sale" dataKey="previousNextSeasonSale" stackId="py-sale" name="전년-차기시즌(매출)" fill="#e9d5ff" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousNextSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="sale" dataKey="previousCurrentSeasonSale" stackId="py-sale" name="전년-당시즌(매출)" fill="#bfdbfe" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousCurrentSeasonRatio" />
+                              </Bar>
+                              <Bar yAxisId="sale" dataKey="previousOldSeasonSale" stackId="py-sale" name="전년-과시즌(매출)" fill="#e2e8f0" opacity={0.7}>
+                                <LabelList content={<CustomRatioLabel />} dataKey="previousOldSeasonRatio" />
+                              </Bar>
+                              {/* 매출액대비 모드: 당년 시즌별 택매출액 막대 */}
                               <Bar yAxisId="sale" dataKey="nextSeasonSale" stackId="cy-sale" name="당년-차기시즌(매출)" fill="#c084fc" opacity={0.7}>
                                 <LabelList content={<CustomRatioLabel />} dataKey="nextSeasonSaleRatio" />
                               </Bar>
@@ -1884,7 +1988,7 @@ export default function BrandDashboard() {
                                     : 'text-slate-600'
                               }`}
                             >
-                              {item.month.slice(2).replace('-', '.')}
+                              {item.month}
                               {item.isActual === false && <span className="ml-0.5 text-[9px]">(F)</span>}
                             </th>
                           ))}
@@ -1912,47 +2016,37 @@ export default function BrandDashboard() {
                             </td>
                           ))}
                         </tr>
-                        {/* 택매출액(사입제외) */}
+                        {/* 택매출액 (사입제외+사입 합계) */}
                         <tr className="hover:bg-slate-50 transition-colors">
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                              택매출액(사입제외)
+                              택매출액
                             </span>
                           </td>
-                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
-                            <td 
-                              key={item.month} 
-                              className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
-                                item.isActual === false 
-                                  ? 'bg-blue-50/50 text-green-700' 
-                                  : 'text-slate-700'
-                              }`}
-                            >
-                              {(item.totalSaleExPurchase || 0).toLocaleString()}
-                            </td>
-                          ))}
-                        </tr>
-                        {/* 택매출액(사입) */}
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
-                            <span className="inline-flex items-center gap-1">
-                              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                              택매출액(사입)
-                            </span>
-                          </td>
-                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
-                            <td 
-                              key={item.month} 
-                              className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
-                                item.isActual === false 
-                                  ? 'bg-blue-50/50 text-emerald-600' 
-                                  : 'text-slate-700'
-                              }`}
-                            >
-                              {(item.totalSalePurchase || 0).toLocaleString()}
-                            </td>
-                          ))}
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
+                            // 매출액 계산: 예측 구간은 saleAmount1w, 실적 구간은 saleAmount 또는 tagSaleExcludePurchase
+                            let saleAmount = 0;
+                            if (item.isActual === false) {
+                              // 예측 구간
+                              saleAmount = item.saleAmount1w || item.saleAmount || 0;
+                            } else {
+                              // 실적 구간
+                              saleAmount = item.saleAmount || item.tagSaleExcludePurchase || 0;
+                            }
+                            return (
+                              <td 
+                                key={item.month} 
+                                className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                  item.isActual === false 
+                                    ? 'bg-blue-50/50 text-green-700' 
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                {saleAmount.toLocaleString()}
+                              </td>
+                            );
+                          })}
                         </tr>
                         {/* 재고입고금액 */}
                         <tr className="hover:bg-slate-50 transition-colors">
@@ -1962,31 +2056,20 @@ export default function BrandDashboard() {
                               입고금액
                             </span>
                           </td>
-                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any, idx: number, arr: any[]) => {
                             let incomingAmount = 0;
                             
                             if (item.isActual === false) {
-                              // 예측 구간: forecastIncomingAmounts에서 가져오기
-                              if (forecastIncomingAmounts && forecastIncomingAmounts.length > 0) {
-                                const monthData = forecastIncomingAmounts.find((d: any) => d.month === item.month);
-                                if (monthData) {
-                                  if (selectedItemForChart === 'all') {
-                                    // 전체: 모든 중분류 합계
-                                    const shoes = Number(monthData.shoes) || 0;
-                                    const hat = Number(monthData.hat) || 0;
-                                    const bag = Number(monthData.bag) || 0;
-                                    const other = Number(monthData.other) || 0;
-                                    incomingAmount = Math.round((shoes + hat + bag + other) / 1000000);
-                                  } else {
-                                    incomingAmount = Math.round((Number(monthData[selectedItemForChart]) || 0) / 1000000);
-                                  }
-                                }
-                              }
+                              // 예측 구간: forecast 결과에서 incomingAmount 직접 사용 (이미 백만원 단위)
+                              incomingAmount = item.incomingAmount || 0;
                             } else {
-                              // 실적 구간: 입고금액 = 당월 기말재고 + 당월 택매출액 - 전월 기말재고
+                              // 실적 구간: 입고금액 = 당주 기말재고 + 당주 택매출액 - 전주 기말재고
                               const currentStock = item.totalStock || 0;
-                              const currentSale = item.totalSale || 0;
-                              const prevStock = item.previousMonthTotalStock || 0;
+                              const currentSale = item.saleAmount || item.tagSaleExcludePurchase || 0;
+                              // 실적 배열에서 이전 주차 찾기
+                              const actualItems = arr.filter((a: any) => a.isActual !== false);
+                              const currentIdx = actualItems.findIndex((a: any) => a.month === item.month || a.weekKey === item.weekKey);
+                              const prevStock = currentIdx > 0 ? (actualItems[currentIdx - 1]?.totalStock || 0) : currentStock;
                               
                               incomingAmount = currentStock + currentSale - prevStock;
                             }
@@ -2009,7 +2092,7 @@ export default function BrandDashboard() {
                     </table>
                     <div className="mt-2 text-[10px] text-slate-500">
                       <span className="bg-blue-50 px-1.5 py-0.5 rounded text-blue-600 mr-2">(F)</span>
-                      = 예측 구간 (Forecast)
+                      = 예측 구간 (Forecast), 입고금액 = 입고금액 - 사입출고금액
                     </div>
                   </div>
                   </>
@@ -2118,13 +2201,14 @@ export default function BrandDashboard() {
                         onClick={() => {
                           if (!productDetails) return;
                           
-                          const products = periodType === 'monthly' ? productDetails.monthly : productDetails.accumulated;
+                          // 주차별은 products 배열 사용 (스타일&컬러 기준)
+                          const products = productDetails.products;
                           
-                          // CSV 헤더
-                          const headers = ['시즌구분', '품번', '품명', '시즌', 'TAG가격', '재고주수', '전년재고주수', '기말재고(백만)', '전년기말재고(백만)', '택판매액(백만)', '전년택판매액(백만)', '실판매액(백만)', '전년실판매액(백만)', '재고YOY(%)', '판매YOY(%)'];
+                          // CSV 헤더 (컬러 열 추가)
+                          const headers = ['시즌구분', '품번', '컬러', '품명', '시즌', 'TAG가격', '재고주수', '전년재고주수', '기말재고(백만)', '전년기말재고(백만)', '4주매출(백만)', '전년4주매출(백만)', '재고YOY(%)', '판매YOY(%)'];
                           
                           // CSV 데이터
-                          const csvData = products.map(p => {
+                          const csvData = products.map((p: WeeklyProductDetailData) => {
                             const seasonLabel = p.seasonCategory === 'current' ? '당시즌' 
                               : p.seasonCategory === 'next' ? '차기시즌' 
                               : p.seasonCategory === 'stagnant' ? '정체재고' 
@@ -2132,17 +2216,16 @@ export default function BrandDashboard() {
                             return [
                               seasonLabel,
                               p.productCode,
+                              p.colorCode || '',
                               p.productName || '',
                               p.season || '',
                               p.tagPrice || '',
                               p.weeks,
-                              p.previousWeeks,
+                              p.prevWeeks,
                               p.endingInventory,
-                              p.previousEndingInventory,
-                              p.tagSalesAmount || 0,
-                              p.previousTagSalesAmount || 0,
+                              p.prevEndingInventory,
                               p.salesAmount,
-                              p.previousSalesAmount,
+                              p.prevSalesAmount,
                               p.inventoryYOY,
                               p.salesYOY
                             ];
@@ -2156,9 +2239,8 @@ export default function BrandDashboard() {
                           const itemCode = selectedItem === 'shoes' ? 'shoes' : 
                                           selectedItem === 'hat' ? 'hat' : 
                                           selectedItem === 'bag' ? 'bag' : 'etc';
-                          const monthCode = selectedWeek.replace(/-/g, '');
-                          const periodCode = periodType === 'monthly' ? 'monthly' : 'accumulated';
-                          const fileName = `MLB_ACC_${itemCode}_${monthCode}_${periodCode}.csv`;
+                          const weekCode = selectedWeek.replace(/-/g, '');
+                          const fileName = `ACC_weekly_${itemCode}_${weekCode}.csv`;
                           const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                           saveAs(blob, fileName);
                         }}
@@ -2225,17 +2307,19 @@ export default function BrandDashboard() {
                           </Select>
                         </div>
 
-                        {/* 필터링 및 정렬된 데이터 */}
+                        {/* 필터링 및 정렬된 데이터 (스타일&컬러 기준) */}
                         {(() => {
-                          const data = periodType === 'accumulated' ? productDetails.accumulated : productDetails.monthly;
+                          // 주차별은 products 배열 사용 (스타일&컬러 기준)
+                          const data = productDetails.products;
                           
                           // 필터링
                           let filtered = data.filter((product) => {
-                            // 검색 필터
+                            // 검색 필터 (품번, 품명, 컬러코드 검색)
                             const searchLower = searchFilter.toLowerCase();
                             const matchesSearch = !searchFilter || 
                               product.productCode.toLowerCase().includes(searchLower) ||
-                              (product.productName || '').toLowerCase().includes(searchLower);
+                              (product.productName || '').toLowerCase().includes(searchLower) ||
+                              (product.colorCode || '').toLowerCase().includes(searchLower);
                             
                             // 시즌 필터
                             const matchesSeason = seasonFilter === 'all' ||
@@ -2246,19 +2330,16 @@ export default function BrandDashboard() {
                             let matchesExcludeFilter = true;
                             
                             // 디스커버리(X) 브랜드인 경우 DX MASTER 서브카테고리도 참조
-                            // 품번에서 DX(성인) 또는 DK(키즈)로 시작하는 부분 추출 (예: X25NDXSH1234 -> DXSH1234, X25NDKSH7535N -> DKSH7535N)
                             const productCode = product.productCode || '';
                             const dxCodeMatch = productCode.match(/D[XK][A-Z0-9]+/);
                             const dxCode = dxCodeMatch ? dxCodeMatch[0] : '';
                             const dxSubCategory = dxCode ? dxMasterData[dxCode] : null;
                             
                             if (excludeSeasonFilter === 'excludeS') {
-                              // S시즌 제외 (예: 24S, 25S 등) + 디스커버리 SUMMER 서브카테고리
                               const isSSeason = season.includes('S');
                               const isSummerSubCategory = brand?.code === 'X' && dxSubCategory === 'SUMMER';
                               matchesExcludeFilter = !isSSeason && !isSummerSubCategory;
                             } else if (excludeSeasonFilter === 'excludeF') {
-                              // F시즌 제외 (예: 24F, 25F 등) + 디스커버리 WINTER 서브카테고리
                               const isFSeason = season.includes('F');
                               const isWinterSubCategory = brand?.code === 'X' && dxSubCategory === 'WINTER';
                               matchesExcludeFilter = !isFSeason && !isWinterSubCategory;
@@ -2304,44 +2385,39 @@ export default function BrandDashboard() {
                           const oldSeasonProducts = filtered.filter(p => p.seasonCategory === 'old');
                           const stagnantProducts = filtered.filter(p => p.seasonCategory === 'stagnant');
                           
-                          // 시즌별 요약 카드용 - 필터되지 않은 전체 데이터에서 품번 수 계산
-                          const allData = periodType === 'accumulated' ? productDetails.accumulated : productDetails.monthly;
+                          // 시즌별 요약 카드용 - 필터되지 않은 전체 데이터에서 품번×컬러 수 계산
+                          const allData = productDetails.products;
                           const allCurrentSeasonProducts = allData.filter(p => p.seasonCategory === 'current');
                           const allNextSeasonProducts = allData.filter(p => p.seasonCategory === 'next');
                           const allOldSeasonProducts = allData.filter(p => p.seasonCategory === 'old');
                           const allStagnantProducts = allData.filter(p => p.seasonCategory === 'stagnant');
                           
-                          // 전체 데이터에서 재고주수 TOP 10 및 정체재고 중 재고금액 TOP 10 계산
+                          // 전체 데이터에서 재고주수 TOP 10 및 정체재고 중 재고금액 TOP 10 계산 (품번+컬러 기준)
                           const allProducts = [...currentSeasonProducts, ...nextSeasonProducts, ...oldSeasonProducts, ...stagnantProducts];
                           const top10WeeksCodes = [...allProducts]
                             .sort((a, b) => b.weeks - a.weeks)
                             .slice(0, 10)
-                            .map(p => p.productCode);
+                            .map(p => `${p.productCode}_${p.colorCode}`);
                           const stagnantTop10InventoryCodes = [...stagnantProducts]
                             .sort((a, b) => b.endingInventory - a.endingInventory)
                             .slice(0, 10)
-                            .map(p => p.productCode);
+                            .map(p => `${p.productCode}_${p.colorCode}`);
                           
-                          // 테이블 렌더링 헬퍼 함수
+                          // 테이블 렌더링 헬퍼 함수 (스타일&컬러 기준)
                           const renderProductTable = (products: typeof filtered, title: string, colorClass: string, seasonKey: 'current' | 'next' | 'old' | 'stagnant') => {
                             if (products.length === 0) return null;
                             
-                            // 합계 계산 (원본 금액 합산 후 마지막에 반올림)
+                            // 합계 계산 (새 API 필드명 기준)
                             const totalEndingInventoryQty = products.reduce((sum, p) => sum + (p.endingInventoryQty || 0), 0);
-                            const totalPreviousEndingInventoryQty = products.reduce((sum, p) => sum + (p.previousEndingInventoryQty || 0), 0);
+                            const totalPreviousEndingInventoryQty = products.reduce((sum, p) => sum + (p.prevEndingInventoryQty || 0), 0);
                             
-                            // 원본 금액 합산 후 반올림 (chartData와 동일한 결과)
-                            const totalEndingInventoryRaw = products.reduce((sum, p) => sum + (p.endingInventoryRaw || 0), 0);
-                            const totalEndingInventory = Math.round(totalEndingInventoryRaw / 1000000);
-                            const totalPreviousEndingInventory = products.reduce((sum, p) => sum + p.previousEndingInventory, 0);
+                            // 재고 금액 합계 (이미 백만원 단위)
+                            const totalEndingInventory = products.reduce((sum, p) => sum + (p.endingInventory || 0), 0);
+                            const totalPreviousEndingInventory = products.reduce((sum, p) => sum + (p.prevEndingInventory || 0), 0);
                             
-                            const totalTagSalesAmountRaw = products.reduce((sum, p) => sum + (p.tagSalesAmountRaw || 0), 0);
-                            const totalTagSalesAmount = Math.round(totalTagSalesAmountRaw / 1000000);
-                            const totalPreviousTagSalesAmount = products.reduce((sum, p) => sum + (p.previousTagSalesAmount || 0), 0);
-                            
-                            const totalSalesAmountRaw = products.reduce((sum, p) => sum + (p.salesAmountRaw || 0), 0);
-                            const totalSalesAmount = Math.round(totalSalesAmountRaw / 1000000);
-                            const totalPreviousSalesAmount = products.reduce((sum, p) => sum + p.previousSalesAmount, 0);
+                            // 4주 매출 금액 합계 (이미 백만원 단위)
+                            const totalSalesAmount = products.reduce((sum, p) => sum + (p.salesAmount || 0), 0);
+                            const totalPreviousSalesAmount = products.reduce((sum, p) => sum + (p.prevSalesAmount || 0), 0);
                             
                             const totalInventoryYOY = totalPreviousEndingInventory > 0 ? Math.round((totalEndingInventory / totalPreviousEndingInventory) * 100) : 0;
                             const totalSalesYOY = totalPreviousSalesAmount > 0 ? Math.round((totalSalesAmount / totalPreviousSalesAmount) * 100) : 0;
@@ -2411,8 +2487,7 @@ export default function BrandDashboard() {
                             // S/F 시즌 필터 적용 시 품번별 합계 사용, 그렇지 않으면 chartData 사용
                             const displayCurrentSeasonStock = isSeasonFiltered ? totalEndingInventory : currentSeasonStock;
                             const displayCurrentSeasonStockQty = isSeasonFiltered ? totalEndingInventoryQty : currentSeasonStockQty;
-                            const displayCurrentSeasonSale = isSeasonFiltered ? totalTagSalesAmount : currentSeasonSale;
-                            const displayCurrentSeasonActSale = isSeasonFiltered ? totalSalesAmount : currentSeasonActSale;
+                            const displayCurrentSeasonSale = isSeasonFiltered ? totalSalesAmount : currentSeasonSale;
                             
                             const avgWeeks = calculateWeeks(displayCurrentSeasonStock, displayCurrentSeasonSale);
                             const avgPreviousWeeks = calculateWeeks(previousSeasonStock, previousSeasonSale);
@@ -2421,37 +2496,36 @@ export default function BrandDashboard() {
                               <div>
                                 <div className="mb-3 flex items-center gap-2">
                                   <div className={`h-2 w-2 rounded-full ${colorClass}`}></div>
-                                  <h3 className="text-sm font-semibold text-slate-700">{title} - {products.length}개</h3>
+                                  <h3 className="text-sm font-semibold text-slate-700">{title} - {products.length}개 (스타일×컬러)</h3>
                                 </div>
                                 <div className="overflow-x-auto overflow-y-auto max-h-[400px] border rounded-lg">
                                   <table className="w-full border-collapse table-fixed">
                                     <colgroup>
-                                      <col className="w-[120px]" />
-                                      <col className="w-[180px]" />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
-                                      <col style={{ width: 'calc((100% - 300px) / 8)' }} />
+                                      <col className="w-[110px]" />
+                                      <col className="w-[70px]" />
+                                      <col className="w-[160px]" />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
+                                      <col style={{ width: 'calc((100% - 340px) / 7)' }} />
                                     </colgroup>
                                     <thead className="sticky top-0 z-10 bg-white shadow-sm">
                                       <tr className="border-b border-slate-200">
                                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">품번</th>
+                                        <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">컬러</th>
                                         <th className="text-left py-2 px-3 text-xs font-semibold text-slate-700 bg-white">품명</th>
-                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">TAG가격</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'weeks') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('weeks'); setSortDirection('desc'); } }}>
                                           <div className="flex items-center justify-center gap-1">재고주수 {sortColumn === 'weeks' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">기말재고수량</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'endingInventory') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('endingInventory'); setSortDirection('desc'); } }}>
-                                          <div className="flex items-center justify-center gap-1">기말재고택(V+) {sortColumn === 'endingInventory' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                          <div className="flex items-center justify-center gap-1">기말재고택 {sortColumn === 'endingInventory' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
-                                        <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">택판매액(V+)</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white cursor-pointer hover:bg-slate-50" onClick={() => { if (sortColumn === 'salesAmount') { setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc'); } else { setSortColumn('salesAmount'); setSortDirection('desc'); } }}>
-                                          <div className="flex items-center justify-center gap-1">실판매액(V+) {sortColumn === 'salesAmount' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
+                                          <div className="flex items-center justify-center gap-1">4주매출 {sortColumn === 'salesAmount' && (sortDirection === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />)}</div>
                                         </th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">재고YOY</th>
                                         <th className="text-center py-2 px-3 text-xs font-semibold text-slate-700 bg-white">판매YOY</th>
@@ -2459,68 +2533,56 @@ export default function BrandDashboard() {
                                       {/* TOTAL 합계 행 */}
                                       <tr className="border-b-2 border-slate-300 bg-slate-100">
                                         <td className="py-2 px-3 text-xs font-bold text-slate-800 bg-slate-100">TOTAL</td>
-                                        <td className="py-2 px-3 text-xs font-bold text-slate-600 bg-slate-100">{products.length}개 품번</td>
-                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
-                                          {totalEndingInventoryQty > 0 ? (
-                                            <p className="font-semibold text-slate-900">{formatNumber(Math.round((totalEndingInventory * 1000000) / totalEndingInventoryQty))}원</p>
-                                          ) : (
-                                            <p className="text-slate-400">-</p>
-                                          )}
-                                        </td>
+                                        <td className="py-2 px-3 text-xs font-bold text-slate-600 bg-slate-100">-</td>
+                                        <td className="py-2 px-3 text-xs font-bold text-slate-600 bg-slate-100">{products.length}개</td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
                                           <div>
                                             <p className="font-bold text-slate-800">{formatNumberWithDecimal(avgWeeks)}주</p>
                                             <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(avgPreviousWeeks)}주</p>
-                                            <p className={`text-[10px] font-semibold ${avgWeeks - avgPreviousWeeks < 0 ? 'text-emerald-600' : 'text-red-600'}`}>{avgWeeks - avgPreviousWeeks < 0 ? '-' : '+'}{formatNumberWithDecimal(Math.abs(avgWeeks - avgPreviousWeeks))}주</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
                                           <div>
-                                            <p className="font-bold text-slate-800">{formatNumber(displayCurrentSeasonStockQty)}</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(previousSeasonStockQty)}</p>
+                                            <p className="font-bold text-slate-800">{formatNumber(totalEndingInventoryQty)}</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(totalPreviousEndingInventoryQty)}</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
                                           <div>
-                                            <p className="font-bold text-slate-800">{formatNumber(displayCurrentSeasonStock)}백만</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(previousSeasonStock)}백만</p>
+                                            <p className="font-bold text-slate-800">{formatNumber(Math.round(totalEndingInventory))}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(totalPreviousEndingInventory))}백만</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
                                           <div>
-                                            <p className="font-bold text-purple-700">{formatNumber(displayCurrentSeasonSale)}백만</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(previousSeasonSale)}백만</p>
+                                            <p className="font-bold text-purple-700">{formatNumber(Math.round(totalSalesAmount))}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(totalPreviousSalesAmount))}백만</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
-                                          <div>
-                                            <p className="font-bold text-slate-800">{formatNumber(displayCurrentSeasonActSale)}백만</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(previousSeasonActSale)}백만</p>
-                                          </div>
-                                        </td>
-                                        <td className="py-2 px-3 text-xs text-center bg-slate-100">
-                                          <span className={`font-bold ${previousSeasonStock > 0 ? (displayCurrentSeasonStock / previousSeasonStock * 100 >= 100 ? 'text-red-600' : 'text-emerald-600') : 'text-slate-400'}`}>
-                                            {previousSeasonStock > 0 ? formatNumber(Math.round(displayCurrentSeasonStock / previousSeasonStock * 100)) + '%' : '-'}
+                                          <span className={`font-bold ${totalInventoryYOY >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                            {totalPreviousEndingInventory > 0 ? totalInventoryYOY + '%' : '-'}
                                           </span>
                                         </td>
                                         <td className="py-2 px-3 text-xs text-center bg-slate-100">
-                                          <span className={`font-bold ${previousSeasonActSale > 0 ? (displayCurrentSeasonActSale / previousSeasonActSale * 100 >= 100 ? 'text-emerald-600' : 'text-red-600') : 'text-slate-400'}`}>
-                                            {previousSeasonActSale > 0 ? formatNumber(Math.round(displayCurrentSeasonActSale / previousSeasonActSale * 100)) + '%' : '-'}
+                                          <span className={`font-bold ${totalSalesYOY >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {totalPreviousSalesAmount > 0 ? totalSalesYOY + '%' : '-'}
                                           </span>
                                         </td>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {products.map((product) => {
-                                        const weeksDiff = product.weeks - product.previousWeeks;
+                                        const weeksDiff = product.weeks - product.prevWeeks;
                                         const isImproved = weeksDiff < 0;
-                                        const isTop10Weeks = top10WeeksCodes.includes(product.productCode);
-                                        const isStagnantTop10Inventory = stagnantTop10InventoryCodes.includes(product.productCode);
+                                        const productColorKey = `${product.productCode}_${product.colorCode}`;
+                                        const isTop10Weeks = top10WeeksCodes.includes(productColorKey);
+                                        const isStagnantTop10Inventory = stagnantTop10InventoryCodes.includes(productColorKey);
                                         const isHighRisk = isTop10Weeks || isStagnantTop10Inventory;
                                         
                                         return (
                                           <tr 
-                                            key={product.productCode} 
+                                            key={productColorKey} 
                                             className={`border-b border-slate-100 transition-colors cursor-pointer ${isHighRisk ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}
                                             onClick={() => setSelectedProductForDetail(product)}
                                           >
@@ -2531,43 +2593,31 @@ export default function BrandDashboard() {
                                                 <span className="hover:underline text-blue-600">{product.productCode}</span>
                                               </div>
                                             </td>
+                                            <td className="py-2 px-3 text-xs font-mono text-slate-600">{product.colorCode || '-'}</td>
                                             <td className="py-2 px-3 text-xs text-slate-700 truncate" title={product.productName}>{product.productName || '-'}</td>
-                                            <td className="py-2 px-3 text-xs text-center">
-                                              {product.tagPrice != null && product.tagPrice > 0 ? (
-                                                <p className="font-semibold text-slate-900">{formatNumber(product.tagPrice)}원</p>
-                                              ) : (
-                                                <p className="text-slate-400">-</p>
-                                              )}
-                                            </td>
                                             <td className="py-2 px-3 text-xs text-center">
                                               <div>
                                                 <p className="font-semibold text-slate-900">{formatNumberWithDecimal(product.weeks)}주</p>
-                                                <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(product.previousWeeks)}주</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumberWithDecimal(product.prevWeeks)}주</p>
                                                 <p className={`text-[10px] font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>{isImproved ? '-' : '+'}{formatNumberWithDecimal(Math.abs(weeksDiff))}주</p>
                                               </div>
                                             </td>
                                             <td className="py-2 px-3 text-xs text-center">
                                               <div>
                                                 <p className="font-semibold text-slate-900">{formatNumber(product.endingInventoryQty || 0)}</p>
-                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousEndingInventoryQty || 0)}</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.prevEndingInventoryQty || 0)}</p>
                                               </div>
                                             </td>
                                             <td className="py-2 px-3 text-xs text-center">
                                               <div>
                                                 <p className="font-semibold text-slate-900">{formatNumber(product.endingInventory)}백만</p>
-                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousEndingInventory)}백만</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.prevEndingInventory)}백만</p>
                                               </div>
                                             </td>
                                             <td className="py-2 px-3 text-xs text-center">
                                               <div>
-                                                <p className="font-semibold text-purple-700">{formatNumber(product.tagSalesAmount || 0)}백만</p>
-                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousTagSalesAmount || 0)}백만</p>
-                                              </div>
-                                            </td>
-                                            <td className="py-2 px-3 text-xs text-center">
-                                              <div>
-                                                <p className="font-semibold text-slate-900">{formatNumber(product.salesAmount)}백만</p>
-                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.previousSalesAmount)}백만</p>
+                                                <p className="font-semibold text-purple-700">{formatNumber(product.salesAmount)}백만</p>
+                                                <p className="text-[10px] text-slate-500">전년 {formatNumber(product.prevSalesAmount)}백만</p>
                                               </div>
                                             </td>
                                             <td className="py-2 px-3 text-xs text-center">
@@ -2635,8 +2685,8 @@ export default function BrandDashboard() {
                             }
                           ];
                           
-                          // 필터 결과 요약 계산
-                          const totalProducts = periodType === 'monthly' ? productDetails.monthly : productDetails.accumulated;
+                          // 필터 결과 요약 계산 (스타일×컬러 기준)
+                          const totalProducts = productDetails.products;
                           const totalCount = totalProducts.length;
                           const filteredCount = filtered.length;
                           const totalInventorySum = totalProducts.reduce((sum, p) => sum + p.endingInventory, 0);
@@ -2734,12 +2784,9 @@ export default function BrandDashboard() {
                                   
                                   const filteredSeasonProducts = getFilteredProducts(season.allProducts);
                                   
-                                  // 원본 금액 합산 후 마지막에 반올림 (chartData와 동일한 결과)
-                                  const totalInventoryRaw = filteredSeasonProducts.reduce((sum, p) => sum + (p.endingInventoryRaw || 0), 0);
-                                  const totalInventory = Math.round(totalInventoryRaw / 1000000);
-                                  
-                                  const totalTagSaleRaw = filteredSeasonProducts.reduce((sum, p) => sum + (p.tagSalesAmountRaw || 0), 0);
-                                  const totalTagSale = Math.round(totalTagSaleRaw / 1000000);
+                                  // 금액 합계 (새 API는 이미 백만원 단위로 반환)
+                                  const totalInventory = filteredSeasonProducts.reduce((sum, p) => sum + (p.endingInventory || 0), 0);
+                                  const totalTagSale = filteredSeasonProducts.reduce((sum, p) => sum + (p.salesAmount || 0), 0);
                                   
                                   // 재고주수 계산 (막대그래프와 동일한 공식: 재고 / (매출 / 30 * 7))
                                   const calculateWeeks = (stock: number, sale: number) => {

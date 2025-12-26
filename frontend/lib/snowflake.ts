@@ -69,12 +69,14 @@ export async function connectToSnowflake(): Promise<snowflake.Connection> {
 }
 
 /**
- * SQL 쿼리 실행
+ * SQL 쿼리 실행 (재시도 로직 포함)
  */
 export async function executeQuery<T = any>(
   sqlText: string,
-  conn?: snowflake.Connection
+  conn?: snowflake.Connection,
+  retryCount: number = 0
 ): Promise<T[]> {
+  const MAX_RETRIES = 2;
   let connectionToUse = conn || connection;
 
   // 연결이 없거나 종료된 경우 새로 연결
@@ -87,14 +89,34 @@ export async function executeQuery<T = any>(
     try {
       connectionToUse!.execute({
         sqlText,
-        complete: (err, stmt, rows) => {
+        complete: async (err, stmt, rows) => {
           if (err) {
             console.error('쿼리 실행 실패:', err);
-            // 연결 종료 오류인 경우 연결을 null로 설정
-            if (err.message && err.message.includes('terminated')) {
+            
+            // 연결 종료 오류인 경우 재시도
+            const isConnectionError = 
+              (err.message && err.message.includes('terminated')) ||
+              (err.code === 407002) || // Unable to perform operation using terminated connection
+              (err.sqlState === '08003'); // Connection does not exist
+            
+            if (isConnectionError && retryCount < MAX_RETRIES) {
+              console.log(`연결 종료 감지. 재시도 ${retryCount + 1}/${MAX_RETRIES}`);
               connection = null;
+              
+              try {
+                // 재연결 후 재시도
+                const result = await executeQuery<T>(sqlText, undefined, retryCount + 1);
+                resolve(result);
+              } catch (retryError) {
+                reject(retryError);
+              }
+            } else {
+              // 연결 종료 오류인 경우 연결을 null로 설정
+              if (isConnectionError) {
+                connection = null;
+              }
+              reject(err);
             }
-            reject(err);
           } else {
             console.log(`쿼리 실행 성공: ${rows?.length || 0}개 행 반환`);
             resolve((rows || []) as T[]);
@@ -102,12 +124,20 @@ export async function executeQuery<T = any>(
         },
       });
     } catch (error) {
-      // 연결이 종료된 경우 새로 연결 시도
-      if (error instanceof Error && error.message.includes('terminated')) {
-        console.log('연결이 종료되어 재연결합니다.');
+      // 연결이 종료된 경우 재시도
+      const isConnectionError = error instanceof Error && error.message.includes('terminated');
+      
+      if (isConnectionError && retryCount < MAX_RETRIES) {
+        console.log(`연결 종료 감지 (catch). 재시도 ${retryCount + 1}/${MAX_RETRIES}`);
         connection = null;
-        reject(new Error('연결이 종료되었습니다. 다시 시도해주세요.'));
+        
+        executeQuery<T>(sqlText, undefined, retryCount + 1)
+          .then(resolve)
+          .catch(reject);
       } else {
+        if (isConnectionError) {
+          connection = null;
+        }
         reject(error);
       }
     }

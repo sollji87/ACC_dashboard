@@ -441,6 +441,13 @@ export function combineActualAndForecast(
       nextSeasonSaleRatio: forecast.nextSeasonSaleRatio || 0,
       oldSeasonSaleRatio: forecast.oldSeasonSaleRatio || 0,
       stagnantSaleRatio: forecast.stagnantSaleRatio || 0,
+      // 주차별 예측 추가 필드
+      saleAmount1w: (forecast as any).saleAmount1w || 0, // 주간 예상 매출 (백만원)
+      saleAmount: (forecast as any).saleAmount1w || 0, // 주간 매출 (차트용)
+      prevSaleAmount: (forecast as any).prevYearSale || 0, // 전년 동주차 매출 (차트용)
+      incomingAmount: (forecast as any).incomingAmount || 0, // 입고예정금액 (백만원)
+      weekKey: (forecast as any).weekKey || '',
+      weekLabel: (forecast as any).weekLabel || '',
     });
   });
   

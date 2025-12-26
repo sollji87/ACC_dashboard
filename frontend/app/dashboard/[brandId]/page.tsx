@@ -730,6 +730,13 @@ export default function BrandDashboard() {
     setBrand(foundBrand);
   }, [brandId, router]);
 
+  // 주차별 모드 선택 시 주차별 대시보드로 이동
+  useEffect(() => {
+    if (dataSource === 'weekly') {
+      router.push(`/dashboard-weekly/${brandId}?week=${selectedWeek}&dataSource=weekly`);
+    }
+  }, [dataSource, brandId, selectedWeek, router]);
+
   useEffect(() => {
     async function loadBrandSpecificData() {
       setIsLoading(true);

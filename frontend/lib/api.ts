@@ -209,6 +209,77 @@ export async function fetchProductDetails(
 }
 
 /**
+ * 주차별 품번별 재고 데이터 (스타일&컬러 기준)
+ */
+export interface WeeklyProductDetailData {
+  productCode: string;
+  colorCode: string;
+  productName: string;
+  season: string;
+  seasonCategory: 'current' | 'next' | 'old' | 'stagnant';
+  tagPrice: number | null;
+  endingInventory: number; // 기말재고 (백만원)
+  prevEndingInventory: number;
+  endingInventoryQty: number; // 기말재고 수량
+  prevEndingInventoryQty: number;
+  salesAmount: number; // 4주 매출 (백만원)
+  prevSalesAmount: number;
+  salesQty: number; // 매출 수량
+  prevSalesQty: number;
+  weeks: number; // 재고주수
+  prevWeeks: number;
+  inventoryYOY: number;
+  salesYOY: number;
+}
+
+export interface WeeklyProductDetailResponse {
+  products: WeeklyProductDetailData[];
+  thresholdAmt: number; // 정체재고 판별 기준금액 (원 단위)
+}
+
+/**
+ * 주차별 품번별 재고 데이터 조회 (스타일&컬러 기준)
+ */
+export async function fetchWeeklyProductDetails(
+  brandCode: string,
+  itemStd: string,
+  week: string
+): Promise<WeeklyProductDetailResponse> {
+  try {
+    const apiUrl = `/api/dashboard/inventory/detail-weekly?brandCode=${brandCode}&itemStd=${encodeURIComponent(itemStd)}&week=${week}`;
+    
+    console.log(`🔍 주차별 품번별 데이터 조회 시작:`, apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📡 응답 상태 (주차별 품번별):`, response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API 오류 응답 (주차별 품번별):`, errorText);
+      throw new Error(`API 호출 실패: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'API 오류');
+    }
+
+    console.log(`✅ 주차별 품번별 데이터 조회 성공 (${brandCode} ${itemStd}, ${week}): ${result.data.products.length}개`);
+    return result.data;
+  } catch (error) {
+    console.error('❌ 주차별 품번별 재고 데이터 조회 실패:', error);
+    throw error;
+  }
+}
+
+/**
  * 입고예정금액 조회 (중분류별)
  */
 export interface IncomingAmountData {
