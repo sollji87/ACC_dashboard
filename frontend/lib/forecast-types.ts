@@ -137,7 +137,8 @@ export interface OrderCapacity {
   weeklyAvgSales: number; // 주간평균 택판매액 (백만원, 소수점 제거)
   // 추가 정보
   yoyRate: number; // YOY 성장률 (%)
-  nWeeksTotal: number; // N주 매출 합계 (YOY 적용, 백만원)
+  monthlyAvgSales?: number; // 월간 평균 매출 (백만원, 월별 대시보드용)
+  nWeeksTotal?: number; // N주 매출 합계 (YOY 적용, 백만원, 주차별 대시보드용)
   weeksType: '4weeks' | '8weeks' | '12weeks'; // 재고주수 계산 기준
 }
 
