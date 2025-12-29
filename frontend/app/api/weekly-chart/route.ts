@@ -173,6 +173,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         stock_tag_amt,
         stock_qty,
         season_class,
+        sale_amt_for_stagnant,
         -- 정체재고: 과시즌(old)이면서 판매 < 0.01%인 경우만
         CASE 
           WHEN season_class = 'old' AND sale_amt_for_stagnant < threshold_amt THEN 1
@@ -180,7 +181,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         END AS is_stagnant
       FROM cy_classified
     ),
-    -- 당년 시즌별 집계
+    -- 당년 시즌별 집계 (재고 + 정체재고 매출 포함)
     cy_season_agg AS (
       SELECT
         week_key,
@@ -191,7 +192,9 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         SUM(CASE WHEN season_class = 'current' THEN stock_tag_amt ELSE 0 END) AS current_season_stock,
         SUM(CASE WHEN season_class = 'next' THEN stock_tag_amt ELSE 0 END) AS next_season_stock,
         SUM(CASE WHEN season_class = 'old' AND is_stagnant = 0 THEN stock_tag_amt ELSE 0 END) AS old_season_stock,
-        SUM(CASE WHEN is_stagnant = 1 THEN stock_tag_amt ELSE 0 END) AS stagnant_stock
+        SUM(CASE WHEN is_stagnant = 1 THEN stock_tag_amt ELSE 0 END) AS stagnant_stock,
+        -- 정체재고 매출 (품번+컬러별 4주 매출 합산)
+        SUM(CASE WHEN is_stagnant = 1 THEN sale_amt_for_stagnant ELSE 0 END) AS stagnant_sale
       FROM cy_with_stagnant
       GROUP BY week_key, asof_dt, week_num
     ),
@@ -298,6 +301,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         stock_tag_amt,
         stock_qty,
         season_class,
+        sale_amt_for_stagnant,
         CASE 
           WHEN season_class = 'old' AND sale_amt_for_stagnant < threshold_amt THEN 1
           ELSE 0
@@ -314,9 +318,65 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         SUM(CASE WHEN season_class = 'current' THEN stock_tag_amt ELSE 0 END) AS current_season_stock,
         SUM(CASE WHEN season_class = 'next' THEN stock_tag_amt ELSE 0 END) AS next_season_stock,
         SUM(CASE WHEN season_class = 'old' AND is_stagnant = 0 THEN stock_tag_amt ELSE 0 END) AS old_season_stock,
-        SUM(CASE WHEN is_stagnant = 1 THEN stock_tag_amt ELSE 0 END) AS stagnant_stock
+        SUM(CASE WHEN is_stagnant = 1 THEN stock_tag_amt ELSE 0 END) AS stagnant_stock,
+        -- 전년 정체재고 매출
+        SUM(CASE WHEN is_stagnant = 1 THEN sale_amt_for_stagnant ELSE 0 END) AS stagnant_sale
       FROM py_with_stagnant
       GROUP BY week_key, asof_dt, week_num
+    ),
+    -- 당년 1주 매출 (해당 주차만) - 시즌별 분류 포함
+    cy_sale_1w_detail AS (
+      SELECT
+        wm.cy_week_key AS week_key,
+        wm.cy_end_dt AS asof_dt,
+        wm.cy_month,
+        p.sesn,
+        CASE 
+          WHEN wm.cy_month >= 9 OR wm.cy_month <= 2 THEN
+            CASE 
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'N%' 
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'F%' THEN 'current'
+              WHEN p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+          ELSE
+            CASE 
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'N%' 
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'S%' THEN 'current'
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+        END AS season_class,
+        SUM(COALESCE(s.sale_nml_tag_amt_cns, 0) + COALESCE(s.sale_ret_tag_amt_cns, 0)) AS sale_amt,
+        SUM(COALESCE(s.sale_nml_qty_cns, 0) + COALESCE(s.sale_ret_qty_cns, 0)) AS sale_qty
+      FROM week_mapping wm
+      JOIN fnf.prcs.db_scs_w s
+        ON s.end_dt = wm.cy_end_dt  -- 해당 주차만 (1주)
+      INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
+      WHERE s.brd_cd = '${brandCode}'
+        ${itemFilter}
+      GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.cy_month, p.sesn
+    ),
+    cy_sale_1w AS (
+      SELECT
+        week_key,
+        asof_dt,
+        SUM(sale_amt) AS sale_amt_1w,
+        SUM(sale_qty) AS sale_qty_1w,
+        SUM(CASE WHEN season_class = 'current' THEN sale_amt ELSE 0 END) AS current_season_sale_1w,
+        SUM(CASE WHEN season_class = 'next' THEN sale_amt ELSE 0 END) AS next_season_sale_1w,
+        SUM(CASE WHEN season_class = 'old' THEN sale_amt ELSE 0 END) AS old_season_sale_1w
+      FROM cy_sale_1w_detail
+      GROUP BY week_key, asof_dt
     ),
     -- 당년 N주 매출 (전체 + 시즌별) - 월별과 동일한 시즌 분류
     cy_sale_detail AS (
@@ -375,6 +435,61 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         SUM(CASE WHEN season_class = 'next' THEN sale_amt ELSE 0 END) AS next_season_sale,
         SUM(CASE WHEN season_class = 'old' THEN sale_amt ELSE 0 END) AS old_season_sale
       FROM cy_sale_detail
+      GROUP BY week_key, asof_dt
+    ),
+    -- 전년 1주 매출 (해당 주차만) - 시즌별 분류 포함
+    py_sale_1w_detail AS (
+      SELECT
+        wm.cy_week_key AS week_key,
+        wm.cy_end_dt AS asof_dt,
+        MONTH(wm.py_end_dt) AS py_month,
+        p.sesn,
+        CASE 
+          WHEN MONTH(wm.py_end_dt) >= 9 OR MONTH(wm.py_end_dt) <= 2 THEN
+            CASE 
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'N%' 
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'F%' THEN 'current'
+              WHEN p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+          ELSE
+            CASE 
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'N%' 
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'S%' THEN 'current'
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 2)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+        END AS season_class,
+        SUM(COALESCE(s.sale_nml_tag_amt_cns, 0) + COALESCE(s.sale_ret_tag_amt_cns, 0)) AS sale_amt,
+        SUM(COALESCE(s.sale_nml_qty_cns, 0) + COALESCE(s.sale_ret_qty_cns, 0)) AS sale_qty
+      FROM week_mapping wm
+      JOIN fnf.prcs.db_scs_w s
+        ON s.end_dt = wm.py_end_dt  -- 전년 해당 주차만 (1주)
+      INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
+      WHERE s.brd_cd = '${brandCode}'
+        AND wm.py_end_dt IS NOT NULL
+        ${itemFilter}
+      GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.py_end_dt, p.sesn
+    ),
+    py_sale_1w AS (
+      SELECT
+        week_key,
+        asof_dt,
+        SUM(sale_amt) AS sale_amt_1w,
+        SUM(sale_qty) AS sale_qty_1w,
+        SUM(CASE WHEN season_class = 'current' THEN sale_amt ELSE 0 END) AS current_season_sale_1w,
+        SUM(CASE WHEN season_class = 'next' THEN sale_amt ELSE 0 END) AS next_season_sale_1w,
+        SUM(CASE WHEN season_class = 'old' THEN sale_amt ELSE 0 END) AS old_season_sale_1w
+      FROM py_sale_1w_detail
       GROUP BY week_key, asof_dt
     ),
     -- 전년 N주 매출 (전체 + 시즌별) - 월별과 동일한 시즌 분류
@@ -465,10 +580,22 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       ROUND(COALESCE(csa.current_season_sale, 0) / 1000000, 0) AS cy_current_season_sale,
       ROUND(COALESCE(csa.next_season_sale, 0) / 1000000, 0) AS cy_next_season_sale,
       ROUND(COALESCE(csa.old_season_sale, 0) / 1000000, 0) AS cy_old_season_sale,
+      ROUND(COALESCE(cs.stagnant_sale, 0) / 1000000, 0) AS cy_stagnant_sale,
       -- 시즌별 전년 매출 (백만원)
       ROUND(COALESCE(psa.current_season_sale, 0) / 1000000, 0) AS py_current_season_sale,
       ROUND(COALESCE(psa.next_season_sale, 0) / 1000000, 0) AS py_next_season_sale,
       ROUND(COALESCE(psa.old_season_sale, 0) / 1000000, 0) AS py_old_season_sale,
+      ROUND(COALESCE(ps.stagnant_sale, 0) / 1000000, 0) AS py_stagnant_sale,
+      -- 1주 매출 (해당 주차만, 백만원)
+      ROUND(COALESCE(csa1w.sale_amt_1w, 0) / 1000000, 0) AS cy_sale_1w_million,
+      ROUND(COALESCE(psa1w.sale_amt_1w, 0) / 1000000, 0) AS py_sale_1w_million,
+      -- 시즌별 1주 매출 (백만원)
+      ROUND(COALESCE(csa1w.current_season_sale_1w, 0) / 1000000, 0) AS cy_current_season_sale_1w,
+      ROUND(COALESCE(csa1w.next_season_sale_1w, 0) / 1000000, 0) AS cy_next_season_sale_1w,
+      ROUND(COALESCE(csa1w.old_season_sale_1w, 0) / 1000000, 0) AS cy_old_season_sale_1w,
+      ROUND(COALESCE(psa1w.current_season_sale_1w, 0) / 1000000, 0) AS py_current_season_sale_1w,
+      ROUND(COALESCE(psa1w.next_season_sale_1w, 0) / 1000000, 0) AS py_next_season_sale_1w,
+      ROUND(COALESCE(psa1w.old_season_sale_1w, 0) / 1000000, 0) AS py_old_season_sale_1w,
       -- 재고주수 (금액기준)
       CASE WHEN COALESCE(csa.sale_amt, 0) > 0 
         THEN ROUND(cs.total_stock / (csa.sale_amt / ${weeksForSale}), 1)
@@ -487,6 +614,8 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
     LEFT JOIN py_season_agg ps ON cs.week_key = ps.week_key
     LEFT JOIN cy_sale csa ON cs.week_key = csa.week_key
     LEFT JOIN py_sale psa ON cs.week_key = psa.week_key
+    LEFT JOIN cy_sale_1w csa1w ON cs.week_key = csa1w.week_key
+    LEFT JOIN py_sale_1w psa1w ON cs.week_key = psa1w.week_key
     ORDER BY cs.asof_dt ASC
   `;
 }
@@ -565,9 +694,30 @@ export async function GET(request: NextRequest) {
         // 재고수량
         stockQty: row.CY_STOCK_QTY || 0,
         prevStockQty: row.PY_STOCK_QTY || 0,
-        // 매출금액 (백만원)
+        // 매출금액 N주 합계 (백만원)
         saleAmount: row.CY_SALE_MILLION || 0,
         prevSaleAmount: row.PY_SALE_MILLION || 0,
+        // 1주 매출 (해당 주차만, 백만원)
+        saleAmount1w: row.CY_SALE_1W_MILLION || 0,
+        prevSaleAmount1w: row.PY_SALE_1W_MILLION || 0,
+        // 시즌별 1주 매출
+        currentSeasonSale1w: row.CY_CURRENT_SEASON_SALE_1W || 0,
+        nextSeasonSale1w: row.CY_NEXT_SEASON_SALE_1W || 0,
+        oldSeasonSale1w: row.CY_OLD_SEASON_SALE_1W || 0,
+        // 정체재고 1주 매출: N주 매출에서 정체재고 비율을 적용
+        stagnantSale1w: (() => {
+          const totalNw = (row.CY_CURRENT_SEASON_SALE || 0) + (row.CY_NEXT_SEASON_SALE || 0) + (row.CY_OLD_SEASON_SALE || 0) + (row.CY_STAGNANT_SALE || 0);
+          const stagnantRatio = totalNw > 0 ? ((row.CY_STAGNANT_SALE || 0) / totalNw) : 0;
+          return Math.round((row.CY_SALE_1W_MILLION || 0) * stagnantRatio);
+        })(),
+        previousCurrentSeasonSale1w: row.PY_CURRENT_SEASON_SALE_1W || 0,
+        previousNextSeasonSale1w: row.PY_NEXT_SEASON_SALE_1W || 0,
+        previousOldSeasonSale1w: row.PY_OLD_SEASON_SALE_1W || 0,
+        previousStagnantSale1w: (() => {
+          const totalNw = (row.PY_CURRENT_SEASON_SALE || 0) + (row.PY_NEXT_SEASON_SALE || 0) + (row.PY_OLD_SEASON_SALE || 0) + (row.PY_STAGNANT_SALE || 0);
+          const stagnantRatio = totalNw > 0 ? ((row.PY_STAGNANT_SALE || 0) / totalNw) : 0;
+          return Math.round((row.PY_SALE_1W_MILLION || 0) * stagnantRatio);
+        })(),
         // 매출수량
         saleQty: row.CY_SALE_QTY || 0,
         prevSaleQty: row.PY_SALE_QTY || 0,
@@ -605,17 +755,17 @@ export async function GET(request: NextRequest) {
         currentSeasonSale: row.CY_CURRENT_SEASON_SALE || 0,
         nextSeasonSale: row.CY_NEXT_SEASON_SALE || 0,
         oldSeasonSale: row.CY_OLD_SEASON_SALE || 0,
-        stagnantSale: 0, // 정체재고 매출은 별도 계산 필요
+        stagnantSale: row.CY_STAGNANT_SALE || 0,
         // 시즌별 전년 매출 (백만원)
         previousCurrentSeasonSale: row.PY_CURRENT_SEASON_SALE || 0,
         previousNextSeasonSale: row.PY_NEXT_SEASON_SALE || 0,
         previousOldSeasonSale: row.PY_OLD_SEASON_SALE || 0,
-        previousStagnantSale: 0,
+        previousStagnantSale: row.PY_STAGNANT_SALE || 0,
         // 시즌별 매출 비율 (%)
         currentSeasonSaleRatio: (row.CY_SALE_MILLION || 0) > 0 ? Math.round(((row.CY_CURRENT_SEASON_SALE || 0) / row.CY_SALE_MILLION) * 100) : 0,
         nextSeasonSaleRatio: (row.CY_SALE_MILLION || 0) > 0 ? Math.round(((row.CY_NEXT_SEASON_SALE || 0) / row.CY_SALE_MILLION) * 100) : 0,
         oldSeasonSaleRatio: (row.CY_SALE_MILLION || 0) > 0 ? Math.round(((row.CY_OLD_SEASON_SALE || 0) / row.CY_SALE_MILLION) * 100) : 0,
-        stagnantSaleRatio: 0,
+        stagnantSaleRatio: (row.CY_SALE_MILLION || 0) > 0 ? Math.round(((row.CY_STAGNANT_SALE || 0) / row.CY_SALE_MILLION) * 100) : 0,
         // YOY
         stockYOY,
         saleYOY,

@@ -222,10 +222,16 @@ export interface WeeklyProductDetailData {
   prevEndingInventory: number;
   endingInventoryQty: number; // 기말재고 수량
   prevEndingInventoryQty: number;
-  salesAmount: number; // 4주 매출 (백만원)
-  prevSalesAmount: number;
-  salesQty: number; // 매출 수량
-  prevSalesQty: number;
+  // 4주 매출 (재고주수 계산용, 백만원)
+  fourWeekSalesAmount: number;
+  prevFourWeekSalesAmount: number;
+  fourWeekSalesQty: number;
+  prevFourWeekSalesQty: number;
+  // 1주 매출 (해당 주차만, 백만원)
+  oneWeekSalesAmount: number;
+  prevOneWeekSalesAmount: number;
+  oneWeekSalesQty: number;
+  prevOneWeekSalesQty: number;
   weeks: number; // 재고주수
   prevWeeks: number;
   inventoryYOY: number;

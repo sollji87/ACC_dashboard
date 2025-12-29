@@ -72,6 +72,15 @@ function formatDateShort(date: Date): string {
 }
 
 /**
+ * 특정 연도의 마지막 ISO 주차 계산 (52 또는 53)
+ */
+function getLastISOWeekOfYear(year: number): number {
+  // 12월 28일은 항상 해당 연도의 마지막 주에 속함
+  const dec28 = new Date(year, 11, 28);
+  return getISOWeek(dec28);
+}
+
+/**
  * 최근 12주의 주차 옵션 생성
  */
 export function getWeekOptions(): WeekOption[] {
@@ -87,12 +96,12 @@ export function getWeekOptions(): WeekOption[] {
     let week = currentWeek - i;
     let year = currentYear;
     
-    // 연도 조정
+    // 연도 조정 - week이 0 이하면 전년도로 이동
     while (week < 1) {
       year--;
-      // 전년도의 마지막 주차 계산 (보통 52 또는 53)
-      const dec31 = new Date(year, 11, 31);
-      week += getISOWeek(dec31);
+      // 전년도의 실제 마지막 주차 (52 또는 53)
+      const lastWeekOfPrevYear = getLastISOWeekOfYear(year);
+      week += lastWeekOfPrevYear;
     }
     
     const startDate = getWeekStart(year, week);

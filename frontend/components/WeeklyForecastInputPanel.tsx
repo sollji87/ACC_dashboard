@@ -237,13 +237,17 @@ export default function WeeklyForecastInputPanel({
         stagnantRatio: latestData?.previousStagnantRatio || (latestData?.previousStagnantStock / (latestData?.previousTotalStock || 1) * 100) || 0,
       };
       
-      // 가장 최근 실적에서 시즌별 매출 비율 계산 (예측 구간에 적용)
-      const totalSale = (latestData?.currentSeasonSale || 0) + (latestData?.nextSeasonSale || 0) + (latestData?.oldSeasonSale || 0) + (latestData?.stagnantSale || 0);
+      // 가장 최근 실적에서 시즌별 1주 매출 비율 계산 (예측 구간에 적용)
+      // 1주 매출 데이터가 있으면 사용, 없으면 N주 매출 사용
+      const totalSale1w = (latestData?.currentSeasonSale1w || 0) + (latestData?.nextSeasonSale1w || 0) + (latestData?.oldSeasonSale1w || 0) + (latestData?.stagnantSale1w || 0);
+      const totalSaleNw = (latestData?.currentSeasonSale || 0) + (latestData?.nextSeasonSale || 0) + (latestData?.oldSeasonSale || 0) + (latestData?.stagnantSale || 0);
+      const totalSale = totalSale1w > 0 ? totalSale1w : totalSaleNw;
+      
       const latestSaleRatios = {
-        currentSeasonRatio: totalSale > 0 ? ((latestData?.currentSeasonSale || 0) / totalSale * 100) : 25,
-        nextSeasonRatio: totalSale > 0 ? ((latestData?.nextSeasonSale || 0) / totalSale * 100) : 25,
-        oldSeasonRatio: totalSale > 0 ? ((latestData?.oldSeasonSale || 0) / totalSale * 100) : 25,
-        stagnantRatio: totalSale > 0 ? ((latestData?.stagnantSale || 0) / totalSale * 100) : 25,
+        currentSeasonRatio: totalSale > 0 ? (((latestData?.currentSeasonSale1w || latestData?.currentSeasonSale || 0) / totalSale) * 100) : 25,
+        nextSeasonRatio: totalSale > 0 ? (((latestData?.nextSeasonSale1w || latestData?.nextSeasonSale || 0) / totalSale) * 100) : 25,
+        oldSeasonRatio: totalSale > 0 ? (((latestData?.oldSeasonSale1w || latestData?.oldSeasonSale || 0) / totalSale) * 100) : 25,
+        stagnantRatio: totalSale > 0 ? (((latestData?.stagnantSale1w || latestData?.stagnantSale || 0) / totalSale) * 100) : 25,
       };
       
       // 전년 시즌별 매출 비율
@@ -588,7 +592,7 @@ export default function WeeklyForecastInputPanel({
                 {isLoadingIncoming ? '조회 중...' : '📥 입고예정금액 불러오기'}
               </Button>
               <span className="text-xs text-slate-500">
-                (Snowflake에서 중분류별 자동 조회)
+                (입고예정금액 및 전년 동주차 데이터 조회)
               </span>
             </div>
 

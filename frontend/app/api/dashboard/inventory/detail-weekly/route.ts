@@ -117,6 +117,38 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         ${itemFilter}
       GROUP BY s.prdt_cd, s.color_cd
     ),
+    -- 당년 1주 매출 (해당 주차만, 품번+컬러별)
+    cy_sale_1w AS (
+      SELECT
+        s.prdt_cd,
+        s.color_cd,
+        SUM(COALESCE(s.sale_nml_tag_amt_cns, 0) + COALESCE(s.sale_ret_tag_amt_cns, 0)) AS sale_tag_amt,
+        SUM(COALESCE(s.sale_nml_qty_cns, 0) + COALESCE(s.sale_ret_qty_cns, 0)) AS sale_qty
+      FROM week_dates wd
+      JOIN fnf.prcs.db_scs_w s
+        ON s.end_dt = wd.cy_end_dt  -- 해당 주차만 (1주)
+      INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
+      WHERE s.brd_cd = '${brandCode}'
+        AND wd.cy_end_dt IS NOT NULL
+        ${itemFilter}
+      GROUP BY s.prdt_cd, s.color_cd
+    ),
+    -- 전년 1주 매출 (해당 주차만, 품번+컬러별)
+    py_sale_1w AS (
+      SELECT
+        s.prdt_cd,
+        s.color_cd,
+        SUM(COALESCE(s.sale_nml_tag_amt_cns, 0) + COALESCE(s.sale_ret_tag_amt_cns, 0)) AS sale_tag_amt,
+        SUM(COALESCE(s.sale_nml_qty_cns, 0) + COALESCE(s.sale_ret_qty_cns, 0)) AS sale_qty
+      FROM week_dates wd
+      JOIN fnf.prcs.db_scs_w s
+        ON s.end_dt = wd.py_end_dt  -- 전년 해당 주차만 (1주)
+      INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
+      WHERE s.brd_cd = '${brandCode}'
+        AND wd.py_end_dt IS NOT NULL
+        ${itemFilter}
+      GROUP BY s.prdt_cd, s.color_cd
+    ),
     -- 전체 재고 합계 (정체재고 threshold 계산용)
     total_stock AS (
       SELECT SUM(stock_tag_amt) AS total_stock_amt
@@ -135,10 +167,14 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         cs.stock_qty AS cy_stock_qty,
         COALESCE(ps.stock_tag_amt, 0) AS py_stock_tag_amt,
         COALESCE(ps.stock_qty, 0) AS py_stock_qty,
-        COALESCE(csa.sale_tag_amt, 0) AS cy_sale_tag_amt,
-        COALESCE(csa.sale_qty, 0) AS cy_sale_qty,
-        COALESCE(psa.sale_tag_amt, 0) AS py_sale_tag_amt,
-        COALESCE(psa.sale_qty, 0) AS py_sale_qty,
+        COALESCE(csa.sale_tag_amt, 0) AS cy_sale_4w_tag_amt,
+        COALESCE(csa.sale_qty, 0) AS cy_sale_4w_qty,
+        COALESCE(psa.sale_tag_amt, 0) AS py_sale_4w_tag_amt,
+        COALESCE(psa.sale_qty, 0) AS py_sale_4w_qty,
+        COALESCE(cs1w.sale_tag_amt, 0) AS cy_sale_1w_tag_amt,
+        COALESCE(cs1w.sale_qty, 0) AS cy_sale_1w_qty,
+        COALESCE(ps1w.sale_tag_amt, 0) AS py_sale_1w_tag_amt,
+        COALESCE(ps1w.sale_qty, 0) AS py_sale_1w_qty,
         ts.total_stock_amt,
         ts.total_stock_amt * 0.0001 AS threshold_amt,
         -- 시즌 분류 (월별과 동일한 로직)
@@ -170,6 +206,8 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
       LEFT JOIN py_stock ps ON cs.prdt_cd = ps.prdt_cd AND cs.color_cd = ps.color_cd
       LEFT JOIN cy_sale_4w csa ON cs.prdt_cd = csa.prdt_cd AND cs.color_cd = csa.color_cd
       LEFT JOIN py_sale_4w psa ON cs.prdt_cd = psa.prdt_cd AND cs.color_cd = psa.color_cd
+      LEFT JOIN cy_sale_1w cs1w ON cs.prdt_cd = cs1w.prdt_cd AND cs.color_cd = cs1w.color_cd
+      LEFT JOIN py_sale_1w ps1w ON cs.prdt_cd = ps1w.prdt_cd AND cs.color_cd = ps1w.color_cd
       CROSS JOIN total_stock ts
     ),
     -- 최종 데이터 (정체재고 판정 포함)
@@ -184,24 +222,28 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         cy_stock_qty,
         py_stock_tag_amt,
         py_stock_qty,
-        cy_sale_tag_amt,
-        cy_sale_qty,
-        py_sale_tag_amt,
-        py_sale_qty,
+        cy_sale_4w_tag_amt,
+        cy_sale_4w_qty,
+        py_sale_4w_tag_amt,
+        py_sale_4w_qty,
+        cy_sale_1w_tag_amt,
+        cy_sale_1w_qty,
+        py_sale_1w_tag_amt,
+        py_sale_1w_qty,
         threshold_amt,
         season_class,
         -- 정체재고: 과시즌(old)이면서 4주 판매 < 0.01%인 경우만
         CASE 
-          WHEN season_class = 'old' AND cy_sale_tag_amt < threshold_amt THEN 'stagnant'
+          WHEN season_class = 'old' AND cy_sale_4w_tag_amt < threshold_amt THEN 'stagnant'
           ELSE season_class
         END AS final_season_class,
         -- 재고주수 계산 (4주 매출 기준)
         CASE 
-          WHEN cy_sale_tag_amt > 0 THEN ROUND(cy_stock_tag_amt / (cy_sale_tag_amt / 4), 1)
+          WHEN cy_sale_4w_tag_amt > 0 THEN ROUND(cy_stock_tag_amt / (cy_sale_4w_tag_amt / 4), 1)
           ELSE 0
         END AS cy_weeks,
         CASE 
-          WHEN py_sale_tag_amt > 0 THEN ROUND(py_stock_tag_amt / (py_sale_tag_amt / 4), 1)
+          WHEN py_sale_4w_tag_amt > 0 THEN ROUND(py_stock_tag_amt / (py_sale_4w_tag_amt / 4), 1)
           ELSE 0
         END AS py_weeks
       FROM classified
@@ -213,19 +255,26 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
       sesn AS "SESN",
       tag_price AS "TAG_PRICE",
       final_season_class AS "SEASON_CATEGORY",
-      ROUND(cy_stock_tag_amt / 1000000, 1) AS "CY_STOCK_MILLION",
-      ROUND(py_stock_tag_amt / 1000000, 1) AS "PY_STOCK_MILLION",
+      -- 재고 (정수 반올림, weekly-chart와 동일)
+      ROUND(cy_stock_tag_amt / 1000000, 0) AS "CY_STOCK_MILLION",
+      ROUND(py_stock_tag_amt / 1000000, 0) AS "PY_STOCK_MILLION",
       cy_stock_qty AS "CY_STOCK_QTY",
       py_stock_qty AS "PY_STOCK_QTY",
-      ROUND(cy_sale_tag_amt / 1000000, 1) AS "CY_SALE_MILLION",
-      ROUND(py_sale_tag_amt / 1000000, 1) AS "PY_SALE_MILLION",
-      cy_sale_qty AS "CY_SALE_QTY",
-      py_sale_qty AS "PY_SALE_QTY",
+      -- 4주 매출 (재고주수 계산용)
+      ROUND(cy_sale_4w_tag_amt / 1000000, 0) AS "CY_SALE_4W_MILLION",
+      ROUND(py_sale_4w_tag_amt / 1000000, 0) AS "PY_SALE_4W_MILLION",
+      cy_sale_4w_qty AS "CY_SALE_4W_QTY",
+      py_sale_4w_qty AS "PY_SALE_4W_QTY",
+      -- 1주 매출 (해당 주차만)
+      ROUND(cy_sale_1w_tag_amt / 1000000, 0) AS "CY_SALE_1W_MILLION",
+      ROUND(py_sale_1w_tag_amt / 1000000, 0) AS "PY_SALE_1W_MILLION",
+      cy_sale_1w_qty AS "CY_SALE_1W_QTY",
+      py_sale_1w_qty AS "PY_SALE_1W_QTY",
       cy_weeks AS "CY_WEEKS",
       py_weeks AS "PY_WEEKS",
       ROUND(threshold_amt / 1000000, 3) AS "THRESHOLD_MILLION"
     FROM final_data
-    WHERE cy_stock_tag_amt > 0 OR cy_sale_tag_amt > 0
+    WHERE cy_stock_tag_amt > 0 OR cy_sale_4w_tag_amt > 0
     ORDER BY final_season_class, cy_stock_tag_amt DESC
   `;
 }
@@ -344,12 +393,18 @@ function formatWeeklyProductDetailData(rows: any[]): {
     // 재고 수량
     endingInventoryQty: row.CY_STOCK_QTY || 0,
     prevEndingInventoryQty: row.PY_STOCK_QTY || 0,
-    // 4주 매출 (백만원)
-    salesAmount: row.CY_SALE_MILLION || 0,
-    prevSalesAmount: row.PY_SALE_MILLION || 0,
-    // 매출 수량
-    salesQty: row.CY_SALE_QTY || 0,
-    prevSalesQty: row.PY_SALE_QTY || 0,
+    // 4주 매출 (백만원) - 재고주수 계산용
+    fourWeekSalesAmount: row.CY_SALE_4W_MILLION || 0,
+    prevFourWeekSalesAmount: row.PY_SALE_4W_MILLION || 0,
+    // 4주 매출 수량
+    fourWeekSalesQty: row.CY_SALE_4W_QTY || 0,
+    prevFourWeekSalesQty: row.PY_SALE_4W_QTY || 0,
+    // 1주 매출 (해당 주차만, 백만원)
+    oneWeekSalesAmount: row.CY_SALE_1W_MILLION || 0,
+    prevOneWeekSalesAmount: row.PY_SALE_1W_MILLION || 0,
+    // 1주 매출 수량
+    oneWeekSalesQty: row.CY_SALE_1W_QTY || 0,
+    prevOneWeekSalesQty: row.PY_SALE_1W_QTY || 0,
     // 재고주수
     weeks: row.CY_WEEKS || 0,
     prevWeeks: row.PY_WEEKS || 0,
@@ -357,8 +412,8 @@ function formatWeeklyProductDetailData(rows: any[]): {
     inventoryYOY: row.PY_STOCK_MILLION > 0 
       ? Math.round((row.CY_STOCK_MILLION / row.PY_STOCK_MILLION) * 100) 
       : 0,
-    salesYOY: row.PY_SALE_MILLION > 0 
-      ? Math.round((row.CY_SALE_MILLION / row.PY_SALE_MILLION) * 100) 
+    salesYOY: row.PY_SALE_4W_MILLION > 0 
+      ? Math.round((row.CY_SALE_4W_MILLION / row.PY_SALE_4W_MILLION) * 100) 
       : 0,
   }));
 

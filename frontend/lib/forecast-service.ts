@@ -448,6 +448,16 @@ export function combineActualAndForecast(
       incomingAmount: (forecast as any).incomingAmount || 0, // 입고예정금액 (백만원)
       weekKey: (forecast as any).weekKey || '',
       weekLabel: (forecast as any).weekLabel || '',
+      // 시즌별 1주 매출 (예측 구간) - N주 매출에서 비율로 계산
+      currentSeasonSale1w: forecast.currentSeasonSale || 0,
+      nextSeasonSale1w: forecast.nextSeasonSale || 0,
+      oldSeasonSale1w: forecast.oldSeasonSale || 0,
+      stagnantSale1w: forecast.stagnantSale || 0,
+      // 시즌별 1주 매출 비율
+      currentSeasonSale1wRatio: forecast.currentSeasonSaleRatio || 0,
+      nextSeasonSale1wRatio: forecast.nextSeasonSaleRatio || 0,
+      oldSeasonSale1wRatio: forecast.oldSeasonSaleRatio || 0,
+      stagnantSale1wRatio: forecast.stagnantSaleRatio || 0,
     });
   });
   

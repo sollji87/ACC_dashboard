@@ -1786,8 +1786,8 @@ export default function BrandDashboard() {
                                 item.month === selectedMonth
                                   ? 'bg-slate-800 text-white rounded-md'
                                   : item.isActual === false 
-                                    ? 'bg-blue-50 text-blue-700' 
-                                    : 'text-slate-600'
+                                  ? 'bg-blue-50 text-blue-700' 
+                                  : 'text-slate-600'
                               }`}
                             >
                               {item.month.slice(2).replace('-', '.')}
