@@ -191,5 +191,24 @@ export interface CombinedChartData {
   nextSeasonSaleRatio?: number;
   oldSeasonSaleRatio?: number;
   stagnantSaleRatio?: number;
+  // 주차별 대시보드용 추가 필드
+  saleAmount1w?: number; // 1주 매출액 (백만원)
+  saleAmount?: number; // 주간 매출 (차트용)
+  prevSaleAmount?: number; // 전년 동주차 매출 (차트용)
+  incomingAmount?: number; // 입고예정금액 (백만원)
+  currentSeasonSale1w?: number; // 당시즌 1주 매출
+  nextSeasonSale1w?: number; // 차기시즌 1주 매출
+  oldSeasonSale1w?: number; // 과시즌 1주 매출
+  stagnantSale1w?: number; // 정체재고 1주 매출
+  currentSeasonSale1wRatio?: number; // 당시즌 1주 매출 비율
+  nextSeasonSale1wRatio?: number; // 차기시즌 1주 매출 비율
+  oldSeasonSale1wRatio?: number; // 과시즌 1주 매출 비율
+  stagnantSale1wRatio?: number; // 정체재고 1주 매출 비율
+  previousCurrentSeasonSale1w?: number; // 전년 당시즌 1주 매출
+  previousNextSeasonSale1w?: number; // 전년 차기시즌 1주 매출
+  previousOldSeasonSale1w?: number; // 전년 과시즌 1주 매출
+  previousStagnantSale1w?: number; // 전년 정체재고 1주 매출
+  weekKey?: string; // 주차 키 (YYYY-WNN)
+  weekLabel?: string; // 주차 라벨 (NN주차)
 }
 
