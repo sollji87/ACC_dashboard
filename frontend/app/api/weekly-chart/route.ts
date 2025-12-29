@@ -189,10 +189,16 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         week_num,
         SUM(stock_tag_amt) AS total_stock,
         SUM(stock_qty) AS total_qty,
+        -- 시즌별 금액
         SUM(CASE WHEN season_class = 'current' THEN stock_tag_amt ELSE 0 END) AS current_season_stock,
         SUM(CASE WHEN season_class = 'next' THEN stock_tag_amt ELSE 0 END) AS next_season_stock,
         SUM(CASE WHEN season_class = 'old' AND is_stagnant = 0 THEN stock_tag_amt ELSE 0 END) AS old_season_stock,
         SUM(CASE WHEN is_stagnant = 1 THEN stock_tag_amt ELSE 0 END) AS stagnant_stock,
+        -- 시즌별 수량
+        SUM(CASE WHEN season_class = 'current' THEN stock_qty ELSE 0 END) AS current_season_qty,
+        SUM(CASE WHEN season_class = 'next' THEN stock_qty ELSE 0 END) AS next_season_qty,
+        SUM(CASE WHEN season_class = 'old' AND is_stagnant = 0 THEN stock_qty ELSE 0 END) AS old_season_qty,
+        SUM(CASE WHEN is_stagnant = 1 THEN stock_qty ELSE 0 END) AS stagnant_qty,
         -- 정체재고 매출 (품번+컬러별 4주 매출 합산)
         SUM(CASE WHEN is_stagnant = 1 THEN sale_amt_for_stagnant ELSE 0 END) AS stagnant_sale
       FROM cy_with_stagnant
@@ -315,10 +321,16 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         week_num,
         SUM(stock_tag_amt) AS total_stock,
         SUM(stock_qty) AS total_qty,
+        -- 시즌별 금액
         SUM(CASE WHEN season_class = 'current' THEN stock_tag_amt ELSE 0 END) AS current_season_stock,
         SUM(CASE WHEN season_class = 'next' THEN stock_tag_amt ELSE 0 END) AS next_season_stock,
         SUM(CASE WHEN season_class = 'old' AND is_stagnant = 0 THEN stock_tag_amt ELSE 0 END) AS old_season_stock,
         SUM(CASE WHEN is_stagnant = 1 THEN stock_tag_amt ELSE 0 END) AS stagnant_stock,
+        -- 시즌별 수량
+        SUM(CASE WHEN season_class = 'current' THEN stock_qty ELSE 0 END) AS current_season_qty,
+        SUM(CASE WHEN season_class = 'next' THEN stock_qty ELSE 0 END) AS next_season_qty,
+        SUM(CASE WHEN season_class = 'old' AND is_stagnant = 0 THEN stock_qty ELSE 0 END) AS old_season_qty,
+        SUM(CASE WHEN is_stagnant = 1 THEN stock_qty ELSE 0 END) AS stagnant_qty,
         -- 전년 정체재고 매출
         SUM(CASE WHEN is_stagnant = 1 THEN sale_amt_for_stagnant ELSE 0 END) AS stagnant_sale
       FROM py_with_stagnant
@@ -576,6 +588,16 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       ROUND(COALESCE(ps.next_season_stock, 0) / 1000000, 0) AS py_next_season,
       ROUND(COALESCE(ps.old_season_stock, 0) / 1000000, 0) AS py_old_season,
       ROUND(COALESCE(ps.stagnant_stock, 0) / 1000000, 0) AS py_stagnant,
+      -- 시즌별 당년 재고 수량
+      cs.current_season_qty AS cy_current_season_qty,
+      cs.next_season_qty AS cy_next_season_qty,
+      cs.old_season_qty AS cy_old_season_qty,
+      cs.stagnant_qty AS cy_stagnant_qty,
+      -- 시즌별 전년 재고 수량
+      COALESCE(ps.current_season_qty, 0) AS py_current_season_qty,
+      COALESCE(ps.next_season_qty, 0) AS py_next_season_qty,
+      COALESCE(ps.old_season_qty, 0) AS py_old_season_qty,
+      COALESCE(ps.stagnant_qty, 0) AS py_stagnant_qty,
       -- 시즌별 당년 매출 (백만원)
       ROUND(COALESCE(csa.current_season_sale, 0) / 1000000, 0) AS cy_current_season_sale,
       ROUND(COALESCE(csa.next_season_sale, 0) / 1000000, 0) AS cy_next_season_sale,
@@ -742,6 +764,16 @@ export async function GET(request: NextRequest) {
         previousNextSeasonStock: pyNext,
         previousOldSeasonStock: pyOld,
         previousStagnantStock: pyStagnant,
+        // 시즌별 당년 재고 수량
+        currentSeasonStockQty: row.CY_CURRENT_SEASON_QTY || 0,
+        nextSeasonStockQty: row.CY_NEXT_SEASON_QTY || 0,
+        oldSeasonStockQty: row.CY_OLD_SEASON_QTY || 0,
+        stagnantStockQty: row.CY_STAGNANT_QTY || 0,
+        // 시즌별 전년 재고 수량
+        previousCurrentSeasonStockQty: row.PY_CURRENT_SEASON_QTY || 0,
+        previousNextSeasonStockQty: row.PY_NEXT_SEASON_QTY || 0,
+        previousOldSeasonStockQty: row.PY_OLD_SEASON_QTY || 0,
+        previousStagnantStockQty: row.PY_STAGNANT_QTY || 0,
         // 시즌별 비율 (%)
         currentSeasonRatio: cyCurrentRatio,
         nextSeasonRatio: cyNextRatio,
