@@ -470,7 +470,7 @@ export default function ForecastInputPanel({
                 {isLoadingIncoming ? '조회 중...' : '📥 입고예정금액 불러오기'}
               </Button>
               <span className="text-xs text-slate-500">
-                (Snowflake에서 중분류별 자동 조회)
+                (입고예정금액 조회)
               </span>
             </div>
 

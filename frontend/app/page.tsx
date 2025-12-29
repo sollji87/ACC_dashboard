@@ -4,25 +4,48 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { BRANDS } from '@/lib/brands';
-import { getRealData, getSampleData, getMonthOptions, BrandDashboardData } from '@/lib/data';
-import { BarChart3, ChevronDown, AlertTriangle } from 'lucide-react';
+import { getRealData, getSampleData, BrandDashboardData } from '@/lib/data';
+import { BarChart3, AlertTriangle } from 'lucide-react';
+import DataSourceToggle from '@/components/DataSourceToggle';
+import { DataSourceType, getCurrentWeekValue } from '@/lib/week-utils';
+
+// 주차별 브랜드 데이터 타입
+interface WeeklyBrandData {
+  brandId: string;
+  brandCode: string;
+  weekKey: string;
+  asofDate: string;
+  shoes: { current: number; previous: number };
+  hat: { current: number; previous: number };
+  bag: { current: number; previous: number };
+  other: { current: number; previous: number };
+  shoesDetail?: { stockCurrent: number; stockPrevious: number; saleCurrent: number; salePrevious: number; weeks: number; previousWeeks: number };
+  hatDetail?: { stockCurrent: number; stockPrevious: number; saleCurrent: number; salePrevious: number; weeks: number; previousWeeks: number };
+  bagDetail?: { stockCurrent: number; stockPrevious: number; saleCurrent: number; salePrevious: number; weeks: number; previousWeeks: number };
+  otherDetail?: { stockCurrent: number; stockPrevious: number; saleCurrent: number; salePrevious: number; weeks: number; previousWeeks: number };
+  totalCurrent: number;
+  totalPrevious: number;
+  totalSaleCurrent?: number;
+  totalSalePrevious?: number;
+  totalWeeks?: number;
+  totalPreviousWeeks?: number;
+  inventoryYOY: number;
+  salesYOY?: number;
+}
 
 export default function Home() {
+  const [dataSource, setDataSource] = useState<DataSourceType>('monthly');
   const [selectedMonth, setSelectedMonth] = useState('2025-11');
+  const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekValue());
   const [dashboardData, setDashboardData] = useState<BrandDashboardData[]>([]);
+  const [weeklyDashboardData, setWeeklyDashboardData] = useState<WeeklyBrandData[]>([]); // 주차별 데이터
   const [isLoading, setIsLoading] = useState(true);
-  const monthOptions = getMonthOptions();
 
-  // 실제 데이터 로드
+  // 월결산 데이터 로드
   useEffect(() => {
+    if (dataSource !== 'monthly') return;
+    
     async function loadData() {
       setIsLoading(true);
       try {
@@ -43,11 +66,42 @@ export default function Home() {
       }
     }
     loadData();
-  }, [selectedMonth]);
+  }, [selectedMonth, dataSource]);
 
-  // 브랜드별 데이터 매핑
+  // 주차별(실시간) 데이터 로드
+  useEffect(() => {
+    if (dataSource !== 'weekly') return;
+    
+    async function loadWeeklyData() {
+      setIsLoading(true);
+      try {
+        const response = await fetch(`/api/dashboard-weekly?week=${selectedWeek}`);
+        if (response.ok) {
+          const result = await response.json();
+          console.log('[Main Page] Weekly data loaded:', result.data);
+          setWeeklyDashboardData(result.data || []);
+        } else {
+          console.error('[Main Page] Weekly API error:', response.status);
+          setWeeklyDashboardData([]);
+        }
+      } catch (error) {
+        console.error('[Main Page] Error loading weekly data:', error);
+        setWeeklyDashboardData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadWeeklyData();
+  }, [selectedWeek, dataSource]);
+
+  // 브랜드별 데이터 매핑 (월결산)
   const brandDataMap = new Map(
     dashboardData.map((data) => [data.brandId, data])
+  );
+
+  // 브랜드별 주차 데이터 매핑 (실시간)
+  const weeklyDataMap = new Map(
+    weeklyDashboardData.map((data) => [data.brandId, data])
   );
 
   // 재고주수가 가장 크게 악화된 두 브랜드 찾기 및 원인 분석
@@ -130,18 +184,14 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[180px] border-slate-300 shadow-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <DataSourceToggle
+                dataSource={dataSource}
+                onDataSourceChange={setDataSource}
+                selectedMonth={selectedMonth}
+                onMonthChange={setSelectedMonth}
+                selectedWeek={selectedWeek}
+                onWeekChange={setSelectedWeek}
+              />
               <span className="text-sm font-medium text-slate-600 bg-slate-100 px-3 py-1.5 rounded-full">5개 브랜드</span>
             </div>
           </div>
@@ -154,13 +204,298 @@ export default function Home() {
         <div className="mb-6">
           <h2 className="text-lg font-bold text-slate-900 mb-1">브랜드 선택</h2>
           <p className="text-sm text-slate-600">
-            분석할 브랜드를 클릭하여 상세 대시보드로 이동합니다
+            분석할 브랜드를 클릭하여 상세 대시보드로 이동합니다. 재고주수는 최근 4주 매출 기준입니다.
           </p>
         </div>
 
         {/* 브랜드 카드 그리드 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {BRANDS.map((brand) => {
+            // 실시간 모드일 때
+            if (dataSource === 'weekly') {
+              const weeklyData = weeklyDataMap.get(brand.id);
+              
+              if (!weeklyData) {
+                return (
+                  <Card key={brand.id} className="group relative overflow-hidden border-2 border-slate-200 bg-white shadow-sm flex flex-col h-full">
+                    <CardHeader className="pb-4">
+                      <div className="flex items-center gap-3 mb-4">
+                        <div className={`h-14 w-14 rounded-2xl ${brand.logoColor} flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-lg`}>
+                          {brand.code}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-xl font-bold text-slate-900 truncate">{brand.name}</CardTitle>
+                        </div>
+                      </div>
+                      <div className="py-6 text-center bg-slate-50 rounded-xl">
+                        <p className="text-sm text-slate-500">데이터 없음</p>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                );
+              }
+
+              // 재고주수 계산
+              const currentWeeks = weeklyData.totalWeeks || 0;
+              const previousWeeks = weeklyData.totalPreviousWeeks || 0;
+              const weeksDiff = currentWeeks - previousWeeks;
+              const isImproved = weeksDiff < 0;
+              
+              return (
+                <Card
+                  key={brand.id}
+                  className="group relative overflow-hidden border border-slate-200 bg-white shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full hover:-translate-y-1 hover:border-slate-300"
+                >
+                  <CardHeader className="pb-4">
+                    {/* 브랜드 헤더 */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div
+                        className={`h-14 w-14 rounded-2xl ${brand.logoColor} flex items-center justify-center text-white font-bold text-xl flex-shrink-0 shadow-lg group-hover:scale-110 transition-transform duration-300`}
+                      >
+                        {brand.code}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-xl font-bold text-slate-900 truncate">
+                          {brand.name}
+                        </CardTitle>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded whitespace-nowrap">
+                            매출 {weeklyData.salesYOY || 0}%
+                          </span>
+                          <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded whitespace-nowrap">
+                            재고 {weeklyData.inventoryYOY || 0}%
+                          </span>
+                          <span className="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-0.5 rounded whitespace-nowrap">
+                            주차별
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 전체 재고주수 요약 */}
+                    <div className="mt-4 mb-2 py-3 px-0 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 rounded-2xl border-2 border-blue-200/50 shadow-sm">
+                      <div className="flex items-center justify-between gap-0 px-1">
+                        <div className="flex-1 text-center min-w-0">
+                          <p className="text-xs font-medium text-slate-600 mb-1">당년</p>
+                          <div className="flex items-baseline justify-center gap-1">
+                            <span className="font-bold text-blue-600 leading-none" style={{ fontSize: '20px' }}>
+                              {currentWeeks.toFixed(1)}
+                            </span>
+                            <span className="text-sm font-medium text-slate-500">주</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex-1 text-center border-l border-r border-slate-300/50 min-w-0">
+                          <p className="text-xs font-medium text-slate-600 mb-1">전년</p>
+                          <div className="flex items-baseline justify-center gap-1">
+                            <span className="font-bold text-slate-700 leading-none" style={{ fontSize: '20px' }}>
+                              {previousWeeks.toFixed(1)}
+                            </span>
+                            <span className="text-sm font-medium text-slate-500">주</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex-1 text-center min-w-0">
+                          <p className="text-xs font-medium text-slate-600 mb-1">
+                            {isImproved ? '개선' : '악화'}
+                          </p>
+                          <div className="flex items-baseline justify-center gap-1">
+                            <span className={`font-bold leading-none ${isImproved ? 'text-emerald-600' : 'text-red-600'}`} style={{ fontSize: '20px' }}>
+                              {isImproved ? '-' : '+'}{Math.abs(weeksDiff).toFixed(1)}
+                            </span>
+                            <span className="text-sm font-medium text-slate-500">주</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 핵심 지표 */}
+                    <div className="grid grid-cols-2 gap-4 pt-2">
+                      <div className="relative bg-gradient-to-br from-blue-50 to-blue-100/50 p-3 rounded-xl border-2 border-blue-200/50">
+                        <p className="text-xs font-medium text-slate-600 mb-1">ACC 기말재고</p>
+                        <p className="text-xl font-bold text-slate-900">
+                          {formatNumber(weeklyData.totalCurrent)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">백만원</p>
+                      </div>
+                      <div className="relative bg-gradient-to-br from-purple-50 to-purple-100/50 p-3 rounded-xl border-2 border-purple-200/50">
+                        <p className="text-xs font-medium text-slate-600 mb-1">ACC 택판매액</p>
+                        <p className="text-xl font-bold text-slate-900">
+                          {formatNumber(weeklyData.totalSaleCurrent || 0)}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">백만원</p>
+                      </div>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="pt-0 pb-4 flex-1 flex flex-col bg-white">
+                    {/* ACC 재고 상세보기 */}
+                    <div className="mb-4 flex-1 -mt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-1 w-1 rounded-full bg-blue-500"></div>
+                        <h3 className="text-sm font-bold text-slate-900">
+                          ACC 재고 상세보기 <span className="text-xs font-normal text-slate-500">(백만원, 주)</span>
+                        </h3>
+                      </div>
+                      
+                      {/* 헤더 */}
+                      <div className="grid grid-cols-4 gap-2 mb-2 px-3 py-2 bg-slate-100 rounded-lg">
+                        <div className="text-xs font-semibold text-slate-700"></div>
+                        <div className="text-xs font-semibold text-slate-700 text-center">당년</div>
+                        <div className="text-xs font-semibold text-slate-700 text-center">전년</div>
+                        <div className="text-xs font-semibold text-slate-700 text-center">YOY</div>
+                      </div>
+                      
+                      {/* 데이터 행 */}
+                      <div className="space-y-1.5">
+                        {/* 전체 합계 행 */}
+                        <div className="grid grid-cols-4 gap-2 py-2 px-3 rounded-lg bg-blue-50 border-2 border-blue-200 items-center">
+                          <div className="text-sm font-bold text-blue-900">전체</div>
+                          <div className="text-xs text-center font-bold text-blue-900">
+                            <div>{formatNumber(weeklyData.totalCurrent)}</div>
+                            <div className="text-blue-700">{currentWeeks.toFixed(1)}주</div>
+                          </div>
+                          <div className="text-xs text-center text-blue-800">
+                            <div>{formatNumber(weeklyData.totalPrevious)}</div>
+                            <div className="text-blue-700">{previousWeeks.toFixed(1)}주</div>
+                          </div>
+                          <div className="text-xs text-center font-bold text-blue-900">
+                            <div>{weeklyData.inventoryYOY}%</div>
+                            <div className={`text-xs font-semibold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {isImproved ? '-' : '+'}{Math.abs(weeksDiff).toFixed(1)}주
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* 신발 */}
+                        {(() => {
+                          const detail = weeklyData.shoesDetail;
+                          const weeks = detail?.weeks || 0;
+                          const prevWeeks = detail?.previousWeeks || 0;
+                          const diff = weeks - prevWeeks;
+                          const worse = diff > 0;
+                          return (
+                            <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${worse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                              <div className="text-sm font-semibold text-slate-900">신발</div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{formatNumber(weeklyData.shoes?.current || 0)}</div>
+                                <div className="text-slate-500">{weeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center text-slate-600">
+                                <div>{formatNumber(weeklyData.shoes?.previous || 0)}</div>
+                                <div className="text-slate-500">{prevWeeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{weeklyData.shoes?.previous ? Math.round((weeklyData.shoes.current / weeklyData.shoes.previous) * 100) : 0}%</div>
+                                <div className={`font-semibold ${diff < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(diff) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
+                                  {diff < 0 ? '-' : '+'}{Math.abs(diff).toFixed(1)}주
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        
+                        {/* 모자 */}
+                        {(() => {
+                          const detail = weeklyData.hatDetail;
+                          const weeks = detail?.weeks || 0;
+                          const prevWeeks = detail?.previousWeeks || 0;
+                          const diff = weeks - prevWeeks;
+                          const worse = diff > 0;
+                          return (
+                            <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${worse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                              <div className="text-sm font-semibold text-slate-900">모자</div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{formatNumber(weeklyData.hat?.current || 0)}</div>
+                                <div className="text-slate-500">{weeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center text-slate-600">
+                                <div>{formatNumber(weeklyData.hat?.previous || 0)}</div>
+                                <div className="text-slate-500">{prevWeeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{weeklyData.hat?.previous ? Math.round((weeklyData.hat.current / weeklyData.hat.previous) * 100) : 0}%</div>
+                                <div className={`font-semibold ${diff < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(diff) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
+                                  {diff < 0 ? '-' : '+'}{Math.abs(diff).toFixed(1)}주
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        
+                        {/* 가방 */}
+                        {(() => {
+                          const detail = weeklyData.bagDetail;
+                          const weeks = detail?.weeks || 0;
+                          const prevWeeks = detail?.previousWeeks || 0;
+                          const diff = weeks - prevWeeks;
+                          const worse = diff > 0;
+                          return (
+                            <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${worse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                              <div className="text-sm font-semibold text-slate-900">가방</div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{formatNumber(weeklyData.bag?.current || 0)}</div>
+                                <div className="text-slate-500">{weeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center text-slate-600">
+                                <div>{formatNumber(weeklyData.bag?.previous || 0)}</div>
+                                <div className="text-slate-500">{prevWeeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{weeklyData.bag?.previous ? Math.round((weeklyData.bag.current / weeklyData.bag.previous) * 100) : 0}%</div>
+                                <div className={`font-semibold ${diff < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(diff) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
+                                  {diff < 0 ? '-' : '+'}{Math.abs(diff).toFixed(1)}주
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                        
+                        {/* 기타ACC */}
+                        {(() => {
+                          const detail = weeklyData.otherDetail;
+                          const weeks = detail?.weeks || 0;
+                          const prevWeeks = detail?.previousWeeks || 0;
+                          const diff = weeks - prevWeeks;
+                          const worse = diff > 0;
+                          return (
+                            <div className={`grid grid-cols-4 gap-2 py-2 px-3 rounded-lg transition-colors items-center ${worse ? 'bg-red-50 hover:bg-red-100' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                              <div className="text-sm font-semibold text-slate-900">기타ACC</div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{formatNumber(weeklyData.other?.current || 0)}</div>
+                                <div className="text-slate-500">{weeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center text-slate-600">
+                                <div>{formatNumber(weeklyData.other?.previous || 0)}</div>
+                                <div className="text-slate-500">{prevWeeks.toFixed(1)}주</div>
+                              </div>
+                              <div className="text-xs text-center font-semibold text-slate-900">
+                                <div>{weeklyData.other?.previous ? Math.round((weeklyData.other.current / weeklyData.other.previous) * 100) : 0}%</div>
+                                <div className={`font-semibold ${diff < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(diff) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
+                                  {diff < 0 ? '-' : '+'}{Math.abs(diff).toFixed(1)}주
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+
+                    {/* 전체 대시보드 보기 버튼 */}
+                    <Link 
+                      href={`/dashboard-weekly/${brand.id}?week=${selectedWeek}`} 
+                      className="mt-auto"
+                    >
+                      <Button className={`w-full ${brand.logoColor} hover:opacity-90 text-white shadow-md hover:shadow-lg transition-all`} size="sm">
+                        주차별 대시보드 보기
+                      </Button>
+                    </Link>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            // 월결산 모드일 때 (기존 코드)
             const data = brandDataMap.get(brand.id);
             if (!data) {
               return null;
@@ -363,7 +698,7 @@ export default function Home() {
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{Math.round((data.accInventoryDetail.shoes.current / data.accInventoryDetail.shoes.previous) * 100)}%</div>
-                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <div className={`font-semibold ${(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
                             {(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.shoes.weeks - data.accInventoryDetail.shoes.previousWeeks).toFixed(1)}주
                           </div>
                         </div>
@@ -389,7 +724,7 @@ export default function Home() {
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{Math.round((data.accInventoryDetail.hat.current / data.accInventoryDetail.hat.previous) * 100)}%</div>
-                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <div className={`font-semibold ${(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
                             {(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.hat.weeks - data.accInventoryDetail.hat.previousWeeks).toFixed(1)}주
                           </div>
                         </div>
@@ -415,7 +750,7 @@ export default function Home() {
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{Math.round((data.accInventoryDetail.bag.current / data.accInventoryDetail.bag.previous) * 100)}%</div>
-                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <div className={`font-semibold ${(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
                             {(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.bag.weeks - data.accInventoryDetail.bag.previousWeeks).toFixed(1)}주
                           </div>
                         </div>
@@ -441,7 +776,7 @@ export default function Home() {
                         </div>
                         <div className="text-xs text-center font-semibold text-slate-900">
                           <div>{Math.round((data.accInventoryDetail.other.current / data.accInventoryDetail.other.previous) * 100)}%</div>
-                          <div className={`text-xs font-semibold ${(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <div className={`font-semibold ${(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks) < 0 ? 'text-emerald-600' : 'text-red-600'} ${Math.abs(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks) >= 100 ? 'text-[9px]' : 'text-xs'}`}>
                             {(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks) < 0 ? '-' : '+'}{Math.abs(data.accInventoryDetail.other.weeks - data.accInventoryDetail.other.previousWeeks).toFixed(1)}주
                           </div>
                         </div>
@@ -452,7 +787,10 @@ export default function Home() {
                   </div>
 
                   {/* 전체 대시보드 보기 버튼 */}
-                  <Link href={`/dashboard/${brand.id}?month=${selectedMonth}`} className="mt-auto">
+                  <Link 
+                    href={`/dashboard/${brand.id}?month=${selectedMonth}`} 
+                    className="mt-auto"
+                  >
                     <Button className={`w-full ${brand.logoColor} hover:opacity-90 text-white shadow-md hover:shadow-lg transition-all`} size="sm">
                       전체 대시보드 보기
                     </Button>

@@ -209,6 +209,83 @@ export async function fetchProductDetails(
 }
 
 /**
+ * 주차별 품번별 재고 데이터 (스타일&컬러 기준)
+ */
+export interface WeeklyProductDetailData {
+  productCode: string;
+  colorCode: string;
+  productName: string;
+  season: string;
+  seasonCategory: 'current' | 'next' | 'old' | 'stagnant';
+  tagPrice: number | null;
+  endingInventory: number; // 기말재고 (백만원)
+  prevEndingInventory: number;
+  endingInventoryQty: number; // 기말재고 수량
+  prevEndingInventoryQty: number;
+  // 4주 매출 (재고주수 계산용, 백만원)
+  fourWeekSalesAmount: number;
+  prevFourWeekSalesAmount: number;
+  fourWeekSalesQty: number;
+  prevFourWeekSalesQty: number;
+  // 1주 매출 (해당 주차만, 백만원)
+  oneWeekSalesAmount: number;
+  prevOneWeekSalesAmount: number;
+  oneWeekSalesQty: number;
+  prevOneWeekSalesQty: number;
+  weeks: number; // 재고주수
+  prevWeeks: number;
+  inventoryYOY: number;
+  salesYOY: number;
+}
+
+export interface WeeklyProductDetailResponse {
+  products: WeeklyProductDetailData[];
+  thresholdAmt: number; // 정체재고 판별 기준금액 (원 단위)
+}
+
+/**
+ * 주차별 품번별 재고 데이터 조회 (스타일&컬러 기준)
+ */
+export async function fetchWeeklyProductDetails(
+  brandCode: string,
+  itemStd: string,
+  week: string
+): Promise<WeeklyProductDetailResponse> {
+  try {
+    const apiUrl = `/api/dashboard/inventory/detail-weekly?brandCode=${brandCode}&itemStd=${encodeURIComponent(itemStd)}&week=${week}`;
+    
+    console.log(`🔍 주차별 품번별 데이터 조회 시작:`, apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📡 응답 상태 (주차별 품번별):`, response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API 오류 응답 (주차별 품번별):`, errorText);
+      throw new Error(`API 호출 실패: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'API 오류');
+    }
+
+    console.log(`✅ 주차별 품번별 데이터 조회 성공 (${brandCode} ${itemStd}, ${week}): ${result.data.products.length}개`);
+    return result.data;
+  } catch (error) {
+    console.error('❌ 주차별 품번별 재고 데이터 조회 실패:', error);
+    throw error;
+  }
+}
+
+/**
  * 입고예정금액 조회 (중분류별)
  */
 export interface IncomingAmountData {
@@ -254,6 +331,64 @@ export async function fetchIncomingAmounts(
     return result.data;
   } catch (error) {
     console.error('❌ 입고예정금액 조회 실패:', error);
+    console.error('❌ 에러 상세:', {
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error;
+  }
+}
+
+/**
+ * 주차별 입고예정금액 조회 (중분류별)
+ */
+export interface WeeklyIncomingAmountData {
+  weekKey: string;   // '2025-W51' 형식
+  weekLabel: string; // '51주차'
+  year: number;
+  weekNum: number;
+  shoes: number;     // 신발 (원 단위)
+  hat: number;       // 모자 (원 단위)
+  bag: number;       // 가방 (원 단위)
+  other: number;     // 기타ACC (원 단위)
+  total: number;     // 합계 (원 단위)
+}
+
+export async function fetchWeeklyIncomingAmounts(
+  brandCode: string,
+  startWeek: string,
+  endWeek: string
+): Promise<WeeklyIncomingAmountData[]> {
+  try {
+    const apiUrl = `/api/dashboard/incoming-amounts-weekly?brandCode=${brandCode}&startWeek=${startWeek}&endWeek=${endWeek}`;
+    
+    console.log(`🔍 주차별 입고예정금액 조회 시작:`, apiUrl);
+    
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    console.log(`📡 응답 상태 (주차별 입고예정금액):`, response.status, response.statusText);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API 오류 응답 (주차별 입고예정금액):`, errorText);
+      throw new Error(`API 호출 실패: ${response.status} - ${errorText}`);
+    }
+
+    const result = await response.json();
+
+    if (!result.success) {
+      throw new Error(result.error || 'API 오류');
+    }
+
+    console.log(`✅ 주차별 입고예정금액 조회 성공 (${brandCode}, ${startWeek} ~ ${endWeek})`);
+    return result.data;
+  } catch (error) {
+    console.error('❌ 주차별 입고예정금액 조회 실패:', error);
     console.error('❌ 에러 상세:', {
       message: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
