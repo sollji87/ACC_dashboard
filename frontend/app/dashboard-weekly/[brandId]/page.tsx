@@ -298,7 +298,7 @@ const CustomRatioLabel = ({ x, y, width, height, value }: any) => {
 };
 
 // 재고택금액 차트용 커스텀 툴팁
-const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
+const CustomInventoryTooltip = ({ active, payload, label, mode, weeksForSale = 4 }: any) => {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
@@ -343,10 +343,19 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
     // 전체 재고주수
     const stockWeeks = data.stockWeeks || 0;
     
-    // 시즌별 재고주수 계산 (시즌별 재고택금액 / (시즌별 매출액 / 30 * 7))
+    // 예측 구간인지 확인 (예측 구간은 1주 매출을 사용하므로 weeksForSale = 1)
+    const isForecast = !data.isActual;
+    const effectiveWeeksForSale = isForecast ? 1 : weeksForSale;
+    
+    // 시즌별 재고주수 계산 (시즌별 재고택금액 / (시즌별 N주 매출액 / N주))
+    // 예측 구간: 시즌별 매출은 이미 1주 매출이므로 weeksForSale = 1
+    // 실적 구간: 시즌별 매출은 N주 매출이므로 weeksForSale 사용
     const calculateSeasonWeeks = (stock: number, sale: number) => {
-      if (sale > 0 && (sale / 30 * 7) > 0) {
-        return Math.round((stock / (sale / 30 * 7)) * 10) / 10;
+      if (sale > 0 && effectiveWeeksForSale > 0) {
+        const weeklySale = sale / effectiveWeeksForSale; // 주간 평균 매출
+        if (weeklySale > 0) {
+          return Math.round((stock / weeklySale) * 10) / 10;
+        }
       }
       return 0;
     };
@@ -356,7 +365,7 @@ const CustomInventoryTooltip = ({ active, payload, label, mode }: any) => {
     const nextSeasonWeeks = calculateSeasonWeeks(data.nextSeasonStock || 0, data.nextSeasonSale || 0);
     const stagnantWeeks = calculateSeasonWeeks(data.stagnantStock || 0, data.stagnantSale || 0);
     
-    // 전년 시즌별 재고주수 계산
+    // 전년 시즌별 재고주수 계산 (전년 데이터는 항상 N주 매출)
     const prevOldSeasonWeeks = calculateSeasonWeeks(data.previousOldSeasonStock || 0, data.previousOldSeasonSale || 0);
     const prevCurrentSeasonWeeks = calculateSeasonWeeks(data.previousCurrentSeasonStock || 0, data.previousCurrentSeasonSale || 0);
     const prevNextSeasonWeeks = calculateSeasonWeeks(data.previousNextSeasonStock || 0, data.previousNextSeasonSale || 0);
@@ -1882,7 +1891,7 @@ export default function BrandDashboard() {
                             hide={true}
                           />
                           <Tooltip 
-                            content={(props: any) => <CustomInventoryTooltip {...props} mode={inventoryChartMode} />}
+                            content={(props: any) => <CustomInventoryTooltip {...props} mode={inventoryChartMode} weeksForSale={weeksType === '4weeks' ? 4 : weeksType === '8weeks' ? 8 : 12} />}
                             contentStyle={{ 
                               backgroundColor: '#ffffff',
                               background: '#ffffff',
