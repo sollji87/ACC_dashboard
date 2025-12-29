@@ -655,6 +655,32 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // SQL 인젝션 방지: brandId 검증 (허용된 값만)
+  const validBrandIds = ['mlb', 'mlb-kids', 'discovery', 'duvetica', 'sergio-tacchini'];
+  if (!validBrandIds.includes(brandId)) {
+    return NextResponse.json(
+      { error: '유효하지 않은 브랜드입니다.' },
+      { status: 400 }
+    );
+  }
+
+  // SQL 인젝션 방지: weeksForSale 검증 (1-52 범위)
+  if (isNaN(weeksForSale) || weeksForSale < 1 || weeksForSale > 52) {
+    return NextResponse.json(
+      { error: '유효하지 않은 주차 범위입니다. (1-52)' },
+      { status: 400 }
+    );
+  }
+
+  // SQL 인젝션 방지: selectedItem 검증 (허용된 값만)
+  const validItems = ['all', 'shoes', 'hat', 'bag', 'other'];
+  if (!validItems.includes(selectedItem)) {
+    return NextResponse.json(
+      { error: '유효하지 않은 아이템 분류입니다.' },
+      { status: 400 }
+    );
+  }
+
   const brandCode = BRAND_CODE_MAP[brandId];
   if (!brandCode) {
     return NextResponse.json(
@@ -817,7 +843,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[weekly-chart] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch weekly chart data', details: String(error) },
+      { error: '주간 차트 데이터 조회 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }

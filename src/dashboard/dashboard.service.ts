@@ -21,11 +21,42 @@ export class DashboardService {
   constructor(private readonly snowflakeService: SnowflakeService) {}
 
   /**
+   * 브랜드 코드 검증
+   */
+  private validateBrandCode(brandCode: string): void {
+    if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
+      throw new Error('유효하지 않은 브랜드 코드입니다.');
+    }
+  }
+
+  /**
+   * YYYYMM 형식 검증
+   */
+  private validateYyyymm(yyyymm: string): void {
+    if (!/^\d{6}$/.test(yyyymm)) {
+      throw new Error('유효하지 않은 월 형식입니다. (YYYYMM 형식 필요)');
+    }
+  }
+
+  /**
+   * YYYY-MM 형식 검증
+   */
+  private validateYyyyMm(month: string): void {
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      throw new Error('유효하지 않은 월 형식입니다. (YYYY-MM 형식 필요)');
+    }
+  }
+
+  /**
    * 브랜드별 악세사리 재고주수 조회
    * @param brandCode 브랜드 코드 (M, MK, DX, DV, ST)
    * @param yyyymm 조회 월 (예: 202510)
    */
   async getInventoryWeeks(brandCode: string, yyyymm: string): Promise<any> {
+    // 입력값 검증 (SQL 인젝션 방지)
+    this.validateBrandCode(brandCode);
+    this.validateYyyymm(yyyymm);
+
     try {
       this.logger.log(`Snowflake 연결 시작 (브랜드: ${brandCode}, 월: ${yyyymm})`);
       await this.snowflakeService.connect();
@@ -296,6 +327,11 @@ order by seq
     startMonth: string,
     endMonth: string,
   ): Promise<any> {
+    // 입력값 검증 (SQL 인젝션 방지)
+    this.validateBrandCode(brandCode);
+    this.validateYyyyMm(startMonth);
+    this.validateYyyyMm(endMonth);
+
     try {
       this.logger.log(
         `입고예정금액 조회 시작 (브랜드: ${brandCode}, 기간: ${startMonth} ~ ${endMonth})`,

@@ -185,6 +185,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'week parameter is required' }, { status: 400 });
     }
 
+    // SQL 인젝션 방지: weekKey 검증 (YYYY-WXX 형식, 예: 2025-W01)
+    if (!/^\d{4}-W\d{2}$/.test(weekKey)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 주차 형식입니다. (YYYY-WXX 형식 필요)' },
+        { status: 400 }
+      );
+    }
+
+    // SQL 인젝션 방지: brandCode 검증 (제공된 경우 1-2자리 영문만 허용)
+    if (brandCode && !/^[A-Za-z]{1,2}$/.test(brandCode)) {
+      return NextResponse.json(
+        { error: '유효하지 않은 브랜드 코드입니다.' },
+        { status: 400 }
+      );
+    }
+
     // 최적화된 쿼리 - 모든 브랜드를 한 번에 조회
     const query = buildOptimizedWeeklyQuery(weekKey);
     console.log('[Weekly API] Executing optimized query for week:', weekKey);
@@ -211,7 +227,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('[Weekly API] Error:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch weekly data', details: String(error) },
+      { error: '주간 데이터 조회 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }
