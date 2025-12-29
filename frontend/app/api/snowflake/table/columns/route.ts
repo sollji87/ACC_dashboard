@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
     try {
       // 컬럼 정보 조회
       const query = `
-        SELECT 
+        SELECT
           column_name,
           data_type,
           character_maximum_length,
@@ -42,13 +42,14 @@ export async function GET(request: NextRequest) {
           column_default,
           comment
         FROM information_schema.columns
-        WHERE table_catalog = '${database}'
-          AND table_schema = '${schema}'
-          AND table_name = '${table}'
+        WHERE table_catalog = ?
+          AND table_schema = ?
+          AND table_name = ?
         ORDER BY ordinal_position
       `;
 
-      const columns = await executeQuery(query, connection);
+      const params = [database, schema, table];
+      const columns = await executeQuery(query, params, connection);
       
       console.log(`✅ 컬럼 정보 조회 성공: ${columns.length}개 컬럼`);
 

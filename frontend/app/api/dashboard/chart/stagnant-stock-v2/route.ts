@@ -63,57 +63,57 @@ export async function GET(request: NextRequest) {
       const query = `
 -- 1. ACC 품번 정보
 WITH item AS (
-    SELECT 
+    SELECT
         prdt_cd,
         sesn,
-        CASE 
+        CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = ?
 ),
 
 -- 2. 기준금액 계산: 브랜드별 ACC 전체 재고 택금액 * 0.01%
 total_stock AS (
-    SELECT 
+    SELECT
         SUM(a.end_stock_tag_amt) as total_stock_amt,
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
 ),
 
 -- 3. 품번별 재고택금액
 stock_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         b.sesn,
         b.item_std,
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
 
 -- 4. 품번별 당월 판매택금액
 sale_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         SUM(a.tag_sale_amt) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.pst_yyyymm = ?
       AND c.chnl_cd <> '9'  -- 수출 제외
     GROUP BY a.prdt_cd
 ),
@@ -138,9 +138,9 @@ stagnant_products AS (
 )
 
 -- 6. 결과 집계
-SELECT 
-    '${brandCode}' as brand_code,
-    '${yyyymm}' as yyyymm,
+SELECT
+    ? as brand_code,
+    ? as yyyymm,
     (SELECT total_stock_amt FROM total_stock) as total_stock_amt,
     (SELECT threshold_amt FROM total_stock) as threshold_amt,
     SUM(CASE WHEN stock_status = '정체재고' THEN end_stock_tag_amt ELSE 0 END) as stagnant_stock_amt,
@@ -150,60 +150,62 @@ SELECT
 FROM stagnant_products
 `;
 
+      const params = [brandCode, brandCode, yyyymm, brandCode, yyyymm, brandCode, yyyymm, brandCode, yyyymm];
+
       console.log('📊 쿼리 실행 중...');
-      const summaryResult = await executeQuery(query, connection);
+      const summaryResult = await executeQuery(query, params, connection);
       
       // 상세 품번 목록 조회 (상위 20개)
       const detailQuery = `
 WITH item AS (
-    SELECT 
+    SELECT
         prdt_cd,
         sesn,
-        CASE 
+        CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = ?
 ),
 total_stock AS (
-    SELECT 
+    SELECT
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
 ),
 stock_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         b.sesn,
         b.item_std,
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
 sale_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         SUM(a.tag_sale_amt) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.pst_yyyymm = ?
       AND c.chnl_cd <> '9'
     GROUP BY a.prdt_cd
 )
-SELECT 
+SELECT
     s.prdt_cd,
     s.sesn,
     s.item_std,
@@ -219,59 +221,60 @@ ORDER BY s.end_stock_tag_amt DESC
 LIMIT 20
 `;
 
-      const detailResult = await executeQuery(detailQuery, connection);
+      const detailParams = [brandCode, brandCode, yyyymm, brandCode, yyyymm, brandCode, yyyymm];
+      const detailResult = await executeQuery(detailQuery, detailParams, connection);
 
       // 아이템별 집계 조회
       const itemSummaryQuery = `
 WITH item AS (
-    SELECT 
+    SELECT
         prdt_cd,
         sesn,
-        CASE 
+        CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = ?
 ),
 total_stock AS (
-    SELECT 
+    SELECT
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
 ),
 stock_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         b.sesn,
         b.item_std,
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
 sale_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         SUM(a.tag_sale_amt) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.pst_yyyymm = ?
       AND c.chnl_cd <> '9'
     GROUP BY a.prdt_cd
 )
-SELECT 
+SELECT
     s.item_std,
     COUNT(*) as product_count,
     SUM(s.end_stock_tag_amt) as stagnant_stock_amt
@@ -284,7 +287,8 @@ GROUP BY s.item_std
 ORDER BY stagnant_stock_amt DESC
 `;
 
-      const itemSummaryResult = await executeQuery(itemSummaryQuery, connection);
+      const itemSummaryParams = [brandCode, brandCode, yyyymm, brandCode, yyyymm, brandCode, yyyymm];
+      const itemSummaryResult = await executeQuery(itemSummaryQuery, itemSummaryParams, connection);
 
       const summary = summaryResult[0] || {};
       

@@ -46,7 +46,7 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = ?
 )
 -- item_seq: 아이템 정렬 순서
 , item_seq as (
@@ -65,8 +65,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.item_std
     union all
     -- 전년
@@ -77,8 +77,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.item_std
 )
 -- c6m_sale: 최근 1개월 TAG 매출 (재고주수 계산용)
@@ -95,8 +95,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 최근 1개월 기준 
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 최근 1개월 기준
     group by b.item_std
     union all
     -- 전년
@@ -111,8 +111,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 최근 1개월 기준
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?  -- 최근 1개월 기준
     group by b.item_std
 )
 -- act_sale: 실판매출 (ACC 판매액 표시용)
@@ -129,8 +129,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?
     group by b.item_std
     union all
     -- 전년
@@ -145,15 +145,15 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?
     group by b.item_std
 )
 select '전체' as item_std
-        , round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
+        , round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end)
             / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
             , 1) as cy_stock_week_cnt
-        , round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
+        , round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end)
             / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
             , 1) as py_stock_week_cnt
         , sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) as cy_end_stock_tag_amt
@@ -163,7 +163,7 @@ select '전체' as item_std
         , sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) as cy_tag_sale_amt
         , sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) as py_tag_sale_amt
         , 0 as seq
-from cm_stock a 
+from cm_stock a
 join c6m_sale b
 on a.item_std = b.item_std
 and a.div = b.div
@@ -172,10 +172,10 @@ on a.item_std = d.item_std
 and a.div = d.div
 union all
 select a.item_std
-        , round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
+        , round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end)
             / nullif(sum( (case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
             , 1) as cy_stock_week_cnt
-        , round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
+        , round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end)
             / nullif(sum( (case when a.div='py' then b.c6m_tag_sale_amt else 0 end) / 1 / 30 * 7),0)
             , 1) as py_stock_week_cnt
         , sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) as cy_end_stock_tag_amt
@@ -185,7 +185,7 @@ select a.item_std
         , sum(case when a.div='cy' then b.c6m_tag_sale_amt else 0 end) as cy_tag_sale_amt
         , sum(case when a.div='py' then b.c6m_tag_sale_amt else 0 end) as py_tag_sale_amt
         , c.seq
-from cm_stock a 
+from cm_stock a
 join c6m_sale b
 on a.item_std = b.item_std
 and a.div = b.div
@@ -199,7 +199,18 @@ order by seq
       `;
 
       this.logger.log(`쿼리 실행 시작`);
-      const rows = await this.snowflakeService.executeQuery<InventoryWeeksData>(query);
+      const rows = await this.snowflakeService.executeQuery<InventoryWeeksData>(
+        query,
+        [
+          brandCode, // item CTE
+          brandCode, yyyymm, // cm_stock 당해
+          brandCode, pyYyyymm, // cm_stock 전년
+          brandCode, yyyymm, yyyymm, // c6m_sale 당해
+          brandCode, pyYyyymm, pyYyyymm, // c6m_sale 전년
+          brandCode, yyyymm, yyyymm, // act_sale 당해
+          brandCode, pyYyyymm, pyYyyymm, // act_sale 전년
+        ]
+      );
       this.logger.log(`쿼리 실행 완료: ${rows.length}개 행 반환`);
       
       await this.snowflakeService.disconnect();

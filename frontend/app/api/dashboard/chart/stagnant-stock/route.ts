@@ -50,7 +50,7 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = ?
     and prdt_hrrc1_nm = 'ACC'
 )
 -- 최근 1개월 판매 이력이 있는 품번
@@ -60,14 +60,14 @@ with item as (
      left join sap_fnf.mst_shop c
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
-    where a.brd_cd = '${brandCode}'
-    and a.pst_yyyymm >= '${months[0]}'
+    where a.brd_cd = ?
+    and a.pst_yyyymm >= ?
     and a.tag_sale_amt > 0
     and c.chnl_cd <> '9' -- 수출제외
 )
 -- 25년 10월 재고 데이터
 , stock_data as (
-    select 
+    select
         a.prdt_cd,
         b.item_std,
         b.sesn,
@@ -75,12 +75,12 @@ with item as (
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by a.prdt_cd, b.item_std, b.sesn
 )
 -- 정체재고 (판매 이력이 없는 품번)
-select 
+select
     s.prdt_cd,
     s.item_std,
     s.sesn,
@@ -92,7 +92,8 @@ where sp.prdt_cd is null -- 판매 이력이 없는 품번만
 order by s.end_stock_tag_amt desc
       `;
 
-      const rows = await executeQuery(query, connection);
+      const params = [brandCode, brandCode, months[0], brandCode, yyyymm];
+      const rows = await executeQuery(query, params, connection);
 
       // 집계 데이터
       const totalStagnantStock = rows.reduce((sum: number, row: any) => sum + (Number(row.END_STOCK_TAG_AMT) || 0), 0);

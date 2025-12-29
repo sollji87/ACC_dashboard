@@ -47,7 +47,7 @@ with base as (
     left join sap_fnf.mst_prdt d
       on a.prdt_cd = d.prdt_cd
     where 1 = 1
-      and a.brd_cd = '${brandCode}'
+      and a.brd_cd = ?
       and d.vtext2 in ('Acc_etc', 'Bag', 'Headwear', 'Shoes')
       and a.PO_CLS_NM in (
             '내수/원화/세금계산서/DDP',
@@ -55,10 +55,10 @@ with base as (
             '한국수입/외화/FOB'
       )
       and a.indc_dt_cnfm is not null
-      and to_char(a.indc_dt_cnfm, 'YYYYMM') between '${startYyyymm}' and '${endYyyymm}'
+      and to_char(a.indc_dt_cnfm, 'YYYYMM') between ? and ?
 )
 select  brd_cd                                as "브랜드"
-      , case 
+      , case
           when mid_cat = 'Shoes' then '신발'
           when mid_cat = 'Headwear' then '모자'
           when mid_cat = 'Bag' then '가방'
@@ -72,7 +72,8 @@ group by brd_cd, mid_cat, indc_yyyymm
 order by brd_cd, indc_yyyymm, mid_cat
 `;
 
-        const rows = await executeQuery(sqlText, connection);
+        const params = [brandCode, startYyyymm, endYyyymm];
+        const rows = await executeQuery(sqlText, params, connection);
         
         // 월별 중분류별로 집계
         const monthlyData = aggregateIncomingAmountsByMonth(rows);

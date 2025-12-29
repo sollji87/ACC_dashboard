@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 
     try {
       // 차트 쿼리 실행
-      const chartQuery = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd);
-      const chartRows = await executeQuery(chartQuery, connection);
+      const { query: chartQuery, params: chartParams } = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd);
+      const chartRows = await executeQuery(chartQuery, chartParams, connection);
       
       // 202510 데이터 찾기
       const targetMonth = chartRows.find((r: any) => {
@@ -52,13 +52,13 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = ?
     and prdt_hrrc1_nm = 'ACC'
     and case when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Headwear' then '모자'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Shoes'   then '신발'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Bag'     then '가방'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Acc_etc' then '기타ACC'
-        end = '${itemStd}'
+        end = ?
 )
 -- 당월 재고
 , cm_stock as (
@@ -67,16 +67,16 @@ with item as (
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     union all
     select 'py' as div
             , sum(end_stock_tag_amt) as cm_end_stock_tag_amt
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
 )
 -- 최근 4개월 매출 (당년)
 , last4m_sale_cy as (
@@ -88,9 +88,9 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9'
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm >= to_char(add_months(to_date('${yyyymm}', 'YYYYMM'), -3), 'YYYYMM')
-        and a.pst_yyyymm <= '${yyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm >= to_char(add_months(to_date(?, 'YYYYMM'), -3), 'YYYYMM')
+        and a.pst_yyyymm <= ?
 )
 -- 최근 4개월 매출 (전년)
 , last4m_sale_py as (
@@ -102,11 +102,11 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9'
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm >= to_char(add_months(to_date('${pyYyyymm}', 'YYYYMM'), -3), 'YYYYMM')
-        and a.pst_yyyymm <= '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm >= to_char(add_months(to_date(?, 'YYYYMM'), -3), 'YYYYMM')
+        and a.pst_yyyymm <= ?
 )
-select 
+select
     'cy' as div,
     cs.cm_end_stock_tag_amt as ending_inventory,
     s.tag_sale_amt / 4.0 / 30 * 7 as avg_weekly_sale,
@@ -115,7 +115,7 @@ from cm_stock cs
 cross join last4m_sale_cy s
 where cs.div = 'cy'
 union all
-select 
+select
     'py' as div,
     cs.cm_end_stock_tag_amt as ending_inventory,
     s.tag_sale_amt / 4.0 / 30 * 7 as avg_weekly_sale,
@@ -125,7 +125,8 @@ cross join last4m_sale_py s
 where cs.div = 'py'
       `;
 
-      const directRows = await executeQuery(directQuery, connection);
+      const directParams = [brandCode, itemStd, brandCode, yyyymm, brandCode, pyYyyymm, brandCode, yyyymm, yyyymm, brandCode, pyYyyymm, pyYyyymm];
+      const directRows = await executeQuery(directQuery, directParams, connection);
 
       return NextResponse.json({
         success: true,

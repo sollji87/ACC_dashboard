@@ -36,8 +36,8 @@ export async function GET(request: NextRequest) {
         BRAND_CODES.map(async (brandCode) => {
           try {
             console.log(`브랜드 ${brandCode} 조회 시작`);
-            const query = buildInventoryQuery(brandCode, yyyymm);
-            const rows = await executeQuery(query, connection);
+            const { query, params } = buildInventoryQuery(brandCode, yyyymm);
+            const rows = await executeQuery(query, params, connection);
             const formattedData = formatInventoryData(rows, brandCode, yyyymm);
             console.log(`브랜드 ${brandCode} 조회 성공`);
             return formattedData;

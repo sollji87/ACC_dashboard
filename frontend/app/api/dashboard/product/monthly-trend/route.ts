@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
         months.push(`${y}${m.toString().padStart(2, '0')}`);
       }
 
-      const monthsCondition = months.map(m => `'${m}'`).join(',');
+      // Create placeholders for IN clause
+      const monthsPlaceholders = months.map(() => '?').join(',');
 
       const query = `
         WITH monthly_stock AS (
@@ -72,9 +73,9 @@ export async function GET(request: NextRequest) {
             a.yyyymm,
             SUM(a.end_stock_tag_amt) as end_stock_tag_amt
           FROM sap_fnf.dw_ivtr_shop_prdt_m a
-          WHERE a.brd_cd = '${brandCode}'
-            AND a.prdt_cd = '${productCode}'
-            AND a.yyyymm IN (${monthsCondition})
+          WHERE a.brd_cd = ?
+            AND a.prdt_cd = ?
+            AND a.yyyymm IN (${monthsPlaceholders})
           GROUP BY a.yyyymm
         ),
         monthly_sale AS (
@@ -86,9 +87,9 @@ export async function GET(request: NextRequest) {
           LEFT JOIN sap_fnf.mst_shop c
             ON a.brd_cd = c.brd_cd
             AND a.shop_cd = c.sap_shop_cd
-          WHERE a.brd_cd = '${brandCode}'
-            AND a.prdt_cd = '${productCode}'
-            AND a.pst_yyyymm IN (${monthsCondition})
+          WHERE a.brd_cd = ?
+            AND a.prdt_cd = ?
+            AND a.pst_yyyymm IN (${monthsPlaceholders})
             AND c.chnl_cd <> '9'
           GROUP BY a.pst_yyyymm
         )
@@ -102,7 +103,10 @@ export async function GET(request: NextRequest) {
         ORDER BY s.yyyymm
       `;
 
-      const rows = await executeQuery(query, connection);
+      // Parameters: brandCode, productCode, ...months (for monthly_stock), brandCode, productCode, ...months (for monthly_sale)
+      const params = [brandCode, productCode, ...months, brandCode, productCode, ...months];
+
+      const rows = await executeQuery(query, params, connection);
 
       // 데이터 포맷팅
       const formattedData = rows.map((row: any) => {

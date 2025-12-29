@@ -39,16 +39,16 @@ function parseYearMonth(yyyymm: string): { year: number; month: number } {
 /**
  * 재고주수 쿼리 생성 (당월 + 누적 데이터 포함)
  */
-export function buildInventoryQuery(brandCode: string, yyyymm: string): string {
+export function buildInventoryQuery(brandCode: string, yyyymm: string): { query: string; params: any[] } {
   const pyYyyymm = getPreviousYearMonth(yyyymm);
   const { year, month } = parseYearMonth(yyyymm);
   const pyYear = year - 1;
-  
+
   // 누적 범위: 1월부터 해당월까지
   const cyAccumStart = `${year}01`;
   const pyAccumStart = `${pyYear}01`;
 
-  return `
+  const query = `
 -- item: item 기준
 with item as (
     select prdt_cd
@@ -60,7 +60,7 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = ?
 )
 -- item_seq: 아이템 정렬 순서
 , item_seq as (
@@ -79,8 +79,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.item_std
     union all
     -- 전년
@@ -91,8 +91,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.item_std
 )
 -- c6m_sale: 당월 TAG 매출 (재고주수 계산용 - 당월)
@@ -110,8 +110,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월 기준 
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 당월 기준
     group by b.item_std
     union all
     -- 전년
@@ -127,8 +127,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 당월 기준
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?  -- 당월 기준
     group by b.item_std
 )
 -- c6m_sale_accumulated: 누적 TAG 매출 (재고주수 계산용 - 누적, 1월부터 해당월까지)
@@ -146,8 +146,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 1월부터 해당월까지 누적
     group by b.item_std
     union all
     -- 전년
@@ -163,8 +163,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}'  -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?  -- 1월부터 해당월까지 누적
     group by b.item_std
 )
 -- act_sale: 당월 실판매출 (ACC 판매액 표시용 - 당월)
@@ -182,8 +182,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 당월
     group by b.item_std
     union all
     -- 전년
@@ -199,8 +199,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}' -- 당월
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 당월
     group by b.item_std
 )
 -- act_sale_accumulated: 누적 실판매출 (ACC 판매액 표시용 - 누적, 1월부터 해당월까지)
@@ -218,8 +218,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 1월부터 해당월까지 누적
     group by b.item_std
     union all
     -- 전년
@@ -235,8 +235,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         and c.chnl_cd <> '8' -- 사입제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}' -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 1월부터 해당월까지 누적
     group by b.item_std
 )
 -- 당월 데이터
@@ -273,14 +273,14 @@ union all
 select '전체' as item_std
         , 'accumulated' as period_type
         , case when sum(case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) > 0
-            then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
+            then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end)
+                / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ? / 30 * 7),0)
                 , 1)
             else null
           end as cy_stock_week_cnt
         , case when sum(case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) > 0
-            then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
+            then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end)
+                / nullif(sum( (case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) / ? / 30 * 7),0)
                 , 1)
             else null
           end as py_stock_week_cnt
@@ -336,14 +336,14 @@ union all
 select a.item_std
         , 'accumulated' as period_type
         , case when sum(case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) > 0
-            then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
+            then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end)
+                / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ? / 30 * 7),0)
                 , 1)
             else null
           end as cy_stock_week_cnt
         , case when sum(case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) > 0
-            then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
+            then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end)
+                / nullif(sum( (case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) / ? / 30 * 7),0)
                 , 1)
             else null
           end as py_stock_week_cnt
@@ -366,6 +366,24 @@ join item_seq c
 group by a.item_std, c.seq
 order by period_type, seq
   `;
+
+  const params = [
+    brandCode,                    // 1. item CTE
+    brandCode, yyyymm,           // 2-3. cm_stock 당해
+    brandCode, pyYyyymm,         // 4-5. cm_stock 전년
+    brandCode, yyyymm, yyyymm,   // 6-8. c6m_sale 당해
+    brandCode, pyYyyymm, pyYyyymm, // 9-11. c6m_sale 전년
+    brandCode, cyAccumStart, yyyymm, // 12-14. c6m_sale_accumulated 당해
+    brandCode, pyAccumStart, pyYyyymm, // 15-17. c6m_sale_accumulated 전년
+    brandCode, yyyymm, yyyymm,   // 18-20. act_sale 당해
+    brandCode, pyYyyymm, pyYyyymm, // 21-23. act_sale 전년
+    brandCode, cyAccumStart, yyyymm, // 24-26. act_sale_accumulated 당해
+    brandCode, pyAccumStart, pyYyyymm, // 27-29. act_sale_accumulated 전년
+    month, month,                // 30-31. 누적 전체
+    month, month                 // 32-33. 누적 아이템별
+  ];
+
+  return { query, params };
 }
 
 /**
@@ -545,19 +563,19 @@ export function getItemNameFromKey(itemKey: string): string {
 /**
  * 품번별 재고주수 쿼리 생성 (당월 + 누적 데이터 포함 + 정체재고 판별)
  */
-export function buildProductDetailQuery(brandCode: string, itemStd: string, yyyymm: string, excludePurchase: boolean = false): string {
+export function buildProductDetailQuery(brandCode: string, itemStd: string, yyyymm: string, excludePurchase: boolean = false): { query: string; params: any[] } {
   const pyYyyymm = getPreviousYearMonth(yyyymm);
   const { year, month } = parseYearMonth(yyyymm);
   const pyYear = year - 1;
-  
+
   // 누적 범위: 1월부터 해당월까지
   const cyAccumStart = `${year}01`;
   const pyAccumStart = `${pyYear}01`;
-  
+
   // 사입제외 조건 (chnl_cd = '8' 이 사입)
   const excludePurchaseCondition = excludePurchase ? "AND c.chnl_cd <> '8'" : '';
 
-  return `
+  const query = `
 -- item: item 기준 (특정 아이템만)
 with item as (
     select prdt_cd
@@ -571,22 +589,22 @@ with item as (
             , zzsellpr as tag_price
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = ?
     and case when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Headwear' then '모자'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Shoes'   then '신발'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Bag'     then '가방'
              when prdt_hrrc1_nm = 'ACC' and prdt_hrrc2_nm = 'Acc_etc' then '기타ACC'
-        end = '${itemStd}'
+        end = ?
 )
 -- 해당 아이템 재고 기준금액 (정체재고 판별용 - 차트와 동일하게 해당 아이템 기준)
 , total_item_stock as (
-    select 
+    select
         sum(a.end_stock_tag_amt) as total_stock_amt,
         sum(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     from sap_fnf.dw_ivtr_shop_prdt_m a
     join item b on a.prdt_cd = b.prdt_cd
-    where a.brd_cd = '${brandCode}'
-      and a.yyyymm = '${yyyymm}'
+    where a.brd_cd = ?
+      and a.yyyymm = ?
       and b.item_std IS NOT NULL
 )
 -- cm_stock: 당월 재고 (품번별)
@@ -601,8 +619,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.prdt_cd, b.product_name
     union all
     -- 전년
@@ -615,8 +633,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.prdt_cd, b.product_name
 )
 -- c6m_sale: 당월 TAG 매출 (재고주수 계산용 - 당월, 품번별)
@@ -634,8 +652,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월 기준 
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 당월 기준
     group by b.prdt_cd
     union all
     -- 전년
@@ -651,8 +669,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 당월 기준
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?  -- 당월 기준
     group by b.prdt_cd
 )
 -- c6m_sale_accumulated: 누적 TAG 매출 (재고주수 계산용 - 누적, 1월부터 해당월까지, 품번별)
@@ -670,8 +688,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 1월부터 해당월까지 누적
     group by b.prdt_cd
     union all
     -- 전년
@@ -687,8 +705,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}'  -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?  -- 1월부터 해당월까지 누적
     group by b.prdt_cd
 )
 -- act_sale: 당월 실판매출 (ACC 판매액 표시용 - 당월, 품번별)
@@ -706,8 +724,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 당월
     group by b.prdt_cd
     union all
     -- 전년
@@ -723,8 +741,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}' -- 당월
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 당월
     group by b.prdt_cd
 )
 -- act_sale_accumulated: 누적 실판매출 (ACC 판매액 표시용 - 누적, 1월부터 해당월까지, 품번별)
@@ -742,8 +760,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 1월부터 해당월까지 누적
     group by b.prdt_cd
     union all
     -- 전년
@@ -759,8 +777,8 @@ with item as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchaseCondition}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}' -- 1월부터 해당월까지 누적
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ? -- 1월부터 해당월까지 누적
     group by b.prdt_cd
 )
 -- 당월 데이터 - 품번별 (시즌 정보 + 정체재고 판별)
@@ -808,14 +826,14 @@ select a.prdt_cd
         , 'accumulated' as period_type
         , max(e.tag_price) as tag_price
         , case when sum(case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) > 0
-            then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
+            then round( sum(case when a.div='cy' then a.cm_end_stock_tag_amt else 0 end)
+                / nullif(sum( (case when a.div='cy' then b_acc.c6m_tag_sale_amt else 0 end) / ? / 30 * 7),0)
                 , 1)
             else null
           end as cy_stock_week_cnt
         , case when sum(case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) > 0
-            then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end) 
-                / nullif(sum( (case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) / ${month} / 30 * 7),0)
+            then round( sum(case when a.div='py' then a.cm_end_stock_tag_amt else 0 end)
+                / nullif(sum( (case when a.div='py' then b_acc.c6m_tag_sale_amt else 0 end) / ? / 30 * 7),0)
                 , 1)
             else null
           end as py_stock_week_cnt
@@ -840,6 +858,24 @@ and a.div = d_acc.div
 group by a.prdt_cd
 order by period_type, cy_end_stock_tag_amt desc
   `;
+
+  const params = [
+    brandCode, itemStd,           // 1-2. item CTE
+    brandCode, yyyymm,            // 3-4. total_item_stock
+    brandCode, yyyymm,            // 5-6. cm_stock 당해
+    brandCode, pyYyyymm,          // 7-8. cm_stock 전년
+    brandCode, yyyymm, yyyymm,    // 9-11. c6m_sale 당해
+    brandCode, pyYyyymm, pyYyyymm, // 12-14. c6m_sale 전년
+    brandCode, cyAccumStart, yyyymm, // 15-17. c6m_sale_accumulated 당해
+    brandCode, pyAccumStart, pyYyyymm, // 18-20. c6m_sale_accumulated 전년
+    brandCode, yyyymm, yyyymm,    // 21-23. act_sale 당해
+    brandCode, pyYyyymm, pyYyyymm, // 24-26. act_sale 전년
+    brandCode, cyAccumStart, yyyymm, // 27-29. act_sale_accumulated 당해
+    brandCode, pyAccumStart, pyYyyymm, // 30-32. act_sale_accumulated 전년
+    month, month                  // 33-34. 누적 데이터
+  ];
+
+  return { query, params };
 }
 
 /**

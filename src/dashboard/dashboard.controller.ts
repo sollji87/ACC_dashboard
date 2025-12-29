@@ -1,5 +1,6 @@
 import { Controller, Get, Query, Logger } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
+import { Public } from '../auth/public.decorator';
 
 @Controller('api/dashboard')
 export class DashboardController {
@@ -12,6 +13,7 @@ export class DashboardController {
   /**
    * 헬스 체크
    */
+  @Public()
   @Get('health')
   health() {
     return { status: 'ok', message: 'Dashboard API is running' };

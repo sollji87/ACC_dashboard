@@ -54,8 +54,8 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
-    and prdt_cd = '${productCode}'
+    and brd_cd = ?
+    and prdt_cd = ?
 )
 -- cm_stock: 당월 재고 (품번별)
 , cm_stock as (
@@ -67,8 +67,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.prdt_cd
     union all
     -- 전년
@@ -79,8 +79,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.yyyymm = ?
     group by b.prdt_cd
 )
 -- c6m_sale: 당월 TAG 매출 (재고주수 계산용)
@@ -97,8 +97,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?
     group by b.prdt_cd
     union all
     -- 전년
@@ -113,8 +113,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?
     group by b.prdt_cd
 )
 -- act_sale: 당월 실판매출
@@ -131,8 +131,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?
     group by b.prdt_cd
     union all
     -- 전년
@@ -147,12 +147,12 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm between ? and ?
     group by b.prdt_cd
 )
 -- 최종 조회: 원본 데이터 + 계산된 재고주수
-select 
+select
     max(i.prdt_cd) as product_code
     , max(i.product_name) as product_name
     , max(i.item_std) as item_std
@@ -168,7 +168,7 @@ left join c6m_sale b on i.prdt_cd = b.prdt_cd and b.div = 'cy'
 left join act_sale d on i.prdt_cd = d.prdt_cd and d.div = 'cy'
 group by i.prdt_cd
 union all
-select 
+select
     max(i.prdt_cd) as product_code
     , max(i.product_name) as product_name
     , max(i.item_std) as item_std
@@ -185,8 +185,10 @@ left join act_sale d on i.prdt_cd = d.prdt_cd and d.div = 'py'
 group by i.prdt_cd
       `;
 
+      const params = [brandCode, productCode, brandCode, yyyymm, brandCode, pyYyyymm, brandCode, yyyymm, yyyymm, brandCode, pyYyyymm, pyYyyymm, brandCode, yyyymm, yyyymm, brandCode, pyYyyymm, pyYyyymm];
+
       console.log(`📝 실행 쿼리:`, query);
-      const rows = await executeQuery(query, connection);
+      const rows = await executeQuery(query, params, connection);
 
       console.log(`✅ 품번 ${productCode} 디버깅 데이터 조회 성공:`, rows);
 

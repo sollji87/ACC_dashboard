@@ -37,9 +37,11 @@ export class SnowflakeService {
   }
 
   /**
-   * SQL 쿼리 실행
+   * SQL 쿼리 실행 (파라미터화된 쿼리 지원)
+   * @param sqlText SQL 쿼리 문자열 (? 플레이스홀더 사용)
+   * @param binds 바인딩할 파라미터 배열
    */
-  async executeQuery<T = any>(sqlText: string): Promise<T[]> {
+  async executeQuery<T = any>(sqlText: string, binds?: any[]): Promise<T[]> {
     return new Promise((resolve, reject) => {
       if (!this.connection) {
         reject(new Error('Snowflake 연결이 없습니다. 먼저 connect()를 호출하세요.'));
@@ -48,6 +50,7 @@ export class SnowflakeService {
 
       this.connection.execute({
         sqlText,
+        binds: binds || [],
         complete: (err, stmt, rows) => {
           if (err) {
             this.logger.error('쿼리 실행 실패:', err);
@@ -105,7 +108,7 @@ with base as (
       on a.prdt_cd = d.prdt_cd
     where 1 = 1
       -- 브랜드 필터
-      and a.brd_cd = '${brandCode}'
+      and a.brd_cd = ?
       -- 중분류 필터 (ACC만)
       and d.vtext2 in ('Acc_etc', 'Bag', 'Headwear', 'Shoes')
       -- PO_CLS_NM 필터
@@ -117,10 +120,10 @@ with base as (
       -- 합의납기일 존재
       and a.indc_dt_cnfm is not null
       -- 합의납기연월이 범위 내에 있는 경우만
-      and to_char(a.indc_dt_cnfm, 'YYYYMM') between '${startYyyymm}' and '${endYyyymm}'
+      and to_char(a.indc_dt_cnfm, 'YYYYMM') between ? and ?
 )
 select  brd_cd                                as "브랜드"
-      , case 
+      , case
           when mid_cat = 'Shoes' then '신발'
           when mid_cat = 'Headwear' then '모자'
           when mid_cat = 'Bag' then '가방'
@@ -135,7 +138,7 @@ order by brd_cd, indc_yyyymm, mid_cat
 ;
     `;
 
-    return this.executeQuery(sqlText);
+    return this.executeQuery(sqlText, [brandCode, startYyyymm, endYyyymm]);
   }
 
   /**

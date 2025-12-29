@@ -69,10 +69,14 @@ export async function connectToSnowflake(): Promise<snowflake.Connection> {
 }
 
 /**
- * SQL 쿼리 실행
+ * SQL 쿼리 실행 (파라미터화된 쿼리 지원)
+ * @param sqlText SQL 쿼리 문자열 (? 플레이스홀더 사용)
+ * @param binds 바인딩할 파라미터 배열
+ * @param conn 사용할 연결 (선택사항)
  */
 export async function executeQuery<T = any>(
   sqlText: string,
+  binds?: any[],
   conn?: snowflake.Connection
 ): Promise<T[]> {
   let connectionToUse = conn || connection;
@@ -87,6 +91,7 @@ export async function executeQuery<T = any>(
     try {
       connectionToUse!.execute({
         sqlText,
+        binds: binds || [],
         complete: (err, stmt, rows) => {
           if (err) {
             console.error('쿼리 실행 실패:', err);

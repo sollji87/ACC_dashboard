@@ -155,57 +155,57 @@ export async function GET(request: NextRequest) {
       // 시즌별 재고 계산 쿼리
       const query = `
 WITH item AS (
-    SELECT 
+    SELECT
         prdt_cd,
         sesn,
-        CASE 
+        CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = ?
 ),
 
 -- 전체 ACC 재고
 total_stock AS (
-    SELECT 
+    SELECT
         SUM(a.end_stock_tag_amt) as total_stock_amt,
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
 ),
 
 -- 품번별 재고
 stock_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         b.sesn,
         b.item_std,
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.yyyymm = ?
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
 
 -- 품번별 당월 판매택금액
 sale_by_product AS (
-    SELECT 
+    SELECT
         a.prdt_cd,
         SUM(a.tag_sale_amt) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = ?
+      AND a.pst_yyyymm = ?
       AND c.chnl_cd <> '9'
     GROUP BY a.prdt_cd
 ),
@@ -251,8 +251,10 @@ ORDER BY
     END
 `;
 
+      const params = [brandCode, brandCode, yyyymm, brandCode, yyyymm, brandCode, yyyymm];
+
       console.log('📊 쿼리 실행 중...');
-      const result = await executeQuery(query, connection);
+      const result = await executeQuery(query, params, connection);
       
       // 전체 재고 조회
       const totalQuery = `
@@ -260,20 +262,21 @@ SELECT SUM(a.end_stock_tag_amt) as total_amt
 FROM sap_fnf.dw_ivtr_shop_prdt_m a
 JOIN (
     SELECT prdt_cd,
-        CASE 
+        CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = ?
 ) b ON a.prdt_cd = b.prdt_cd
-WHERE a.brd_cd = '${brandCode}'
-  AND a.yyyymm = '${yyyymm}'
+WHERE a.brd_cd = ?
+  AND a.yyyymm = ?
   AND b.item_std IS NOT NULL
 `;
-      const totalResult = await executeQuery(totalQuery, connection);
+      const totalParams = [brandCode, brandCode, yyyymm];
+      const totalResult = await executeQuery(totalQuery, totalParams, connection);
       const totalAmt = Number(totalResult[0]?.TOTAL_AMT || 0);
 
       console.log(`✅ 시즌별 재고 조회 성공`);

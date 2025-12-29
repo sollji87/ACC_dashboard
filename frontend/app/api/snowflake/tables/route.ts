@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     try {
       // 테이블 목록 조회
       let query = `
-        SELECT 
+        SELECT
           table_catalog as database_name,
           table_schema as schema_name,
           table_name,
@@ -34,16 +34,20 @@ export async function GET(request: NextRequest) {
         WHERE table_type = 'BASE TABLE'
       `;
 
+      const params: string[] = [];
+
       if (database) {
-        query += ` AND table_catalog = '${database}'`;
+        query += ` AND table_catalog = ?`;
+        params.push(database);
       }
       if (schema) {
-        query += ` AND table_schema = '${schema}'`;
+        query += ` AND table_schema = ?`;
+        params.push(schema);
       }
 
       query += ` ORDER BY table_catalog, table_schema, table_name`;
 
-      const tables = await executeQuery(query, connection);
+      const tables = await executeQuery(query, params, connection);
       
       console.log(`✅ 테이블 목록 조회 성공: ${tables.length}개 테이블`);
 

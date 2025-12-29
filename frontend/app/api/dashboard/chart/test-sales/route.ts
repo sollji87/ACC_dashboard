@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
                     when prdt_hrrc1_nm='ACC' and prdt_hrrc2_nm='Headwear' then '모자'
                     when prdt_hrrc1_nm='ACC' and prdt_hrrc2_nm='Bag' then '가방'
                     when prdt_hrrc1_nm='ACC' and prdt_hrrc2_nm='Acc_etc' then '기타ACC'
-              end = '${itemStd}'`;
+              end = ?`;
 
       const query = `
 with item as (
@@ -37,12 +37,12 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = ?
     ${itemFilter}
 ),
 -- 당년 10월 매출 (사입제외)
 monthly_sale_cy as (
-    select 
+    select
         sum(tag_sale_amt) as tag_sale_amt,
         count(distinct a.prdt_cd) as product_count,
         count(*) as record_count
@@ -54,12 +54,12 @@ monthly_sale_cy as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm = ?
 ),
 -- 채널별 매출 상세 (디버깅용)
 channel_detail as (
-    select 
+    select
         c.chnl_cd,
         c.chnl_nm,
         sum(tag_sale_amt) as tag_sale_amt,
@@ -72,12 +72,12 @@ channel_detail as (
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
         ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm = '${yyyymm}'
+        and a.brd_cd = ?
+        and a.pst_yyyymm = ?
     group by c.chnl_cd, c.chnl_nm
     order by tag_sale_amt desc
 )
-select 
+select
     'summary' as type,
     ms.tag_sale_amt as tag_sale_amount,
     ms.product_count,
@@ -86,7 +86,7 @@ select
     null as chnl_nm
 from monthly_sale_cy ms
 union all
-select 
+select
     'channel_detail' as type,
     cd.tag_sale_amt as tag_sale_amount,
     cd.product_count,
@@ -97,7 +97,12 @@ from channel_detail cd
 order by type, tag_sale_amount desc
       `;
 
-      const rows = await executeQuery(query, connection);
+      // Parameters array depends on whether itemStd is 'all' or not
+      const params = itemStd === 'all'
+        ? [brandCode, brandCode, yyyymm, brandCode, yyyymm]
+        : [brandCode, itemStd, brandCode, yyyymm, brandCode, yyyymm];
+
+      const rows = await executeQuery(query, params, connection);
 
       console.log('✅ 택매출액 조회 성공:', rows);
 

@@ -63,8 +63,8 @@ export async function GET(request: NextRequest) {
         connection = await connectToSnowflake();
 
         // 쿼리 생성 및 실행
-        const query = buildProductDetailQuery(brandCode, itemStd, yyyymm, excludePurchase);
-        const rows = await executeQuery(query, connection);
+        const { query, params } = buildProductDetailQuery(brandCode, itemStd, yyyymm, excludePurchase);
+        const rows = await executeQuery(query, params, connection);
         
         // 데이터 포맷팅 (시즌 정보를 위해 yyyymm 전달)
         const formattedData = formatProductDetailData(rows, itemStd, yyyymm);

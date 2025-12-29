@@ -80,9 +80,9 @@ export function buildChartDataQuery(
   itemStd: string = 'all',
   excludePurchase: boolean = false,
   base: 'amount' | 'quantity' = 'amount'
-): string {
+): { query: string; params: any[] } {
   const { year, month } = parseYearMonth(yyyymm);
-  
+
   // 최근 13개월 목록 생성 (입고금액 계산을 위해 한 달 더 이전 포함)
   const months: string[] = [];
   for (let i = 12; i >= 0; i--) {
@@ -91,62 +91,62 @@ export function buildChartDataQuery(
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     months.push(`${yyyy}${mm}`);
   }
-  
+
   // 전년 동일 기간 목록
   const pyMonths: string[] = months.map(m => {
     const y = parseInt(m.substring(0, 4));
     const mNum = parseInt(m.substring(4, 6));
     return `${y - 1}${String(mNum).padStart(2, '0')}`;
   });
-  
+
   // 재고주수 계산을 위한 기간 설정
   let monthsForAvg = 1;
   if (weeksType === '8weeks') monthsForAvg = 2;
   if (weeksType === '12weeks') monthsForAvg = 3;
-  
+
   // 금액/수량 기준에 따른 컬럼명 선택
   const stockColumn = base === 'quantity' ? 'end_stock_qty' : 'end_stock_tag_amt';
   const saleColumn = base === 'quantity' ? 'sale_qty' : 'tag_sale_amt';
-  
-  return `
+
+  const query = `
 -- item: ACC 아이템 기준
 WITH item AS (
     SELECT prdt_cd, sesn,
-        CASE 
+        CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = ?
       AND prdt_hrrc1_nm = 'ACC'
-      ${itemStd !== 'all' ? `AND CASE 
+      ${itemStd !== 'all' ? `AND CASE
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
-        END = '${itemStd}'` : ''}
+        END = ?` : ''}
 ),
 
--- 월별 기준금액 계산 (전체 ACC 재고 * 0.01%)
+-- 월별 기준금액 계산 (전체 ACC 재고 * 0.0001)
 monthly_threshold AS (
-    SELECT 
+    SELECT
         a.yyyymm,
         SUM(a.${stockColumn}) as total_stock_amt,
         SUM(a.${stockColumn}) * 0.0001 as threshold_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+    WHERE a.brd_cd = ?
+      AND a.yyyymm IN (${[...months, ...pyMonths].map(() => '?').join(',')})
       AND b.item_std IS NOT NULL
     GROUP BY a.yyyymm
 ),
 
 -- 월별 품번별 판매 (금액 또는 수량 + 실판매액 + 사입제외/사입 분리)
 monthly_sale_by_product AS (
-    ${base === 'quantity' 
-      ? `SELECT 
+    ${base === 'quantity'
+      ? `SELECT
         TO_CHAR(a.pst_dt, 'YYYYMM') as yyyymm,
         a.prdt_cd,
         SUM(CASE WHEN c.chnl_cd <> '8' THEN a.${saleColumn} ELSE 0 END) as tag_sale_amt_ex_purchase,
@@ -158,12 +158,12 @@ monthly_sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.cust_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+    WHERE a.brd_cd = ?
+      AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(() => '?').join(',')})
       AND b.item_std IS NOT NULL
       AND c.chnl_cd <> '9'
     GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM'), a.prdt_cd`
-      : `SELECT 
+      : `SELECT
         a.pst_yyyymm as yyyymm,
         a.prdt_cd,
         SUM(CASE WHEN c.chnl_cd <> '8' THEN a.${saleColumn} ELSE 0 END) as tag_sale_amt_ex_purchase,
@@ -175,8 +175,8 @@ monthly_sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+    WHERE a.brd_cd = ?
+      AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(() => '?').join(',')})
       AND b.item_std IS NOT NULL
       AND c.chnl_cd <> '9'
     GROUP BY a.pst_yyyymm, a.prdt_cd`
@@ -185,7 +185,7 @@ monthly_sale_by_product AS (
 
 -- 월별 품번별 재고 (금액 및 수량)
 monthly_stock_by_product AS (
-    SELECT 
+    SELECT
         a.yyyymm,
         a.prdt_cd,
         b.sesn,
@@ -193,8 +193,8 @@ monthly_stock_by_product AS (
         SUM(a.end_stock_qty) as end_stock_qty
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+    WHERE a.brd_cd = ?
+      AND a.yyyymm IN (${[...months, ...pyMonths].map(() => '?').join(',')})
       AND b.item_std IS NOT NULL
     GROUP BY a.yyyymm, a.prdt_cd, b.sesn
 ),
@@ -308,7 +308,7 @@ monthly_season_sale_summary AS (
 -- 월별 재고주수 계산용 매출 (전체, 금액 또는 수량)
 monthly_sale AS (
     ${base === 'quantity'
-      ? `SELECT 
+      ? `SELECT
         TO_CHAR(a.pst_dt, 'YYYYMM') as yyyymm,
         SUM(a.${saleColumn}) as tag_sale_amt
     FROM sap_fnf.dw_copa_d a
@@ -316,12 +316,12 @@ monthly_sale AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.cust_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+    WHERE a.brd_cd = ?
+      AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(() => '?').join(',')})
       AND c.chnl_cd <> '9'
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
     GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM')`
-      : `SELECT 
+      : `SELECT
         a.pst_yyyymm as yyyymm,
         SUM(a.${saleColumn}) as tag_sale_amt
     FROM sap_fnf.dm_pl_shop_prdt_m a
@@ -329,8 +329,8 @@ monthly_sale AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
+    WHERE a.brd_cd = ?
+      AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(() => '?').join(',')})
       AND c.chnl_cd <> '9'
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
     GROUP BY a.pst_yyyymm`
@@ -394,9 +394,9 @@ monthly_normal_stock_weeks AS (
 )
 
 -- 최종 결과
-SELECT 
+SELECT
     ss.yyyymm,
-    CASE WHEN ss.yyyymm IN (${months.map(m => `'${m}'`).join(',')}) THEN 'cy' ELSE 'py' END as div,
+    CASE WHEN ss.yyyymm IN (${months.map(() => '?').join(',')}) THEN 'cy' ELSE 'py' END as div,
     CASE 
         WHEN mas.avg_tag_sale_amt > 0 AND (mas.avg_tag_sale_amt / 30 * 7) > 0
         THEN ROUND(ss.total_stock / (mas.avg_tag_sale_amt / 30 * 7), 1)
@@ -431,6 +431,36 @@ LEFT JOIN monthly_normal_stock_weeks ns ON ss.yyyymm = ns.yyyymm
 LEFT JOIN monthly_season_sale_summary sss ON ss.yyyymm = sss.yyyymm
 ORDER BY ss.yyyymm
   `;
+
+  // 파라미터 배열 생성
+  const params: any[] = [];
+
+  // 1. item CTE
+  params.push(brandCode);
+  if (itemStd !== 'all') {
+    params.push(itemStd);
+  }
+
+  // 2. monthly_threshold
+  params.push(brandCode);
+  params.push(...months, ...pyMonths);
+
+  // 3. monthly_sale_by_product
+  params.push(brandCode);
+  params.push(...months, ...pyMonths);
+
+  // 4. monthly_stock_by_product
+  params.push(brandCode);
+  params.push(...months, ...pyMonths);
+
+  // 5. monthly_sale
+  params.push(brandCode);
+  params.push(...months, ...pyMonths);
+
+  // 6. 최종 SELECT의 CASE WHEN IN 절
+  params.push(...months);
+
+  return { query, params };
 }
 
 /**

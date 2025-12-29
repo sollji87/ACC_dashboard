@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
 
     try {
       // 쿼리 생성 및 실행
-      const query = buildInventoryQuery(brandCode, yyyymm);
-      const rows = await executeQuery(query, connection);
+      const { query, params } = buildInventoryQuery(brandCode, yyyymm);
+      const rows = await executeQuery(query, params, connection);
       
       // 데이터 포맷팅
       const formattedData = formatInventoryData(rows, brandCode, yyyymm);
