@@ -1578,7 +1578,7 @@ export default function BrandDashboard() {
                             {orderCapacity.weeklyAvgSales.toLocaleString()}백만원
                           </div>
                           <div className="text-slate-400 text-xs mt-1">
-                            = {orderCapacity.nWeeksTotal.toLocaleString()}백만원 ({orderCapacity.weeksType === '4weeks' ? '4주' : orderCapacity.weeksType === '8weeks' ? '8주' : '12주'} 합계) ÷ {orderCapacity.weeksType === '4weeks' ? '4' : orderCapacity.weeksType === '8weeks' ? '8' : '12'}
+                            = {(orderCapacity.nWeeksTotal || 0).toLocaleString()}백만원 ({orderCapacity.weeksType === '4weeks' ? '4주' : orderCapacity.weeksType === '8weeks' ? '8주' : '12주'} 합계) ÷ {orderCapacity.weeksType === '4weeks' ? '4' : orderCapacity.weeksType === '8weeks' ? '8' : '12'}
                           </div>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm">
