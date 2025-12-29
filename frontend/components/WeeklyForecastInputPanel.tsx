@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -102,8 +102,23 @@ export default function WeeklyForecastInputPanel({
   const [isLoadingIncoming, setIsLoadingIncoming] = useState(false);
   const [forecastWeeks, setForecastWeeks] = useState<{ weekKey: string; weekLabel: string }[]>([]);
   const [isForecastReady, setIsForecastReady] = useState(false);
-  const [prevYearData, setPrevYearData] = useState<Record<string, { sale: number; stock: number; weeks: number }>>({}); // 전년 동주차 데이터
+  // 전년 동주차 데이터 (중분류별로 저장)
+  const [prevYearDataByItem, setPrevYearDataByItem] = useState<Record<string, Record<string, { sale: number; stock: number; weeks: number }>>>({
+    shoes: {},
+    hat: {},
+    bag: {},
+    other: {},
+  });
+  
+  // 현재 선택된 중분류의 전년 데이터 (호환성 유지) - useMemo로 안정적인 참조 유지
+  const prevYearData = useMemo(() => {
+    return prevYearDataByItem[selectedItem] || {};
+  }, [prevYearDataByItem, selectedItem]);
+  
   const [isLoadingPrevSales, setIsLoadingPrevSales] = useState(false);
+  
+  // 이전 actualData 길이를 추적하여 불필요한 재계산 방지
+  const prevActualDataLengthRef = useRef<number>(0);
 
   // 로컬 스토리지 키
   const storageKey = `weekly_forecast_${brandCode}`;
@@ -134,6 +149,16 @@ export default function WeeklyForecastInputPanel({
           setIncomingAmounts(parsed.incomingAmounts);
           setIsForecastReady(true);
         }
+        // 전년 동주차 데이터 복원 (중분류별)
+        if (parsed.prevYearDataByItem) {
+          setPrevYearDataByItem(parsed.prevYearDataByItem);
+          const totalWeeks = Object.values(parsed.prevYearDataByItem).reduce((sum: number, data: any) => sum + Object.keys(data || {}).length, 0);
+          console.log('✅ 저장된 전년 동주차 데이터 복원 (중분류별):', totalWeeks, '개 주차');
+        } else if (parsed.prevYearData) {
+          // 이전 형식 호환성 (단일 객체인 경우 현재 선택된 중분류에 할당)
+          setPrevYearDataByItem(prev => ({ ...prev, [selectedItem]: parsed.prevYearData }));
+          console.log('✅ 저장된 전년 동주차 데이터 복원 (레거시):', Object.keys(parsed.prevYearData).length, '개 주차');
+        }
       }
     } catch (error) {
       console.error('주차별 예측 데이터 로드 실패:', error);
@@ -163,6 +188,7 @@ export default function WeeklyForecastInputPanel({
         yoyRatePurchase,
         baseStockWeeks,
         incomingAmounts,
+        prevYearDataByItem, // 전년 동주차 데이터 (중분류별)
         savedAt: new Date().toISOString(),
       };
       localStorage.setItem(storageKey, JSON.stringify(dataToSave));
@@ -206,8 +232,8 @@ export default function WeeklyForecastInputPanel({
       // YOY 적용한 예상 주간 매출
       const adjustedWeeklySales = Math.round(weeklyAvgSales * (currentYoyRate / 100));
       
-      // 월간 평균 매출 (주간 × 30/7)
-      const monthlyAvgSales = Math.round(adjustedWeeklySales * 30 / 7);
+      // N주 매출 합계 (YOY 적용)
+      const nWeeksTotal = Math.round(adjustedWeeklySales * nWeeks);
 
       // 3개월 후 목표 월 계산 (12주 후)
       const targetDate = new Date();
@@ -385,15 +411,46 @@ export default function WeeklyForecastInputPanel({
         ? forecastResults[forecastResults.length - 1].totalStock 
         : 0;
 
+      // 12주차 기준 최근 4주(9, 10, 11, 12주차) 평균 매출 계산
+      const last4WeeksSales = forecastResults.length >= 12
+        ? [
+            forecastResults[8].saleAmount1w,  // 9주차
+            forecastResults[9].saleAmount1w,  // 10주차
+            forecastResults[10].saleAmount1w, // 11주차
+            forecastResults[11].saleAmount1w, // 12주차
+          ]
+        : [];
+      
+      console.log('📊 12주차 기준 최근 4주 매출:', last4WeeksSales);
+      console.log('📊 9주차 매출:', forecastResults[8]?.saleAmount1w, forecastResults[8]?.weekLabel);
+      console.log('📊 10주차 매출:', forecastResults[9]?.saleAmount1w, forecastResults[9]?.weekLabel);
+      console.log('📊 11주차 매출:', forecastResults[10]?.saleAmount1w, forecastResults[10]?.weekLabel);
+      console.log('📊 12주차 매출:', forecastResults[11]?.saleAmount1w, forecastResults[11]?.weekLabel);
+      
+      const nWeeksTotalFor12thWeek = last4WeeksSales.length === 4
+        ? last4WeeksSales.reduce((sum, sale) => sum + sale, 0)
+        : nWeeksTotal; // fallback
+      
+      console.log('📊 12주차 기준 4주 합계:', nWeeksTotalFor12thWeek);
+      
+      const weeklyAvgSalesFor12thWeek = last4WeeksSales.length === 4
+        ? Math.round(nWeeksTotalFor12thWeek / 4)
+        : adjustedWeeklySales; // fallback
+      
+      console.log('📊 12주차 기준 주간평균:', weeklyAvgSalesFor12thWeek);
+
+      // 목표 재고 = 기준 재고주수 × 12주차 기준 주간 평균 매출
+      const targetStockFor12thWeek = Math.round(currentBaseWeeks * weeklyAvgSalesFor12thWeek);
+
       // 발주가능 금액 = 목표재고 - 예상재고(12주차)
-      const orderCapacityAmount = targetStock - lastForecastStock;
+      const orderCapacityAmount = targetStockFor12thWeek - lastForecastStock;
 
       const orderCapacity: OrderCapacity = {
         targetMonth,
         baseStockWeeks: currentBaseWeeks,
-        weeklyAvgSales: adjustedWeeklySales,
-        monthlyAvgSales,
-        targetStock,
+        weeklyAvgSales: weeklyAvgSalesFor12thWeek,
+        nWeeksTotal: nWeeksTotalFor12thWeek,
+        targetStock: targetStockFor12thWeek,
         currentForecastStock: lastForecastStock, // 12주차 예상재고
         orderCapacity: orderCapacityAmount,
         yoyRate: currentYoyRate,
@@ -412,30 +469,92 @@ export default function WeeklyForecastInputPanel({
   };
 
   // 저장된 설정으로 자동 예측 실행 (전년 매출 데이터 변경 시에도 재계산)
+  // 무한 루프 방지를 위해 actualData 배열 길이와 prevYearData 키 개수를 비교
+  const prevYearDataKeyCount = Object.keys(prevYearData).length;
+  const actualDataLength = actualData?.length || 0;
+  
   useEffect(() => {
-    if (isForecastReady && actualData && actualData.length > 0) {
-      calculateForecast();
+    // actualData가 없거나 이전과 동일하면 스킵
+    if (!isForecastReady || !actualData || actualData.length === 0) {
+      return;
     }
+    
+    // 이전과 동일한 데이터면 재계산 스킵 (무한 루프 방지)
+    if (prevActualDataLengthRef.current === actualDataLength && actualDataLength > 0) {
+      // prevYearData가 변경된 경우에만 재계산 (키 개수로 비교)
+      // 하지만 키 개수가 0인 경우에는 처음 로딩이므로 계속 진행
+      if (prevYearDataKeyCount === 0) {
+        console.log('⏭️ 전년 데이터 없음, 예측 계산 스킵');
+        return;
+      }
+    }
+    
+    prevActualDataLengthRef.current = actualDataLength;
+    calculateForecast();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isForecastReady, actualData, selectedItem, weeksType, prevYearData]);
+  }, [isForecastReady, actualDataLength, selectedItem, weeksType, prevYearDataKeyCount]);
 
-  // 전년 동주차 매출 조회 함수
+  // prevYearDataByItem 변경 시 자동 저장
+  useEffect(() => {
+    const totalWeeks = Object.values(prevYearDataByItem).reduce((sum, data) => sum + Object.keys(data || {}).length, 0);
+    if (totalWeeks > 0) {
+      try {
+        const savedData = localStorage.getItem(storageKey);
+        const existing = savedData ? JSON.parse(savedData) : {};
+        const dataToSave = {
+          ...existing,
+          prevYearDataByItem,
+          savedAt: new Date().toISOString(),
+        };
+        localStorage.setItem(storageKey, JSON.stringify(dataToSave));
+        console.log('✅ 전년 동주차 데이터 자동 저장 완료 (중분류별):', totalWeeks, '개 주차');
+      } catch (error) {
+        console.error('❌ 전년 데이터 저장 실패:', error);
+      }
+    }
+  }, [prevYearDataByItem, storageKey]);
+
+  // 전년 동주차 매출 조회 함수 (모든 중분류 병렬 조회)
   const loadPrevYearSales = async () => {
     if (forecastWeeks.length === 0) return;
     
     setIsLoadingPrevSales(true);
     try {
       const weekKeys = forecastWeeks.map(w => w.weekKey).join(',');
-      const itemParam = selectedItem === 'all' ? 'all' : selectedItem;
+      const itemTypes: ('shoes' | 'hat' | 'bag' | 'other')[] = ['shoes', 'hat', 'bag', 'other'];
       
-      console.log(`📊 전년 동주차 매출 조회: ${weekKeys}`);
-      const response = await fetch(`/api/weekly-prev-year-sales?brandCode=${brandCode}&weeks=${weekKeys}&selectedItem=${itemParam}`);
-      const result = await response.json();
+      console.log(`📊 전년 동주차 매출 조회 (모든 중분류): ${weekKeys}`);
       
-      if (result.success && result.data) {
-        setPrevYearData(result.data);
-        console.log('✅ 전년 동주차 데이터 조회 성공:', result.data);
-      }
+      // 모든 중분류에 대해 병렬 조회
+      const results = await Promise.all(
+        itemTypes.map(async (item) => {
+          try {
+            const response = await fetch(`/api/weekly-prev-year-sales?brandCode=${brandCode}&weeks=${weekKeys}&selectedItem=${item}`);
+            const result = await response.json();
+            return { item, data: result.success ? result.data : {} };
+          } catch (error) {
+            console.error(`❌ ${item} 전년 데이터 조회 실패:`, error);
+            return { item, data: {} };
+          }
+        })
+      );
+      
+      // 중분류별로 데이터 병합
+      const newPrevYearDataByItem: Record<string, Record<string, { sale: number; stock: number; weeks: number }>> = {
+        shoes: {},
+        hat: {},
+        bag: {},
+        other: {},
+      };
+      
+      results.forEach(({ item, data }) => {
+        newPrevYearDataByItem[item] = data;
+      });
+      
+      setPrevYearDataByItem(newPrevYearDataByItem);
+      console.log('✅ 전년 동주차 데이터 조회 성공 (모든 중분류):', 
+        Object.entries(newPrevYearDataByItem).map(([k, v]) => `${k}: ${Object.keys(v).length}개`).join(', ')
+      );
     } catch (error) {
       console.error('❌ 전년 동주차 매출 조회 실패:', error);
     } finally {
