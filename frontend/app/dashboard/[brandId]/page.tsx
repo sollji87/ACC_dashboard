@@ -1231,7 +1231,7 @@ export default function BrandDashboard() {
                             {orderCapacity.weeklyAvgSales.toLocaleString()}백만원
                           </div>
                           <div className="text-slate-400 text-xs mt-1">
-                            = {orderCapacity.monthlyAvgSales.toLocaleString()}백만원/월 ÷ 30 × 7
+                            = {(orderCapacity.monthlyAvgSales || 0).toLocaleString()}백만원/월 ÷ 30 × 7
                           </div>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm">
