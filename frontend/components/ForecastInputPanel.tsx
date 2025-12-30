@@ -322,9 +322,11 @@ export default function ForecastInputPanel({
             yoyRateExPurchase[item]
           );
           
-          orderCapacityByItem[item] = orderCapacity;
-          forecastResultsByItem[item] = forecastResults;
-          console.log(`✅ [${item}] 월결산 예측 계산 완료 - 발주가능: ${orderCapacity.orderCapacity}백만원`);
+          if (orderCapacity) {
+            orderCapacityByItem[item] = orderCapacity;
+            forecastResultsByItem[item] = forecastResults;
+            console.log(`✅ [${item}] 월결산 예측 계산 완료 - 발주가능: ${orderCapacity.orderCapacity}백만원`);
+          }
         } else {
           console.log(`⚠️ [${item}] 차트 데이터가 없어 예측 계산을 건너뜁니다.`);
         }
