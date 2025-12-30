@@ -37,10 +37,9 @@ export class DashboardController {
         data,
       };
     } catch (error) {
-      this.logger.error('재고주수 조회 실패:', error);
       return {
         success: false,
-        error: '재고주수 조회 중 오류가 발생했습니다.',
+        error: error.message,
       };
     }
   }
@@ -78,10 +77,9 @@ export class DashboardController {
         data: validResults,
       };
     } catch (error) {
-      this.logger.error('전체 브랜드 재고주수 조회 실패:', error);
       return {
         success: false,
-        error: '브랜드 재고주수 조회 중 오류가 발생했습니다.',
+        error: error.message,
       };
     }
   }
@@ -118,7 +116,7 @@ export class DashboardController {
       this.logger.error('입고예정금액 조회 실패:', error);
       return {
         success: false,
-        error: '입고예정금액 조회 중 오류가 발생했습니다.',
+        error: error.message,
       };
     }
   }

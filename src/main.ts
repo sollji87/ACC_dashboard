@@ -7,25 +7,11 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
-  // CORS 설정 - 보안 강화: 허용된 origin만 접근 가능
+  // CORS 설정
   const frontendUrl = configService.get<string>('FRONTEND_URL');
-  const allowedOrigins = frontendUrl
-    ? [frontendUrl, 'http://localhost:3001']
-    : ['http://localhost:3001'];
-
   app.enableCors({
-    origin: (origin, callback) => {
-      // origin이 없는 경우 (서버 간 요청, curl 등) 또는 허용된 origin인 경우 허용
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`CORS 차단: ${origin}`);
-        callback(new Error('CORS policy violation'), false);
-      }
-    },
+    origin: frontendUrl ? [frontendUrl, 'http://localhost:3001'] : true, // 모든 origin 허용 (프로덕션에서는 특정 도메인만 허용 권장)
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // Validation Pipe 설정

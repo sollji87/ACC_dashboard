@@ -25,14 +25,6 @@ export async function GET(request: NextRequest) {
     const month = searchParams.get('month');
     const yyyymm = month || getCurrentYearMonth();
 
-    // SQL 인젝션 방지: yyyymm 검증 (YYYYMM 형식, 6자리 숫자만 허용)
-    if (!/^\d{6}$/.test(yyyymm)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 월 형식입니다. (YYYYMM 형식 필요)' },
-        { status: 400 }
-      );
-    }
-
     console.log(`📊 모든 브랜드 재고주수 조회 시작 (${yyyymm})`);
 
     // Snowflake 연결
@@ -74,7 +66,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: '브랜드 재고주수 조회 중 오류가 발생했습니다.',
+        error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
       { status: 500 }
     );

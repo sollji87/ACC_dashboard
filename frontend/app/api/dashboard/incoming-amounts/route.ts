@@ -27,23 +27,6 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // SQL 인젝션 방지: brandCode 검증 (1-2자리 영문만 허용)
-    if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 브랜드 코드입니다.' },
-        { status: 400 }
-      );
-    }
-
-    // SQL 인젝션 방지: startMonth/endMonth 검증 (YYYY-MM 형식만 허용)
-    const monthPattern = /^\d{4}-\d{2}$/;
-    if (!monthPattern.test(startMonth) || !monthPattern.test(endMonth)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 월 형식입니다. (YYYY-MM 형식 필요)' },
-        { status: 400 }
-      );
-    }
-
     // YYYY-MM 형식을 YYYYMM으로 변환
     const startYyyymm = startMonth.replace(/-/g, '');
     const endYyyymm = endMonth.replace(/-/g, '');
@@ -126,7 +109,7 @@ order by brd_cd, indc_yyyymm, mid_cat
     return NextResponse.json(
       {
         success: false,
-        error: '입고예정금액 조회 중 오류가 발생했습니다.',
+        error: error instanceof Error ? error.message : '서버 오류',
       },
       { status: 500 }
     );
