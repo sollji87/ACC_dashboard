@@ -110,7 +110,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
     -- 당시즌/차기시즌/과시즌/정체재고 정의:
     -- FW 시즌 (9월~2월): 당시즌=YYN,YYF / 차기시즌=(YY+1)N,(YY+1)S,(YY+1)F... / 과시즌=그 외
     -- SS 시즌 (3월~8월): 당시즌=YYN,YYS / 차기시즌=YYF,(YY+1)N,(YY+1)S... / 과시즌=그 외
-    -- 정체재고: 과시즌 중 품번+컬러 기준 4주 판매가 택재고의 0.01% 미만
+    -- 정체재고: 과시즌 중 품번+컬러 기준 4주 판매가 택재고의 0.0025% 미만 (주차별 기준: 월 0.01%의 1/4)
     cy_classified AS (
       SELECT
         sd.week_key,
@@ -154,10 +154,10 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
               ELSE 'old'
             END
         END AS season_class,
-        -- 정체재고 판정: 과시즌 중에서만 4주 매출이 택재고의 0.01% 미만인 경우
+        -- 정체재고 판정: 과시즌 중에서만 4주 매출이 택재고의 0.0025% 미만인 경우 (주차별 기준)
         -- 먼저 과시즌인지 확인하고, 과시즌인 경우에만 판매 조건 체크
         COALESCE(sc.sale_amt, 0) AS sale_amt_for_stagnant,
-        tw.total_stock * 0.0001 AS threshold_amt
+        tw.total_stock * 0.000025 AS threshold_amt
       FROM cy_stock_detail sd
       LEFT JOIN cy_sale_by_color sc 
         ON sd.week_key = sc.week_key AND sd.prdt_cd = sc.prdt_cd AND sd.color_cd = sc.color_cd
@@ -174,7 +174,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         stock_qty,
         season_class,
         sale_amt_for_stagnant,
-        -- 정체재고: 과시즌(old)이면서 판매 < 0.01%인 경우만
+        -- 정체재고: 과시즌(old)이면서 판매 < 0.0025%인 경우만 (주차별 기준)
         CASE 
           WHEN season_class = 'old' AND sale_amt_for_stagnant < threshold_amt THEN 1
           ELSE 0
@@ -291,13 +291,13 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
             END
         END AS season_class,
         COALESCE(sc.sale_amt, 0) AS sale_amt_for_stagnant,
-        tw.total_stock * 0.0001 AS threshold_amt
+        tw.total_stock * 0.000025 AS threshold_amt
       FROM py_stock_detail sd
       LEFT JOIN py_sale_by_color sc 
         ON sd.week_key = sc.week_key AND sd.prdt_cd = sc.prdt_cd AND sd.color_cd = sc.color_cd
       LEFT JOIN py_total_by_week tw ON sd.week_key = tw.week_key
     ),
-    -- 전년 정체재고 최종 판정 (과시즌 중에서만)
+    -- 전년 정체재고 최종 판정 (과시즌 중에서만, 주차별 기준 0.0025%)
     py_with_stagnant AS (
       SELECT
         week_key,

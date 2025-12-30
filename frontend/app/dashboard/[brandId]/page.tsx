@@ -1011,19 +1011,55 @@ export default function BrandDashboard() {
         {brandData ? (
           <div className="space-y-6">
             {/* 아이템별 KPI 카드 */}
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
               {(() => {
                 const periodData = periodType === 'accumulated' ? brandData.accumulated : brandData.monthly || brandData;
                 const detail = periodData?.accInventoryDetail || brandData.accInventoryDetail;
                 
+                // 전체 ACC 합계 계산
+                const shoes = detail?.shoes || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 };
+                const hat = detail?.hat || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 };
+                const bag = detail?.bag || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 };
+                const other = detail?.other || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 };
+                
+                const totalCurrent = shoes.current + hat.current + bag.current + other.current;
+                const totalPrevious = shoes.previous + hat.previous + bag.previous + other.previous;
+                const totalSalesCurrent = shoes.salesCurrent + hat.salesCurrent + bag.salesCurrent + other.salesCurrent;
+                const totalSalesPrevious = shoes.salesPrevious + hat.salesPrevious + bag.salesPrevious + other.salesPrevious;
+                // 재고주수는 가중평균으로 계산 (재고금액 기준)
+                const totalWeeks = totalCurrent > 0 
+                  ? (shoes.current * shoes.weeks + hat.current * hat.weeks + bag.current * bag.weeks + other.current * other.weeks) / totalCurrent
+                  : 0;
+                const totalPreviousWeeks = totalPrevious > 0
+                  ? (shoes.previous * shoes.previousWeeks + hat.previous * hat.previousWeeks + bag.previous * bag.previousWeeks + other.previous * other.previousWeeks) / totalPrevious
+                  : 0;
+                
                 const items = [
+                  { 
+                    key: 'all', 
+                    name: '전체ACC', 
+                    emoji: '📦',
+                    data: { 
+                      current: totalCurrent, 
+                      previous: totalPrevious, 
+                      weeks: totalWeeks, 
+                      previousWeeks: totalPreviousWeeks, 
+                      salesCurrent: totalSalesCurrent, 
+                      salesPrevious: totalSalesPrevious 
+                    },
+                    salesCurrent: totalSalesCurrent,
+                    salesPrevious: totalSalesPrevious,
+                    color: 'from-slate-50 to-slate-100',
+                    borderColor: 'border-slate-200',
+                    titleColor: 'text-slate-900',
+                  },
                   { 
                     key: 'shoes', 
                     name: '신발', 
                     emoji: '👟',
-                    data: detail?.shoes || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 },
-                    salesCurrent: detail?.shoes?.salesCurrent || 0,
-                    salesPrevious: detail?.shoes?.salesPrevious || 0,
+                    data: shoes,
+                    salesCurrent: shoes.salesCurrent || 0,
+                    salesPrevious: shoes.salesPrevious || 0,
                     color: 'from-blue-50 to-blue-100',
                     borderColor: 'border-blue-200',
                     titleColor: 'text-blue-900',
@@ -1032,9 +1068,9 @@ export default function BrandDashboard() {
                     key: 'hat', 
                     name: '모자', 
                     emoji: '🧢',
-                    data: detail?.hat || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 },
-                    salesCurrent: detail?.hat?.salesCurrent || 0,
-                    salesPrevious: detail?.hat?.salesPrevious || 0,
+                    data: hat,
+                    salesCurrent: hat.salesCurrent || 0,
+                    salesPrevious: hat.salesPrevious || 0,
                     color: 'from-emerald-50 to-emerald-100',
                     borderColor: 'border-emerald-200',
                     titleColor: 'text-emerald-900',
@@ -1043,9 +1079,9 @@ export default function BrandDashboard() {
                     key: 'bag', 
                     name: '가방', 
                     emoji: '🎒',
-                    data: detail?.bag || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 },
-                    salesCurrent: detail?.bag?.salesCurrent || 0,
-                    salesPrevious: detail?.bag?.salesPrevious || 0,
+                    data: bag,
+                    salesCurrent: bag.salesCurrent || 0,
+                    salesPrevious: bag.salesPrevious || 0,
                     color: 'from-purple-50 to-purple-100',
                     borderColor: 'border-purple-200',
                     titleColor: 'text-purple-900',
@@ -1054,9 +1090,9 @@ export default function BrandDashboard() {
                     key: 'other', 
                     name: '기타ACC', 
                     emoji: '🧦',
-                    data: detail?.other || { current: 0, previous: 0, weeks: 0, previousWeeks: 0, salesCurrent: 0, salesPrevious: 0 },
-                    salesCurrent: detail?.other?.salesCurrent || 0,
-                    salesPrevious: detail?.other?.salesPrevious || 0,
+                    data: other,
+                    salesCurrent: other.salesCurrent || 0,
+                    salesPrevious: other.salesPrevious || 0,
                     color: 'from-orange-50 to-orange-100',
                     borderColor: 'border-orange-200',
                     titleColor: 'text-orange-900',
@@ -1076,13 +1112,14 @@ export default function BrandDashboard() {
 
                 // 동적 클래스 생성을 위한 색상 매핑
                 const colorClasses: { [key: string]: { border: string; hover: string; selected: string } } = {
+                  all: { border: 'border-slate-300', hover: 'hover:border-slate-400', selected: 'border-slate-500' },
                   shoes: { border: 'border-blue-300', hover: 'hover:border-blue-400', selected: 'border-blue-500' },
                   hat: { border: 'border-emerald-300', hover: 'hover:border-emerald-400', selected: 'border-emerald-500' },
                   bag: { border: 'border-purple-300', hover: 'hover:border-purple-400', selected: 'border-purple-500' },
                   other: { border: 'border-orange-300', hover: 'hover:border-orange-400', selected: 'border-orange-500' },
                 };
                 
-                const colorClass = colorClasses[item.key] || colorClasses.shoes;
+                const colorClass = colorClasses[item.key] || colorClasses.all;
 
                 return (
                   <Card 
@@ -1106,10 +1143,10 @@ export default function BrandDashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      {/* 4x4 그리드: 첫 번째 열은 행 라벨, 나머지 3개 열은 데이터 */}
+                      {/* 4x4 그리드: 첫 번째 열은 행 라벨(좁게), 나머지 3개 열은 데이터 */}
                       <div className="space-y-0">
                         {/* 헤더 행 */}
-                        <div className="grid grid-cols-4 gap-2 py-2 px-3">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 py-2 px-2">
                           <div className="text-xs font-medium text-slate-600"></div>
                           <div className="text-xs font-medium text-slate-600 text-center">재고주수</div>
                           <div className="text-xs font-medium text-slate-600 text-center">기말재고</div>
@@ -1117,7 +1154,7 @@ export default function BrandDashboard() {
                         </div>
                         
                         {/* 당년 행 */}
-                        <div className="grid grid-cols-4 gap-2 items-center py-2 px-3 rounded-lg bg-yellow-50">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 items-center py-2 px-2 rounded-lg bg-yellow-50">
                           <div className="text-xs font-medium text-slate-600">당년</div>
                           <div className="text-center">
                             <p className="text-sm font-bold text-slate-900">
@@ -1139,7 +1176,7 @@ export default function BrandDashboard() {
                         </div>
                         
                         {/* 전년 행 */}
-                        <div className="grid grid-cols-4 gap-2 items-center py-2 px-3">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 items-center py-2 px-2">
                           <div className="text-xs font-medium text-slate-600">전년</div>
                           <div className="text-center">
                             <p className="text-sm font-semibold text-slate-700">
@@ -1161,7 +1198,7 @@ export default function BrandDashboard() {
                         </div>
                         
                         {/* YOY/개선 행 */}
-                        <div className="grid grid-cols-4 gap-2 items-center py-2 px-3">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 items-center py-2 px-2">
                           <div className="text-xs font-medium text-slate-600">YOY</div>
                           <div className="text-center">
                             <p className={`text-sm font-bold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>

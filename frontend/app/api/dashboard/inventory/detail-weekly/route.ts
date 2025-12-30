@@ -5,7 +5,7 @@
  * 월별 대시보드와 동일한 시즌 분류 로직 적용:
  * - FW 시즌 (9월~2월): 당시즌=YYN,YYF / 차기시즌=(YY+1)N,(YY+1)S,(YY+1)F... / 과시즌=그 외
  * - SS 시즌 (3월~8월): 당시즌=YYN,YYS / 차기시즌=YYF,(YY+1)N,(YY+1)S... / 과시즌=그 외
- * - 정체재고: 과시즌 중 품번+컬러 기준 4주 판매가 택재고의 0.01% 미만
+ * - 정체재고: 과시즌 중 품번+컬러 기준 4주 판매가 택재고의 0.0025% 미만 (주차별 기준: 월 0.01%의 1/4)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -176,7 +176,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         COALESCE(ps1w.sale_tag_amt, 0) AS py_sale_1w_tag_amt,
         COALESCE(ps1w.sale_qty, 0) AS py_sale_1w_qty,
         ts.total_stock_amt,
-        ts.total_stock_amt * 0.0001 AS threshold_amt,
+        ts.total_stock_amt * 0.000025 AS threshold_amt,  -- 주차별 기준 0.0025%
         -- 시즌 분류 (월별과 동일한 로직)
         CASE 
           -- FW 시즌 (9월~2월)
@@ -232,7 +232,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         py_sale_1w_qty,
         threshold_amt,
         season_class,
-        -- 정체재고: 과시즌(old)이면서 4주 판매 < 0.01%인 경우만
+        -- 정체재고: 과시즌(old)이면서 4주 판매 < 0.0025%인 경우만 (주차별 기준)
         CASE 
           WHEN season_class = 'old' AND cy_sale_4w_tag_amt < threshold_amt THEN 'stagnant'
           ELSE season_class
