@@ -25,7 +25,13 @@ interface ForecastInputPanelProps {
   actualData: any[]; // 실적 차트 데이터
   weeksType: '4weeks' | '8weeks' | '12weeks';
   selectedItem: 'all' | 'shoes' | 'hat' | 'bag' | 'other'; // 선택된 중분류
-  onForecastCalculated: (forecastResults: any[], orderCapacity: OrderCapacity | null, incomingAmounts?: any[]) => void;
+  onForecastCalculated: (
+    forecastResults: any[], 
+    orderCapacity: OrderCapacity | null, 
+    incomingAmounts?: any[],
+    orderCapacityByItem?: Record<string, OrderCapacity>,
+    forecastResultsByItem?: Record<string, any[]>
+  ) => void;
 }
 
 export default function ForecastInputPanel({
@@ -247,48 +253,203 @@ export default function ForecastInputPanel({
   };
 
   // 예측 계산 실행 (한 번 실행하면 모든 중분류에 자동 적용)
-  const handleCalculateForecast = () => {
+  // 아이템별 차트 데이터 조회 함수
+  const fetchChartDataForItem = async (itemType: 'shoes' | 'hat' | 'bag' | 'other'): Promise<any[]> => {
+    try {
+      const yyyymm = lastActualMonth.replace(/-/g, '');
+      const itemStdMap: Record<string, string> = {
+        shoes: '신발',
+        hat: '모자',
+        bag: '가방',
+        other: '기타ACC',
+      };
+      const itemStd = itemStdMap[itemType];
+      const url = `/api/dashboard/chart?brandCode=${encodeURIComponent(brandCode)}&yyyymm=${yyyymm}&weeksType=${weeksType}&itemStd=${encodeURIComponent(itemStd)}&excludePurchase=true&base=amount`;
+      console.log(`📊 [${itemType}] 월결산 차트 데이터 조회:`, url);
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error(`❌ [${itemType}] 차트 데이터 조회 실패:`, response.status);
+        return [];
+      }
+      
+      const result = await response.json();
+      const chartData = result.data || result || [];
+      console.log(`✅ [${itemType}] 월결산 차트 데이터 조회 성공:`, chartData.length, '개 월');
+      return chartData;
+    } catch (error) {
+      console.error(`❌ [${itemType}] 차트 데이터 조회 오류:`, error);
+      return [];
+    }
+  };
+
+  const handleCalculateForecast = async () => {
     if (!actualData || actualData.length === 0) {
       alert('실적 데이터가 없습니다.');
       return;
     }
 
-    if (selectedItem === 'all') {
-      alert('중분류를 선택해주세요 (신발, 모자, 가방, 기타ACC).');
-      return;
-    }
-
-    const forecastInput: ForecastInput = {
-      brandCode,
-      brandName,
-      yoyRate: yoyRateExPurchase, // 하위호환용 (재고주수 계산에 사용)
-      yoyRateExPurchase,
-      yoyRatePurchase,
-      baseStockWeeks,
-      incomingAmounts,
-    };
-
     try {
-      // 선택된 중분류에 대한 예측 계산
-      const forecastResults = calculateForecast(actualData, forecastInput, weeksType, selectedItem);
-
-      // 4개월 후 발주가능 금액 계산 (사입제외 YOY 기준)
-      const orderCapacity = calculateOrderCapacity(
-        actualData,
-        forecastResults,
-        baseStockWeeks[selectedItem],
-        weeksType,
-        yoyRateExPurchase[selectedItem]
-      );
-
-      // 로컬 스토리지에 저장 (모든 중분류에 공통 적용)
-      saveToLocalStorage();
+      console.log('🔄 모든 아이템에 대해 월결산 예측 계산 시작...');
+      
+      const itemTypes: ('shoes' | 'hat' | 'bag' | 'other')[] = ['shoes', 'hat', 'bag', 'other'];
+      const orderCapacityByItem: Record<string, OrderCapacity> = {};
+      const forecastResultsByItem: Record<string, any[]> = {};
+      
+      // 각 아이템에 대해 순차적으로 API 호출 및 계산
+      for (const item of itemTypes) {
+        // 해당 아이템의 차트 데이터 조회
+        const itemChartData = await fetchChartDataForItem(item);
+        
+        if (itemChartData && itemChartData.length > 0) {
+          const forecastInput: ForecastInput = {
+            brandCode,
+            brandName,
+            yoyRate: yoyRateExPurchase,
+            yoyRateExPurchase,
+            yoyRatePurchase,
+            baseStockWeeks,
+            incomingAmounts,
+          };
+          
+          // 해당 아이템의 예측 계산
+          const forecastResults = calculateForecast(itemChartData, forecastInput, weeksType, item);
+          const orderCapacity = calculateOrderCapacity(
+            itemChartData,
+            forecastResults,
+            baseStockWeeks[item],
+            weeksType,
+            yoyRateExPurchase[item]
+          );
+          
+          orderCapacityByItem[item] = orderCapacity;
+          forecastResultsByItem[item] = forecastResults;
+          console.log(`✅ [${item}] 월결산 예측 계산 완료 - 발주가능: ${orderCapacity.orderCapacity}백만원`);
+        } else {
+          console.log(`⚠️ [${item}] 차트 데이터가 없어 예측 계산을 건너뜁니다.`);
+        }
+      }
+      
+      // "전체(all)" 아이템에 대한 예측 결과 생성 (각 아이템 합산)
+      if (Object.keys(forecastResultsByItem).length === 4) {
+        const allForecastResults: any[] = [];
+        const shoesResults = forecastResultsByItem['shoes'] || [];
+        const hatResults = forecastResultsByItem['hat'] || [];
+        const bagResults = forecastResultsByItem['bag'] || [];
+        const otherResults = forecastResultsByItem['other'] || [];
+        
+        // 각 월별로 합산
+        for (let i = 0; i < shoesResults.length; i++) {
+          const shoes = shoesResults[i] || {};
+          const hat = hatResults[i] || {};
+          const bag = bagResults[i] || {};
+          const other = otherResults[i] || {};
+          
+          const totalStock = (shoes.totalStock || 0) + (hat.totalStock || 0) + (bag.totalStock || 0) + (other.totalStock || 0);
+          const previousTotalStock = (shoes.previousTotalStock || 0) + (hat.previousTotalStock || 0) + (bag.previousTotalStock || 0) + (other.previousTotalStock || 0);
+          
+          // 시즌별 재고 합산 (당년)
+          const currentSeasonStock = (shoes.currentSeasonStock || 0) + (hat.currentSeasonStock || 0) + (bag.currentSeasonStock || 0) + (other.currentSeasonStock || 0);
+          const nextSeasonStock = (shoes.nextSeasonStock || 0) + (hat.nextSeasonStock || 0) + (bag.nextSeasonStock || 0) + (other.nextSeasonStock || 0);
+          const oldSeasonStock = (shoes.oldSeasonStock || 0) + (hat.oldSeasonStock || 0) + (bag.oldSeasonStock || 0) + (other.oldSeasonStock || 0);
+          const stagnantStock = (shoes.stagnantStock || 0) + (hat.stagnantStock || 0) + (bag.stagnantStock || 0) + (other.stagnantStock || 0);
+          
+          // 시즌별 재고 합산 (전년)
+          const previousCurrentSeasonStock = (shoes.previousCurrentSeasonStock || 0) + (hat.previousCurrentSeasonStock || 0) + (bag.previousCurrentSeasonStock || 0) + (other.previousCurrentSeasonStock || 0);
+          const previousNextSeasonStock = (shoes.previousNextSeasonStock || 0) + (hat.previousNextSeasonStock || 0) + (bag.previousNextSeasonStock || 0) + (other.previousNextSeasonStock || 0);
+          const previousOldSeasonStock = (shoes.previousOldSeasonStock || 0) + (hat.previousOldSeasonStock || 0) + (bag.previousOldSeasonStock || 0) + (other.previousOldSeasonStock || 0);
+          const previousStagnantStock = (shoes.previousStagnantStock || 0) + (hat.previousStagnantStock || 0) + (bag.previousStagnantStock || 0) + (other.previousStagnantStock || 0);
+          
+          // 재고주수 합산
+          const stockWeeks = (shoes.stockWeeks || 0) + (hat.stockWeeks || 0) + (bag.stockWeeks || 0) + (other.stockWeeks || 0);
+          const previousStockWeeks = (shoes.previousStockWeeks || 0) + (hat.previousStockWeeks || 0) + (bag.previousStockWeeks || 0) + (other.previousStockWeeks || 0);
+          const stockWeeksNormal = (shoes.stockWeeksNormal || 0) + (hat.stockWeeksNormal || 0) + (bag.stockWeeksNormal || 0) + (other.stockWeeksNormal || 0);
+          const previousStockWeeksNormal = (shoes.previousStockWeeksNormal || 0) + (hat.previousStockWeeksNormal || 0) + (bag.previousStockWeeksNormal || 0) + (other.previousStockWeeksNormal || 0);
+          
+          // 시즌별 비율 계산
+          const currentSeasonRatio = totalStock > 0 ? (currentSeasonStock / totalStock * 100) : 25;
+          const nextSeasonRatio = totalStock > 0 ? (nextSeasonStock / totalStock * 100) : 25;
+          const oldSeasonRatio = totalStock > 0 ? (oldSeasonStock / totalStock * 100) : 25;
+          const stagnantRatio = totalStock > 0 ? (stagnantStock / totalStock * 100) : 25;
+          
+          allForecastResults.push({
+            month: shoes.month,
+            isActual: false,
+            totalStock,
+            previousTotalStock,
+            stockWeeks: stockWeeks / 4,
+            previousStockWeeks: previousStockWeeks / 4,
+            stockWeeksNormal: stockWeeksNormal / 4,
+            previousStockWeeksNormal: previousStockWeeksNormal / 4,
+            stockYOY: previousTotalStock > 0 ? Math.round((totalStock / previousTotalStock) * 100) : 0,
+            // 시즌별 재고 (당년)
+            currentSeasonStock,
+            nextSeasonStock,
+            oldSeasonStock,
+            stagnantStock,
+            // 시즌별 재고 (전년)
+            previousCurrentSeasonStock,
+            previousNextSeasonStock,
+            previousOldSeasonStock,
+            previousStagnantStock,
+            // 시즌별 비율
+            currentSeasonRatio,
+            nextSeasonRatio,
+            oldSeasonRatio,
+            stagnantRatio,
+            previousCurrentSeasonRatio: previousTotalStock > 0 ? (previousCurrentSeasonStock / previousTotalStock * 100) : currentSeasonRatio,
+            previousNextSeasonRatio: previousTotalStock > 0 ? (previousNextSeasonStock / previousTotalStock * 100) : nextSeasonRatio,
+            previousOldSeasonRatio: previousTotalStock > 0 ? (previousOldSeasonStock / previousTotalStock * 100) : oldSeasonRatio,
+            previousStagnantRatio: previousTotalStock > 0 ? (previousStagnantStock / previousTotalStock * 100) : stagnantRatio,
+          });
+        }
+        
+        forecastResultsByItem['all'] = allForecastResults;
+        
+        // 전체 발주가능금액도 합산
+        const allOrderCapacity: OrderCapacity = {
+          targetMonth: orderCapacityByItem['shoes']?.targetMonth || '',
+          baseStockWeeks: 0,
+          weeklyAvgSales: (orderCapacityByItem['shoes']?.weeklyAvgSales || 0) + (orderCapacityByItem['hat']?.weeklyAvgSales || 0) + (orderCapacityByItem['bag']?.weeklyAvgSales || 0) + (orderCapacityByItem['other']?.weeklyAvgSales || 0),
+          currentForecastStock: (orderCapacityByItem['shoes']?.currentForecastStock || 0) + (orderCapacityByItem['hat']?.currentForecastStock || 0) + (orderCapacityByItem['bag']?.currentForecastStock || 0) + (orderCapacityByItem['other']?.currentForecastStock || 0),
+          targetStock: (orderCapacityByItem['shoes']?.targetStock || 0) + (orderCapacityByItem['hat']?.targetStock || 0) + (orderCapacityByItem['bag']?.targetStock || 0) + (orderCapacityByItem['other']?.targetStock || 0),
+          orderCapacity: (orderCapacityByItem['shoes']?.orderCapacity || 0) + (orderCapacityByItem['hat']?.orderCapacity || 0) + (orderCapacityByItem['bag']?.orderCapacity || 0) + (orderCapacityByItem['other']?.orderCapacity || 0),
+          yoyRate: 100,
+          weeksType,
+        };
+        orderCapacityByItem['all'] = allOrderCapacity;
+        
+        console.log(`✅ [all] 전체 월결산 예측 결과 생성 완료 - 발주가능: ${allOrderCapacity.orderCapacity}백만원`);
+      }
+      
+      // 로컬 스토리지에 저장
+      const dataToSave = {
+        yoyRateExPurchase,
+        yoyRatePurchase,
+        yoyRate: yoyRateExPurchase,
+        baseStockWeeks,
+        incomingAmounts,
+        orderCapacityByItem,
+        forecastResultsByItem,
+        savedAt: new Date().toISOString(),
+      };
+      localStorage.setItem(storageKey, JSON.stringify(dataToSave));
       setIsForecastReady(true);
-
-      // 부모 컴포넌트로 결과 전달 (입고예정금액 포함)
-      onForecastCalculated(forecastResults, orderCapacity, incomingAmounts);
-
-      alert('✅ 예측 설정이 저장되었습니다.\n\n모든 중분류(신발/모자/가방/기타ACC)에 자동 적용됩니다.');
+      console.log('✅ 월결산 예측 설정 저장 완료 (모든 아이템)');
+      
+      // 현재 선택된 아이템에 대해 부모 컴포넌트에 전달
+      const currentItemKey = selectedItem;
+      if (forecastResultsByItem[currentItemKey] && orderCapacityByItem[currentItemKey]) {
+        onForecastCalculated(
+          forecastResultsByItem[currentItemKey], 
+          orderCapacityByItem[currentItemKey], 
+          incomingAmounts,
+          orderCapacityByItem,
+          forecastResultsByItem
+        );
+      }
+      
+      alert('✅ 예측 설정이 저장되었습니다.\n\n모든 중분류(신발/모자/가방/기타ACC/전체)에 자동 적용됩니다.');
     } catch (error) {
       console.error('예측 계산 실패:', error);
       alert('예측 계산에 실패했습니다.');

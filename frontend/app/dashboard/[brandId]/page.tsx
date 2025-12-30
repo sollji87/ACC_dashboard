@@ -701,6 +701,8 @@ export default function BrandDashboard() {
   const [orderCapacity, setOrderCapacity] = useState<OrderCapacity | null>(null); // 발주가능 금액
   const [combinedChartData, setCombinedChartData] = useState<any[]>([]); // 실적 + 예측 결합 데이터
   const [forecastIncomingAmounts, setForecastIncomingAmounts] = useState<any[]>([]); // 입고예정금액
+  const [forecastResultsByItem, setForecastResultsByItem] = useState<Record<string, any[]>>({}); // 아이템별 예측 결과
+  const [orderCapacityByItem, setOrderCapacityByItem] = useState<Record<string, OrderCapacity>>({}); // 아이템별 발주가능 금액
 
   const monthOptions = getMonthOptions();
 
@@ -849,9 +851,23 @@ export default function BrandDashboard() {
   }, [chartData, forecastResults]);
 
   // 예측 계산 완료 콜백
-  const handleForecastCalculated = (results: any[], capacity: OrderCapacity | null, incomingAmounts?: any[]) => {
+  const handleForecastCalculated = (
+    results: any[], 
+    capacity: OrderCapacity | null, 
+    incomingAmounts?: any[],
+    capacityByItem?: Record<string, OrderCapacity>,
+    resultsByItem?: Record<string, any[]>
+  ) => {
     setForecastResults(results);
     setOrderCapacity(capacity);
+    if (capacityByItem) {
+      setOrderCapacityByItem(capacityByItem);
+      console.log('📊 아이템별 발주가능 금액 저장:', Object.keys(capacityByItem).map(k => `${k}: ${capacityByItem[k]?.orderCapacity}백만원`).join(', '));
+    }
+    if (resultsByItem) {
+      setForecastResultsByItem(resultsByItem);
+      console.log('📊 아이템별 예측 결과 저장:', Object.keys(resultsByItem).map(k => `${k}: ${resultsByItem[k]?.length}월`).join(', '));
+    }
     if (incomingAmounts && incomingAmounts.length > 0) {
       setForecastIncomingAmounts(incomingAmounts);
       console.log('📦 입고예정금액 업데이트:', incomingAmounts);
@@ -860,7 +876,7 @@ export default function BrandDashboard() {
     console.log('📊 발주가능 금액:', capacity);
   };
 
-  // 로컬 스토리지에서 입고예정금액 불러오기
+  // 로컬 스토리지에서 입고예정금액, 아이템별 예측 결과 불러오기
   useEffect(() => {
     if (!brand) return;
     try {
@@ -871,11 +887,47 @@ export default function BrandDashboard() {
         if (parsed.incomingAmounts && parsed.incomingAmounts.length > 0) {
           setForecastIncomingAmounts(parsed.incomingAmounts);
         }
+        // 아이템별 발주가능금액 불러오기
+        if (parsed.orderCapacityByItem) {
+          setOrderCapacityByItem(parsed.orderCapacityByItem);
+          console.log('📊 로컬 스토리지에서 아이템별 발주가능금액 로드:', Object.keys(parsed.orderCapacityByItem));
+        }
+        // 아이템별 예측결과 불러오기
+        if (parsed.forecastResultsByItem) {
+          setForecastResultsByItem(parsed.forecastResultsByItem);
+          console.log('📊 로컬 스토리지에서 아이템별 예측결과 로드:', Object.keys(parsed.forecastResultsByItem));
+        }
       }
     } catch (error) {
       console.error('입고예정금액 로드 실패:', error);
     }
   }, [brand]);
+
+  // 선택된 아이템 변경 시 해당 아이템의 발주가능금액 및 예측결과로 업데이트
+  useEffect(() => {
+    const itemKey = selectedItemForChart;
+    
+    // 발주가능금액 업데이트
+    if (Object.keys(orderCapacityByItem).length > 0) {
+      const capacityForItem = orderCapacityByItem[itemKey];
+      if (capacityForItem) {
+        setOrderCapacity(capacityForItem);
+        console.log(`📊 아이템 변경 (${selectedItemForChart}) - 발주가능금액: ${capacityForItem.orderCapacity}백만원`);
+      }
+    }
+    
+    // 예측결과 업데이트
+    if (Object.keys(forecastResultsByItem).length > 0) {
+      const resultsForItem = forecastResultsByItem[itemKey];
+      if (resultsForItem && resultsForItem.length > 0) {
+        setForecastResults(resultsForItem);
+        console.log(`📊 아이템 변경 (${selectedItemForChart}) - 예측결과: ${resultsForItem.length}월`);
+      } else {
+        // 해당 아이템의 예측결과가 없으면 초기화
+        setForecastResults([]);
+      }
+    }
+  }, [selectedItemForChart, orderCapacityByItem, forecastResultsByItem]);
 
   // 품번별 월별 추이 데이터 로드
   useEffect(() => {
