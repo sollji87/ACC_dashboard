@@ -1024,8 +1024,8 @@ export default function BrandDashboard() {
                 
                 const totalCurrent = shoes.current + hat.current + bag.current + other.current;
                 const totalPrevious = shoes.previous + hat.previous + bag.previous + other.previous;
-                const totalSalesCurrent = shoes.salesCurrent + hat.salesCurrent + bag.salesCurrent + other.salesCurrent;
-                const totalSalesPrevious = shoes.salesPrevious + hat.salesPrevious + bag.salesPrevious + other.salesPrevious;
+                const totalSalesCurrent = (shoes.salesCurrent || 0) + (hat.salesCurrent || 0) + (bag.salesCurrent || 0) + (other.salesCurrent || 0);
+                const totalSalesPrevious = (shoes.salesPrevious || 0) + (hat.salesPrevious || 0) + (bag.salesPrevious || 0) + (other.salesPrevious || 0);
                 // 재고주수는 가중평균으로 계산 (재고금액 기준)
                 const totalWeeks = totalCurrent > 0 
                   ? (shoes.current * shoes.weeks + hat.current * hat.weeks + bag.current * bag.weeks + other.current * other.weeks) / totalCurrent
