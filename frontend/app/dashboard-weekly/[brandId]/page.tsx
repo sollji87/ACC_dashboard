@@ -1165,7 +1165,7 @@ export default function BrandDashboard() {
   useEffect(() => {
     if (!brand) return;
     try {
-      const storageKey = `forecast_${brand.code}`;
+      const storageKey = `weekly_forecast_${brand.code}`;
       const savedData = localStorage.getItem(storageKey);
       if (savedData) {
         const parsed = JSON.parse(savedData);
@@ -2409,10 +2409,23 @@ export default function BrandDashboard() {
                         {/* 시즌 정의 - 한 줄 */}
                         <div className="mt-1.5 text-[10px] text-slate-500 bg-slate-50 px-2 py-1 rounded border border-slate-100 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           {(() => {
-                            const month = parseInt(selectedWeek.split('-')[1]);
+                            // 주차 번호에서 대략적인 월 계산 (주차 1-4: 1월, 5-8: 2월, ...)
+                            const weekNum = parseInt(selectedWeek.split('-')[1]);
                             const year = parseInt(selectedWeek.split('-')[0]);
-                            const yy = year % 100;
-                            const isFW = month >= 9 || month <= 2;
+                            // 주차 번호를 월로 변환 (주차 1-4 → 1월, 5-8 → 2월, 9-13 → 3월, ...)
+                            const estimatedMonth = Math.ceil(weekNum / 4.33);
+                            const actualMonth = Math.min(12, Math.max(1, estimatedMonth));
+                            
+                            // FW: 9월~차년도 2월, SS: 3월~8월
+                            const isFW = actualMonth >= 9 || actualMonth <= 2;
+                            
+                            // 시즌 연도 계산: FW 시즌 중 1-2월은 전년도 시즌
+                            let seasonYear = year;
+                            if (isFW && actualMonth <= 2) {
+                              seasonYear = year - 1; // 1-2월은 전년도 FW 시즌
+                            }
+                            const yy = seasonYear % 100;
+                            
                             const thresholdText = productDetails && productDetails.thresholdAmt > 0 
                               ? ` (기준:${Math.round(productDetails.thresholdAmt / 1000000).toLocaleString()}백만)` 
                               : '';
@@ -2667,10 +2680,10 @@ export default function BrandDashboard() {
                             const totalFourWeekSalesYOY = totalPrevFourWeekSalesAmount > 0 ? Math.round((totalFourWeekSalesAmount / totalPrevFourWeekSalesAmount) * 100) : 0;
                             
                             // combinedChartData에서 시즌별 데이터 가져오기 (막대그래프와 동일한 계산)
-                            // selectedWeek에서 주차 번호만 추출 (2025-52 -> 52)
-                            const selectedWeekNum = selectedWeek.split('-').pop() || '';
+                            // selectedWeek에서 주차 번호만 추출 (2025-52 -> 52, 2026-01 -> 1)
+                            const selectedWeekNum = parseInt(selectedWeek.split('-').pop() || '0', 10);
                             const currentMonthChartData = combinedChartData?.find((d: any) => 
-                              String(d.month).replace(/[^0-9]/g, '') === selectedWeekNum
+                              parseInt(String(d.month).replace(/[^0-9]/g, ''), 10) === selectedWeekNum
                             );
                             let currentSeasonStock = 0;
                             let currentSeasonSale = 0;
@@ -2786,13 +2799,19 @@ export default function BrandDashboard() {
                             // S/F 시즌 필터 적용 여부 확인
                             const isSeasonFiltered = excludeSeasonFilter !== 'all';
                             
-                            // S/F 시즌 필터 적용 시 품번별 합계 사용, 그렇지 않으면 chartData 사용
-                            const displayCurrentSeasonStock = isSeasonFiltered ? totalEndingInventory : currentSeasonStock;
-                            const displayCurrentSeasonStockQty = isSeasonFiltered ? totalEndingInventoryQty : currentSeasonStockQty;
-                            const displayCurrentSeasonSale = isSeasonFiltered ? totalFourWeekSalesAmount : currentSeasonSale;
+                            // S/F 시즌 필터 적용 시 품번별 합계 사용, 그렇지 않으면 chartData 사용 (chartData가 0이면 품번별 합계를 fallback으로 사용)
+                            const displayCurrentSeasonStock = isSeasonFiltered ? totalEndingInventory : (currentSeasonStock > 0 ? currentSeasonStock : totalEndingInventory);
+                            const displayCurrentSeasonStockQty = isSeasonFiltered ? totalEndingInventoryQty : (currentSeasonStockQty > 0 ? currentSeasonStockQty : totalEndingInventoryQty);
+                            const displayCurrentSeasonSale = isSeasonFiltered ? totalFourWeekSalesAmount : (currentSeasonSale > 0 ? currentSeasonSale : totalFourWeekSalesAmount);
+                            
+                            // 전년 데이터도 마찬가지로 chartData가 0이면 품번별 합계를 fallback으로 사용
+                            const displayPreviousSeasonStock = previousSeasonStock > 0 ? previousSeasonStock : totalPreviousEndingInventory;
+                            const displayPreviousSeasonStockQty = previousSeasonStockQty > 0 ? previousSeasonStockQty : totalPreviousEndingInventoryQty;
+                            const displayPreviousSeasonSale = previousSeasonSale > 0 ? previousSeasonSale : totalPrevFourWeekSalesAmount;
+                            const displayPreviousSeasonSale1w = previousSeasonSale1w > 0 ? previousSeasonSale1w : totalPrevOneWeekSalesAmount;
                             
                             const avgWeeks = calculateWeeks(displayCurrentSeasonStock, displayCurrentSeasonSale);
-                            const avgPreviousWeeks = calculateWeeks(previousSeasonStock, previousSeasonSale);
+                            const avgPreviousWeeks = calculateWeeks(displayPreviousSeasonStock, displayPreviousSeasonSale);
                             
                             // 디버깅: 막대그래프 vs 품번별 합계 비교
                             console.log(`📊 [${title}] 시즌별 재고 비교:`);
@@ -2852,8 +2871,8 @@ export default function BrandDashboard() {
                                         <td className="py-2 px-2 text-xs font-bold text-slate-600 bg-slate-100">{products.length}개</td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
                                           <div>
-                                            <p className="font-bold text-slate-800">{(currentSeasonStockQty || totalEndingInventoryQty) > 0 ? formatNumber(Math.round((displayCurrentSeasonStock * 1000000) / (currentSeasonStockQty || totalEndingInventoryQty))) : '-'}</p>
-                                            <p className="text-[10px] text-slate-500">전년 {(previousSeasonStockQty || totalPreviousEndingInventoryQty) > 0 ? formatNumber(Math.round((previousSeasonStock * 1000000) / (previousSeasonStockQty || totalPreviousEndingInventoryQty))) : '-'}</p>
+                                            <p className="font-bold text-slate-800">{displayCurrentSeasonStockQty > 0 ? formatNumber(Math.round((displayCurrentSeasonStock * 1000000) / displayCurrentSeasonStockQty)) : '-'}</p>
+                                            <p className="text-[10px] text-slate-500">전년 {displayPreviousSeasonStockQty > 0 ? formatNumber(Math.round((displayPreviousSeasonStock * 1000000) / displayPreviousSeasonStockQty)) : '-'}</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
@@ -2864,36 +2883,36 @@ export default function BrandDashboard() {
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
                                           <div>
-                                            <p className="font-bold text-slate-800">{formatNumber(currentSeasonStockQty || totalEndingInventoryQty)}</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(previousSeasonStockQty || totalPreviousEndingInventoryQty)}</p>
+                                            <p className="font-bold text-slate-800">{formatNumber(displayCurrentSeasonStockQty)}</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(displayPreviousSeasonStockQty)}</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
                                           <div>
                                             <p className="font-bold text-slate-800">{formatNumber(Math.round(displayCurrentSeasonStock))}백만</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(previousSeasonStock))}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(displayPreviousSeasonStock))}백만</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
                                           <div>
                                             <p className="font-bold text-green-700">{formatNumber(Math.round(currentSeasonSale1w || totalOneWeekSalesAmount))}백만</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(previousSeasonSale1w || totalPrevOneWeekSalesAmount))}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(displayPreviousSeasonSale1w))}백만</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
                                           <div>
-                                            <p className="font-bold text-purple-700">{formatNumber(Math.round(displayCurrentSeasonSale || totalFourWeekSalesAmount))}백만</p>
-                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(previousSeasonSale || totalPrevFourWeekSalesAmount))}백만</p>
+                                            <p className="font-bold text-purple-700">{formatNumber(Math.round(displayCurrentSeasonSale))}백만</p>
+                                            <p className="text-[10px] text-slate-500">전년 {formatNumber(Math.round(displayPreviousSeasonSale))}백만</p>
                                           </div>
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
-                                          <span className={`font-bold ${previousSeasonStock > 0 && (displayCurrentSeasonStock / previousSeasonStock * 100) >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
-                                            {previousSeasonStock > 0 ? Math.round((displayCurrentSeasonStock / previousSeasonStock) * 100) + '%' : '-'}
+                                          <span className={`font-bold ${displayPreviousSeasonStock > 0 && (displayCurrentSeasonStock / displayPreviousSeasonStock * 100) >= 100 ? 'text-red-600' : 'text-emerald-600'}`}>
+                                            {displayPreviousSeasonStock > 0 ? Math.round((displayCurrentSeasonStock / displayPreviousSeasonStock) * 100) + '%' : '-'}
                                           </span>
                                         </td>
                                         <td className="py-2 px-2 text-xs text-center bg-slate-100">
-                                          <span className={`font-bold ${previousSeasonSale > 0 && (displayCurrentSeasonSale / previousSeasonSale * 100) >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
-                                            {previousSeasonSale > 0 ? Math.round((displayCurrentSeasonSale / previousSeasonSale) * 100) + '%' : '-'}
+                                          <span className={`font-bold ${displayPreviousSeasonSale > 0 && (displayCurrentSeasonSale / displayPreviousSeasonSale * 100) >= 100 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {displayPreviousSeasonSale > 0 ? Math.round((displayCurrentSeasonSale / displayPreviousSeasonSale) * 100) + '%' : '-'}
                                           </span>
                                         </td>
                                       </tr>
@@ -2970,10 +2989,22 @@ export default function BrandDashboard() {
                             );
                           };
 
-                          const month = parseInt(selectedWeek.split('-')[1]);
+                          // 주차 번호에서 대략적인 월 계산
+                          const weekNum = parseInt(selectedWeek.split('-')[1]);
                           const year = parseInt(selectedWeek.split('-')[0]);
-                          const yy = year % 100;
-                          const isFW = month >= 9 || month <= 2;
+                          // 주차 번호를 월로 변환 (주차 1-4 → 1월, 5-8 → 2월, 9-13 → 3월, ...)
+                          const estimatedMonth = Math.ceil(weekNum / 4.33);
+                          const actualMonth = Math.min(12, Math.max(1, estimatedMonth));
+                          
+                          // FW: 9월~차년도 2월, SS: 3월~8월
+                          const isFW = actualMonth >= 9 || actualMonth <= 2;
+                          
+                          // 시즌 연도 계산: FW 시즌 중 1-2월은 전년도 시즌
+                          let seasonYear = year;
+                          if (isFW && actualMonth <= 2) {
+                            seasonYear = year - 1; // 1-2월은 전년도 FW 시즌
+                          }
+                          const yy = seasonYear % 100;
                           
                           // 시즌별 합계 계산 (필터되지 않은 전체 데이터 사용)
                           const seasonSummary = [
@@ -3058,16 +3089,16 @@ export default function BrandDashboard() {
                               {/* 시즌별 요약 카드 */}
                               {/* combinedChartData에서 현재 월의 시즌별 전년 데이터 가져오기 */}
                               {(() => {
-                                // selectedWeek에서 주차 번호만 추출 (2025-52 -> 52)
-                                const selectedWeekNum = selectedWeek.split('-').pop() || '';
+                                // selectedWeek에서 주차 번호만 추출 (2025-52 -> 52, 2026-01 -> 1)
+                                const selectedWeekNum = parseInt(selectedWeek.split('-').pop() || '0', 10);
                                 console.log('🔍 [디버깅] combinedChartData 존재 여부:', combinedChartData ? `있음 (${combinedChartData.length}개)` : '없음');
                                 console.log('🔍 [디버깅] selectedWeek:', selectedWeek, '-> 주차번호:', selectedWeekNum);
                                 if (combinedChartData && combinedChartData.length > 0) {
                                   console.log('🔍 [디버깅] combinedChartData[0].month:', combinedChartData[0].month);
                                 }
-                                // month 필드에서 숫자만 추출하여 비교 (52주차 -> 52)
+                                // month 필드에서 숫자만 추출하여 비교 (52주차 -> 52, 01주차 -> 1)
                                 const currentMonthChartData = combinedChartData?.find((d: any) => 
-                                  String(d.month).replace(/[^0-9]/g, '') === selectedWeekNum
+                                  parseInt(String(d.month).replace(/[^0-9]/g, ''), 10) === selectedWeekNum
                                 );
                                 console.log('🔍 [디버깅] currentMonthChartData 찾기 결과:', currentMonthChartData ? '찾음' : '못 찾음');
                                 if (currentMonthChartData) {
@@ -3080,10 +3111,10 @@ export default function BrandDashboard() {
                               <div className="grid grid-cols-4 gap-3">
                                 {seasonSummary.map((season) => {
                                   // combinedChartData에서 현재 월의 시즌별 데이터 사용 (막대그래프와 동일한 계산)
-                                  // selectedWeek에서 주차 번호만 추출 (2025-52 -> 52)
-                                  const selectedWeekNum = selectedWeek.split('-').pop() || '';
+                                  // selectedWeek에서 주차 번호만 추출 (2025-52 -> 52, 2026-01 -> 1)
+                                  const selectedWeekNum = parseInt(selectedWeek.split('-').pop() || '0', 10);
                                   const currentMonthChartData = combinedChartData?.find((d: any) => 
-                                    String(d.month).replace(/[^0-9]/g, '') === selectedWeekNum
+                                    parseInt(String(d.month).replace(/[^0-9]/g, ''), 10) === selectedWeekNum
                                   );
                                   let previousSeasonStock = 0;
                                   let currentSeasonSale = 0;
@@ -3133,13 +3164,23 @@ export default function BrandDashboard() {
                                   
                                   const filteredSeasonProducts = getFilteredProducts(season.allProducts);
                                   
-                                  // S시즌/F시즌 필터 적용 시 품번별 합계 사용, 그렇지 않으면 chartData 사용 (막대그래프와 동일)
+                                  // 품번별 합계 계산 (당년/전년)
+                                  const totalInventoryFromProducts = filteredSeasonProducts.reduce((sum, p) => sum + (p.endingInventory || 0), 0);
+                                  const totalSaleFromProducts = filteredSeasonProducts.reduce((sum, p) => sum + (p.fourWeekSalesAmount || 0), 0);
+                                  const totalPrevInventoryFromProducts = filteredSeasonProducts.reduce((sum, p) => sum + (p.prevEndingInventory || 0), 0);
+                                  const totalPrevSaleFromProducts = filteredSeasonProducts.reduce((sum, p) => sum + (p.prevFourWeekSalesAmount || 0), 0);
+                                  
+                                  // S시즌/F시즌 필터 적용 시 품번별 합계 사용, 그렇지 않으면 chartData 사용 (chartData가 0이면 품번별 합계로 fallback)
                                   const displayInventory = isSeasonFiltered 
-                                    ? filteredSeasonProducts.reduce((sum, p) => sum + (p.endingInventory || 0), 0)
-                                    : currentSeasonStock;
+                                    ? totalInventoryFromProducts
+                                    : (currentSeasonStock > 0 ? currentSeasonStock : totalInventoryFromProducts);
                                   const displayTagSale = isSeasonFiltered
-                                    ? filteredSeasonProducts.reduce((sum, p) => sum + (p.fourWeekSalesAmount || 0), 0)
-                                    : currentSeasonSale;
+                                    ? totalSaleFromProducts
+                                    : (currentSeasonSale > 0 ? currentSeasonSale : totalSaleFromProducts);
+                                  
+                                  // 전년 데이터도 chartData가 0이면 품번별 합계로 fallback
+                                  const displayPrevInventory = previousSeasonStock > 0 ? previousSeasonStock : totalPrevInventoryFromProducts;
+                                  const displayPrevSale = previousSeasonSale > 0 ? previousSeasonSale : totalPrevSaleFromProducts;
                                   
                                   // 재고주수 계산 (막대그래프와 동일한 공식: 재고 / (매출 / 30 * 7))
                                   const calculateWeeks = (stock: number, sale: number) => {
@@ -3150,14 +3191,11 @@ export default function BrandDashboard() {
                                   };
                                   
                                   const stockWeeks = calculateWeeks(displayInventory, displayTagSale);
-                                  const previousStockWeeks = calculateWeeks(previousSeasonStock, previousSeasonSale);
+                                  const previousStockWeeks = calculateWeeks(displayPrevInventory, displayPrevSale);
                                   const weeksDiff = stockWeeks - previousStockWeeks;
                                   
-                                  // YOY 계산
-                                  const yoyPercent = previousSeasonStock > 0 ? Math.round((displayInventory / previousSeasonStock) * 100) : 0;
-                                  
-                                  // 디버깅: 막대그래프 vs 품번별 합계 비교 (상단 카드)
-                                  const totalInventoryFromProducts = filteredSeasonProducts.reduce((sum, p) => sum + (p.endingInventory || 0), 0);
+                                  // YOY 계산 (전년 데이터로 fallback된 값 사용)
+                                  const yoyPercent = displayPrevInventory > 0 ? Math.round((displayInventory / displayPrevInventory) * 100) : 0;
                                   console.log(`📊 [상단 카드 - ${season.name}] 재고 비교:`);
                                   console.log(`  - 막대그래프(chartData): ${Math.round(currentSeasonStock)}백만원`);
                                   console.log(`  - 품번별 합계(API): ${Math.round(totalInventoryFromProducts)}백만원`);
