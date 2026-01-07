@@ -362,6 +362,28 @@ export default function ForecastInputPanel({
           const previousOldSeasonStock = (shoes.previousOldSeasonStock || 0) + (hat.previousOldSeasonStock || 0) + (bag.previousOldSeasonStock || 0) + (other.previousOldSeasonStock || 0);
           const previousStagnantStock = (shoes.previousStagnantStock || 0) + (hat.previousStagnantStock || 0) + (bag.previousStagnantStock || 0) + (other.previousStagnantStock || 0);
           
+          // 시즌별 매출액 합산 (당년 예측)
+          const currentSeasonSale = (shoes.currentSeasonSale || 0) + (hat.currentSeasonSale || 0) + (bag.currentSeasonSale || 0) + (other.currentSeasonSale || 0);
+          const nextSeasonSale = (shoes.nextSeasonSale || 0) + (hat.nextSeasonSale || 0) + (bag.nextSeasonSale || 0) + (other.nextSeasonSale || 0);
+          const oldSeasonSale = (shoes.oldSeasonSale || 0) + (hat.oldSeasonSale || 0) + (bag.oldSeasonSale || 0) + (other.oldSeasonSale || 0);
+          const stagnantSale = (shoes.stagnantSale || 0) + (hat.stagnantSale || 0) + (bag.stagnantSale || 0) + (other.stagnantSale || 0);
+          const totalSale = (shoes.totalSale || 0) + (hat.totalSale || 0) + (bag.totalSale || 0) + (other.totalSale || 0);
+          
+          // 시즌별 매출액 합산 (전년)
+          const previousCurrentSeasonSale = (shoes.previousCurrentSeasonSale || 0) + (hat.previousCurrentSeasonSale || 0) + (bag.previousCurrentSeasonSale || 0) + (other.previousCurrentSeasonSale || 0);
+          const previousNextSeasonSale = (shoes.previousNextSeasonSale || 0) + (hat.previousNextSeasonSale || 0) + (bag.previousNextSeasonSale || 0) + (other.previousNextSeasonSale || 0);
+          const previousOldSeasonSale = (shoes.previousOldSeasonSale || 0) + (hat.previousOldSeasonSale || 0) + (bag.previousOldSeasonSale || 0) + (other.previousOldSeasonSale || 0);
+          const previousStagnantSale = (shoes.previousStagnantSale || 0) + (hat.previousStagnantSale || 0) + (bag.previousStagnantSale || 0) + (other.previousStagnantSale || 0);
+          const previousTotalSale = (shoes.previousTotalSale || 0) + (hat.previousTotalSale || 0) + (bag.previousTotalSale || 0) + (other.previousTotalSale || 0);
+          
+          // 사입제외/사입 택매출액 합산 (당년 예측)
+          const totalSaleExPurchase = (shoes.totalSaleExPurchase || 0) + (hat.totalSaleExPurchase || 0) + (bag.totalSaleExPurchase || 0) + (other.totalSaleExPurchase || 0);
+          const totalSalePurchase = (shoes.totalSalePurchase || 0) + (hat.totalSalePurchase || 0) + (bag.totalSalePurchase || 0) + (other.totalSalePurchase || 0);
+          
+          // 사입제외/사입 택매출액 합산 (전년)
+          const previousTotalSaleExPurchase = (shoes.previousTotalSaleExPurchase || 0) + (hat.previousTotalSaleExPurchase || 0) + (bag.previousTotalSaleExPurchase || 0) + (other.previousTotalSaleExPurchase || 0);
+          const previousTotalSalePurchase = (shoes.previousTotalSalePurchase || 0) + (hat.previousTotalSalePurchase || 0) + (bag.previousTotalSalePurchase || 0) + (other.previousTotalSalePurchase || 0);
+          
           // 재고주수 합산
           const stockWeeks = (shoes.stockWeeks || 0) + (hat.stockWeeks || 0) + (bag.stockWeeks || 0) + (other.stockWeeks || 0);
           const previousStockWeeks = (shoes.previousStockWeeks || 0) + (hat.previousStockWeeks || 0) + (bag.previousStockWeeks || 0) + (other.previousStockWeeks || 0);
@@ -374,6 +396,12 @@ export default function ForecastInputPanel({
           const oldSeasonRatio = totalStock > 0 ? (oldSeasonStock / totalStock * 100) : 25;
           const stagnantRatio = totalStock > 0 ? (stagnantStock / totalStock * 100) : 25;
           
+          // 매출액 비율 계산
+          const currentSeasonSaleRatio = totalSale > 0 ? Math.round((currentSeasonSale / totalSale) * 100) : 0;
+          const nextSeasonSaleRatio = totalSale > 0 ? Math.round((nextSeasonSale / totalSale) * 100) : 0;
+          const oldSeasonSaleRatio = totalSale > 0 ? Math.round((oldSeasonSale / totalSale) * 100) : 0;
+          const stagnantSaleRatio = totalSale > 0 ? Math.round((stagnantSale / totalSale) * 100) : 0;
+          
           allForecastResults.push({
             month: shoes.month,
             isActual: false,
@@ -384,6 +412,7 @@ export default function ForecastInputPanel({
             stockWeeksNormal: stockWeeksNormal / 4,
             previousStockWeeksNormal: previousStockWeeksNormal / 4,
             stockYOY: previousTotalStock > 0 ? Math.round((totalStock / previousTotalStock) * 100) : 0,
+            saleYOY: previousTotalSale > 0 ? Math.round((totalSale / previousTotalSale) * 100) : 0,
             // 시즌별 재고 (당년)
             currentSeasonStock,
             nextSeasonStock,
@@ -394,7 +423,7 @@ export default function ForecastInputPanel({
             previousNextSeasonStock,
             previousOldSeasonStock,
             previousStagnantStock,
-            // 시즌별 비율
+            // 시즌별 비율 (재고)
             currentSeasonRatio,
             nextSeasonRatio,
             oldSeasonRatio,
@@ -403,16 +432,55 @@ export default function ForecastInputPanel({
             previousNextSeasonRatio: previousTotalStock > 0 ? (previousNextSeasonStock / previousTotalStock * 100) : nextSeasonRatio,
             previousOldSeasonRatio: previousTotalStock > 0 ? (previousOldSeasonStock / previousTotalStock * 100) : oldSeasonRatio,
             previousStagnantRatio: previousTotalStock > 0 ? (previousStagnantStock / previousTotalStock * 100) : stagnantRatio,
+            // 시즌별 매출액 (당년 예측)
+            currentSeasonSale,
+            nextSeasonSale,
+            oldSeasonSale,
+            stagnantSale,
+            totalSale,
+            // 사입제외/사입 택매출액 (당년 예측)
+            totalSaleExPurchase,
+            totalSalePurchase,
+            // 시즌별 매출액 (전년)
+            previousCurrentSeasonSale,
+            previousNextSeasonSale,
+            previousOldSeasonSale,
+            previousStagnantSale,
+            previousTotalSale,
+            // 사입제외/사입 택매출액 (전년)
+            previousTotalSaleExPurchase,
+            previousTotalSalePurchase,
+            // 시즌별 매출액 비율
+            currentSeasonSaleRatio,
+            nextSeasonSaleRatio,
+            oldSeasonSaleRatio,
+            stagnantSaleRatio,
           });
         }
         
         forecastResultsByItem['all'] = allForecastResults;
         
         // 전체 발주가능금액도 합산
+        const totalWeeklyAvgSales = (orderCapacityByItem['shoes']?.weeklyAvgSales || 0) + (orderCapacityByItem['hat']?.weeklyAvgSales || 0) + (orderCapacityByItem['bag']?.weeklyAvgSales || 0) + (orderCapacityByItem['other']?.weeklyAvgSales || 0);
+        
+        // 기준재고주수는 가중평균으로 계산 (주간평균 매출액 기준)
+        const weightedBaseStockWeeks = totalWeeklyAvgSales > 0 
+          ? (
+              (orderCapacityByItem['shoes']?.baseStockWeeks || 0) * (orderCapacityByItem['shoes']?.weeklyAvgSales || 0) +
+              (orderCapacityByItem['hat']?.baseStockWeeks || 0) * (orderCapacityByItem['hat']?.weeklyAvgSales || 0) +
+              (orderCapacityByItem['bag']?.baseStockWeeks || 0) * (orderCapacityByItem['bag']?.weeklyAvgSales || 0) +
+              (orderCapacityByItem['other']?.baseStockWeeks || 0) * (orderCapacityByItem['other']?.weeklyAvgSales || 0)
+            ) / totalWeeklyAvgSales
+          : (baseStockWeeks.shoes + baseStockWeeks.hat + baseStockWeeks.bag + baseStockWeeks.other) / 4;
+        
+        // 월평균 매출도 합산
+        const totalMonthlyAvgSales = (orderCapacityByItem['shoes']?.monthlyAvgSales || 0) + (orderCapacityByItem['hat']?.monthlyAvgSales || 0) + (orderCapacityByItem['bag']?.monthlyAvgSales || 0) + (orderCapacityByItem['other']?.monthlyAvgSales || 0);
+        
         const allOrderCapacity: OrderCapacity = {
           targetMonth: orderCapacityByItem['shoes']?.targetMonth || '',
-          baseStockWeeks: 0,
-          weeklyAvgSales: (orderCapacityByItem['shoes']?.weeklyAvgSales || 0) + (orderCapacityByItem['hat']?.weeklyAvgSales || 0) + (orderCapacityByItem['bag']?.weeklyAvgSales || 0) + (orderCapacityByItem['other']?.weeklyAvgSales || 0),
+          baseStockWeeks: weightedBaseStockWeeks,
+          weeklyAvgSales: totalWeeklyAvgSales,
+          monthlyAvgSales: totalMonthlyAvgSales,
           currentForecastStock: (orderCapacityByItem['shoes']?.currentForecastStock || 0) + (orderCapacityByItem['hat']?.currentForecastStock || 0) + (orderCapacityByItem['bag']?.currentForecastStock || 0) + (orderCapacityByItem['other']?.currentForecastStock || 0),
           targetStock: (orderCapacityByItem['shoes']?.targetStock || 0) + (orderCapacityByItem['hat']?.targetStock || 0) + (orderCapacityByItem['bag']?.targetStock || 0) + (orderCapacityByItem['other']?.targetStock || 0),
           orderCapacity: (orderCapacityByItem['shoes']?.orderCapacity || 0) + (orderCapacityByItem['hat']?.orderCapacity || 0) + (orderCapacityByItem['bag']?.orderCapacity || 0) + (orderCapacityByItem['other']?.orderCapacity || 0),
@@ -723,20 +791,13 @@ export default function ForecastInputPanel({
             <div className="flex justify-end gap-2 pt-2">
               <Button
                 onClick={handleCalculateForecast}
-                disabled={selectedItem === 'all'}
-                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold disabled:opacity-50"
+                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold"
               >
                 🔮 예측 설정 저장 및 계산
               </Button>
-              {selectedItem === 'all' ? (
-                <span className="text-xs text-red-600 self-center">
-                  * 중분류를 선택해주세요
-                </span>
-              ) : (
-                <span className="text-xs text-purple-600 self-center">
-                  ※ 설정은 모든 중분류(신발/모자/가방/기타ACC)에 자동 적용됩니다
-                </span>
-              )}
+              <span className="text-xs text-purple-600 self-center">
+                ※ 설정은 모든 중분류(신발/모자/가방/기타ACC/전체)에 자동 적용됩니다
+              </span>
             </div>
           </div>
         )}

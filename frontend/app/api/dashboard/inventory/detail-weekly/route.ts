@@ -177,10 +177,22 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         COALESCE(ps1w.sale_qty, 0) AS py_sale_1w_qty,
         ts.total_stock_amt,
         ts.total_stock_amt * 0.000025 AS threshold_amt,  -- 주차별 기준 0.0025%
-        -- 시즌 분류 (월별과 동일한 로직)
+        -- 시즌 분류 (FW: 9월~차년도 2월, SS: 3월~8월)
+        -- FW 시즌 중 1-2월은 전년도 FW 시즌으로 처리
         CASE 
-          -- FW 시즌 (9월~2월)
-          WHEN cs.cy_month >= 9 OR cs.cy_month <= 2 THEN
+          -- FW 시즌 후반부 (1-2월): 전년도 시즌 기준
+          WHEN cs.cy_month <= 2 THEN
+            CASE 
+              -- 당시즌: (YY-1)N, (YY-1)F (예: 2026년 1월 → 25N, 25F)
+              WHEN cs.sesn LIKE '${currentYearYY - 1}N%' OR cs.sesn LIKE '${currentYearYY - 1}F%' THEN 'current'
+              -- 차기시즌: YYN, YYS, YYF~ (예: 2026년 1월 → 26N, 26S, 26F~)
+              WHEN cs.sesn LIKE '${currentYearYY}N%' OR cs.sesn LIKE '${currentYearYY}S%' 
+                OR cs.sesn LIKE '${currentYearYY}F%' OR cs.sesn LIKE '${currentYearYY + 1}N%' 
+                OR cs.sesn LIKE '${currentYearYY + 1}S%' THEN 'next'
+              ELSE 'old'
+            END
+          -- FW 시즌 전반부 (9-12월): 당년도 시즌 기준
+          WHEN cs.cy_month >= 9 THEN
             CASE 
               -- 당시즌: YYN, YYF
               WHEN cs.sesn LIKE '${currentYearYY}N%' OR cs.sesn LIKE '${currentYearYY}F%' THEN 'current'

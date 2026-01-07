@@ -276,6 +276,9 @@ const CustomRatioLabel = ({ x, y, width, height, value }: any) => {
   const labelX = x + width / 2;
   const labelY = y + height / 2;
   
+  // 정수로 반올림
+  const roundedRatio = Math.round(ratio);
+  
   return (
     <text
       x={labelX}
@@ -287,7 +290,7 @@ const CustomRatioLabel = ({ x, y, width, height, value }: any) => {
       fontWeight="bold"
       style={{ fontFamily: 'Pretendard Variable, Pretendard, sans-serif' }}
     >
-      {ratio}%
+      {roundedRatio}%
     </text>
   );
 };
@@ -1324,7 +1327,7 @@ export default function BrandDashboard() {
                           </div>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm">
-                          <div className="text-slate-500 text-xs mb-1">목표재고 ({orderCapacity.baseStockWeeks}주 × {orderCapacity.weeklyAvgSales.toLocaleString()}백만원)</div>
+                          <div className="text-slate-500 text-xs mb-1">목표재고 ({Math.round(orderCapacity.baseStockWeeks * 10) / 10}주 × {orderCapacity.weeklyAvgSales.toLocaleString()}백만원)</div>
                           <div className="font-bold text-blue-600 text-lg">
                             {orderCapacity.targetStock.toLocaleString()}백만원
                           </div>

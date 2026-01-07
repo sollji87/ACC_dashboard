@@ -122,10 +122,25 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         sd.sesn,
         -- 연도 2자리 추출 (예: 2025 -> 25)
         SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT AS current_year,
-        -- 시즌 분류 (월별과 동일한 로직)
+        -- 시즌 분류 (FW: 9월~차년도 2월, SS: 3월~8월)
+        -- FW 시즌 중 1-2월은 전년도 FW 시즌으로 처리
         CASE 
-          -- FW 시즌 (9월~2월)
-          WHEN sd.cy_month >= 9 OR sd.cy_month <= 2 THEN
+          -- FW 시즌 후반부 (1-2월): 전년도 시즌 기준
+          WHEN sd.cy_month <= 2 THEN
+            CASE 
+              -- 당시즌: (YY-1)N, (YY-1)F (예: 2026년 1월 → 25N, 25F)
+              WHEN sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'N%' 
+                OR sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'F%' THEN 'current'
+              -- 차기시즌: YYN, YYS, YYF~ (예: 2026년 1월 → 26N, 26S, 26F~)
+              WHEN sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'N%'
+                OR sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'S%'
+                OR sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'F%'
+                OR sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+          -- FW 시즌 전반부 (9-12월): 당년도 시즌 기준
+          WHEN sd.cy_month >= 9 THEN
             CASE 
               -- 당시즌: YYN, YYF
               WHEN sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'N%' 
@@ -258,10 +273,25 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         sd.stock_tag_amt,
         sd.stock_qty,
         sd.sesn,
-        -- 시즌 분류 (월별과 동일한 로직 - 전년 기준)
+        -- 시즌 분류 (FW: 9월~차년도 2월, SS: 3월~8월) - 전년 기준
+        -- FW 시즌 중 1-2월은 전년도 FW 시즌으로 처리
         CASE 
-          -- FW 시즌 (9월~2월)
-          WHEN sd.py_month >= 9 OR sd.py_month <= 2 THEN
+          -- FW 시즌 후반부 (1-2월): 전년도 시즌 기준
+          WHEN sd.py_month <= 2 THEN
+            CASE 
+              -- 당시즌: (YY-1)N, (YY-1)F
+              WHEN sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'N%' 
+                OR sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'F%' THEN 'current'
+              -- 차기시즌
+              WHEN sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'N%'
+                OR sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'S%'
+                OR sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'F%'
+                OR sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR sd.sesn LIKE LPAD((SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+          -- FW 시즌 전반부 (9-12월): 당년도 시즌 기준
+          WHEN sd.py_month >= 9 THEN
             CASE 
               -- 당시즌: YYN, YYF (전년 기준)
               WHEN sd.sesn LIKE SUBSTRING(TO_CHAR(sd.asof_dt, 'YY'), 1, 2) || 'N%' 
@@ -390,17 +420,29 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       FROM cy_sale_1w_detail
       GROUP BY week_key, asof_dt
     ),
-    -- 당년 N주 매출 (전체 + 시즌별) - 월별과 동일한 시즌 분류
+    -- 당년 N주 매출 (전체 + 시즌별) - FW 시즌 중 1-2월은 전년도 시즌으로 처리
     cy_sale_detail AS (
       SELECT
         wm.cy_week_key AS week_key,
         wm.cy_end_dt AS asof_dt,
         wm.cy_month,
         p.sesn,
-        -- 시즌 분류 (월별과 동일한 로직)
+        -- 시즌 분류 (FW: 9월~차년도 2월, SS: 3월~8월)
         CASE 
-          -- FW 시즌 (9월~2월)
-          WHEN wm.cy_month >= 9 OR wm.cy_month <= 2 THEN
+          -- FW 시즌 후반부 (1-2월): 전년도 시즌 기준
+          WHEN wm.cy_month <= 2 THEN
+            CASE 
+              WHEN p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'N%' 
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'F%' THEN 'current'
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'N%'
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'S%'
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+          -- FW 시즌 전반부 (9-12월): 당년도 시즌 기준
+          WHEN wm.cy_month >= 9 THEN
             CASE 
               WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'N%' 
                 OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.cy_end_dt, 'YY'), 1, 2) || 'F%' THEN 'current'
@@ -504,17 +546,29 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       FROM py_sale_1w_detail
       GROUP BY week_key, asof_dt
     ),
-    -- 전년 N주 매출 (전체 + 시즌별) - 월별과 동일한 시즌 분류
+    -- 전년 N주 매출 (전체 + 시즌별) - FW 시즌 중 1-2월은 전년도 시즌으로 처리
     py_sale_detail AS (
       SELECT
         wm.cy_week_key AS week_key,
         wm.cy_end_dt AS asof_dt,
         MONTH(wm.py_end_dt) AS py_month,
         p.sesn,
-        -- 시즌 분류 (월별과 동일한 로직 - 전년 기준)
+        -- 시즌 분류 (FW: 9월~차년도 2월, SS: 3월~8월) - 전년 기준
         CASE 
-          -- FW 시즌 (9월~2월)
-          WHEN MONTH(wm.py_end_dt) >= 9 OR MONTH(wm.py_end_dt) <= 2 THEN
+          -- FW 시즌 후반부 (1-2월): 전년도 시즌 기준
+          WHEN MONTH(wm.py_end_dt) <= 2 THEN
+            CASE 
+              WHEN p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'N%' 
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT - 1)::VARCHAR, 2, '0') || 'F%' THEN 'current'
+              WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'N%'
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'S%'
+                OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'F%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'N%'
+                OR p.sesn LIKE LPAD((SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2)::INT + 1)::VARCHAR, 2, '0') || 'S%' THEN 'next'
+              ELSE 'old'
+            END
+          -- FW 시즌 전반부 (9-12월): 당년도 시즌 기준
+          WHEN MONTH(wm.py_end_dt) >= 9 THEN
             CASE 
               WHEN p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'N%' 
                 OR p.sesn LIKE SUBSTRING(TO_CHAR(wm.py_end_dt, 'YY'), 1, 2) || 'F%' THEN 'current'
