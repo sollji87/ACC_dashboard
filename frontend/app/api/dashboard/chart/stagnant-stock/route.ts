@@ -63,7 +63,7 @@ with item as (
     where a.brd_cd = '${brandCode}'
     and a.pst_yyyymm >= '${months[0]}'
     and a.tag_sale_amt > 0
-    and c.chnl_cd <> '9' -- 수출제외
+    and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
 )
 -- 25년 10월 재고 데이터
 , stock_data as (

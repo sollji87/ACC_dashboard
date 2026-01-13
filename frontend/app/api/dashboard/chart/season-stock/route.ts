@@ -206,7 +206,7 @@ sale_by_product AS (
         AND a.shop_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm = '${yyyymm}'
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY a.prdt_cd
 ),
 

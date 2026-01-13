@@ -96,7 +96,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
     group by b.prdt_cd
@@ -112,7 +112,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
     group by b.prdt_cd
@@ -130,7 +130,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
     group by b.prdt_cd
@@ -146,7 +146,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
     group by b.prdt_cd

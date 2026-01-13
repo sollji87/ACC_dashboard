@@ -52,7 +52,7 @@ monthly_sale_cy as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm = '${yyyymm}'
@@ -70,7 +70,7 @@ channel_detail as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm = '${yyyymm}'

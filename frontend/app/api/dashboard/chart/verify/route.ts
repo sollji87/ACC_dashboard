@@ -87,7 +87,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9'
+        and c.chnl_cd not in ('9', '99')
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm >= to_char(add_months(to_date('${yyyymm}', 'YYYYMM'), -3), 'YYYYMM')
         and a.pst_yyyymm <= '${yyyymm}'
@@ -101,7 +101,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9'
+        and c.chnl_cd not in ('9', '99')
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm >= to_char(add_months(to_date('${pyYyyymm}', 'YYYYMM'), -3), 'YYYYMM')
         and a.pst_yyyymm <= '${pyYyyymm}'

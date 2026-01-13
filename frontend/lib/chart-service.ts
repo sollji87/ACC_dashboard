@@ -161,7 +161,7 @@ monthly_sale_by_product AS (
     WHERE a.brd_cd = '${brandCode}'
       AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM'), a.prdt_cd`
       : `SELECT 
         a.pst_yyyymm as yyyymm,
@@ -178,7 +178,7 @@ monthly_sale_by_product AS (
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY a.pst_yyyymm, a.prdt_cd`
     }
 ),
@@ -318,7 +318,7 @@ monthly_sale AS (
         AND a.cust_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
     GROUP BY TO_CHAR(a.pst_dt, 'YYYYMM')`
       : `SELECT 
@@ -331,7 +331,7 @@ monthly_sale AS (
         AND a.shop_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
     GROUP BY a.pst_yyyymm`
     }

@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
           WHERE a.brd_cd = '${brandCode}'
             AND a.prdt_cd = '${productCode}'
             AND a.pst_yyyymm IN (${monthsCondition})
-            AND c.chnl_cd <> '9'
+            AND c.chnl_cd NOT IN ('9', '99')
           GROUP BY a.pst_yyyymm
         )
         SELECT

@@ -114,7 +114,7 @@ sale_by_product AS (
         AND a.shop_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm = '${yyyymm}'
-      AND c.chnl_cd <> '9'  -- 수출 제외
+      AND c.chnl_cd NOT IN ('9', '99')  -- 수출, 기타채널 제외
     GROUP BY a.prdt_cd
 ),
 
@@ -200,7 +200,7 @@ sale_by_product AS (
         AND a.shop_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm = '${yyyymm}'
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY a.prdt_cd
 )
 SELECT 
@@ -268,7 +268,7 @@ sale_by_product AS (
         AND a.shop_cd = c.sap_shop_cd
     WHERE a.brd_cd = '${brandCode}'
       AND a.pst_yyyymm = '${yyyymm}'
-      AND c.chnl_cd <> '9'
+      AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY a.prdt_cd
 )
 SELECT 

@@ -111,7 +111,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월 기준 
@@ -128,7 +128,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 당월 기준
@@ -147,7 +147,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
@@ -164,7 +164,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}'  -- 1월부터 해당월까지 누적
@@ -183,7 +183,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월
@@ -200,7 +200,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}' -- 당월
@@ -219,7 +219,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
@@ -236,7 +236,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}' -- 1월부터 해당월까지 누적
@@ -635,7 +635,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월 기준 
@@ -652,7 +652,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 당월 기준
@@ -671,7 +671,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
@@ -688,7 +688,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}'  -- 1월부터 해당월까지 누적
@@ -707,7 +707,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 당월
@@ -724,7 +724,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}' -- 당월
@@ -743,7 +743,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${cyAccumStart}' and '${yyyymm}' -- 1월부터 해당월까지 누적
@@ -760,7 +760,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd <> '9' -- 수출제외
+        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchaseCondition}
         and a.brd_cd = '${brandCode}'
         and a.pst_yyyymm between '${pyAccumStart}' and '${pyYyyymm}' -- 1월부터 해당월까지 누적

@@ -385,8 +385,18 @@ export function combineActualAndForecast(
     });
   });
   
-  // 예측 데이터 추가 (전년 동월 실적 포함)
+  // 실적 데이터에 있는 월/주차 목록 생성 (중복 제거용)
+  const actualMonths = new Set(actualData.map(d => d.month || d.weekKey));
+  
+  // 예측 데이터 추가 (실적 데이터와 중복되지 않는 것만)
   forecastResults.forEach((forecast) => {
+    const forecastKey = forecast.month || (forecast as any).weekKey;
+    
+    // 실적 데이터에 이미 있는 월/주차는 제외
+    if (actualMonths.has(forecastKey)) {
+      return;
+    }
+    
     combined.push({
       month: forecast.month,
       isActual: false,
