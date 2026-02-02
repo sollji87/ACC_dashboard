@@ -1284,7 +1284,7 @@ export default function BrandDashboard() {
 
       {/* 헤더 */}
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
-        <div className="container mx-auto px-6 py-5">
+        <div className="max-w-[1800px] mx-auto px-6 py-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
@@ -1352,7 +1352,7 @@ export default function BrandDashboard() {
       </header>
 
       {/* 메인 컨텐츠 */}
-      <main className="container mx-auto px-6 py-8">
+      <main className="max-w-[1800px] mx-auto px-6 py-8">
         {/* 로딩 중 표시 */}
         {isLoadingWeekly && !weeklyData && (
           <div className="mb-6 p-8 text-center bg-slate-50 rounded-xl border border-slate-200">
@@ -1533,18 +1533,25 @@ export default function BrandDashboard() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                      {/* 4x4 그리드: 첫 번째 열은 행 라벨(좁게), 나머지 3개 열은 데이터 */}
+                      {/* 5열 그리드: 첫 번째 열은 행 라벨(좁게), 나머지 4개 열은 데이터 */}
                       <div className="space-y-0">
                         {/* 헤더 행 */}
-                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 py-2 px-2">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr_1fr] gap-1 py-2 px-2">
                           <div className="text-xs font-medium text-slate-600"></div>
                           <div className="text-xs font-medium text-slate-600 text-center">재고주수</div>
                           <div className="text-xs font-medium text-slate-600 text-center">기말재고</div>
-                          <div className="text-xs font-medium text-slate-600 text-center">택판매액</div>
+                          <div className="text-xs font-medium text-slate-600 text-center">
+                            <div>택판매액</div>
+                            <div className="text-[10px] text-slate-400">(1주)</div>
+                          </div>
+                          <div className="text-xs font-medium text-teal-600 text-center">
+                            <div>택판매액</div>
+                            <div className="text-[10px] text-teal-400">({weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주)</div>
+                          </div>
                         </div>
                         
                         {/* 당년 행 */}
-                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 items-center py-2 px-2 rounded-lg bg-yellow-50">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr_1fr] gap-1 items-center py-2 px-2 rounded-lg bg-yellow-50">
                           <div className="text-xs font-medium text-slate-600">당년</div>
                           <div className="text-center">
                             <p className="text-sm font-bold text-slate-900">
@@ -1563,10 +1570,16 @@ export default function BrandDashboard() {
                             </p>
                             <p className="text-xs text-slate-400">백만원</p>
                           </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-teal-700">
+                              {formatNumber(item.data.weeks > 0 ? Math.round(item.data.current * (weeksType === '4weeks' ? 4 : weeksType === '8weeks' ? 8 : 12) / item.data.weeks) : 0)}
+                            </p>
+                            <p className="text-xs text-slate-400">백만원</p>
+                          </div>
                         </div>
                         
                         {/* 전년 행 */}
-                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 items-center py-2 px-2">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr_1fr] gap-1 items-center py-2 px-2">
                           <div className="text-xs font-medium text-slate-600">전년</div>
                           <div className="text-center">
                             <p className="text-sm font-semibold text-slate-700">
@@ -1585,10 +1598,16 @@ export default function BrandDashboard() {
                             </p>
                             <p className="text-xs text-slate-400">백만원</p>
                           </div>
+                          <div className="text-center">
+                            <p className="text-sm font-semibold text-teal-600">
+                              {formatNumber(item.data.previousWeeks > 0 ? Math.round(item.data.previous * (weeksType === '4weeks' ? 4 : weeksType === '8weeks' ? 8 : 12) / item.data.previousWeeks) : 0)}
+                            </p>
+                            <p className="text-xs text-slate-400">백만원</p>
+                          </div>
                         </div>
                         
                         {/* YOY/개선 행 */}
-                        <div className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1 items-center py-2 px-2">
+                        <div className="grid grid-cols-[28px_1fr_1fr_1fr_1fr] gap-1 items-center py-2 px-2">
                           <div className="text-xs font-medium text-slate-600">YOY</div>
                           <div className="text-center">
                             <p className={`text-sm font-bold ${isImproved ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -1604,6 +1623,17 @@ export default function BrandDashboard() {
                           <div className="text-center">
                             <p className="text-sm font-bold text-slate-900">
                               {salesYOY}%
+                            </p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-sm font-bold text-teal-700">
+                              {(() => {
+                                // N주 매출 YOY 계산
+                                const n = weeksType === '4weeks' ? 4 : weeksType === '8weeks' ? 8 : 12;
+                                const cyNwSale = item.data.weeks > 0 ? item.data.current * n / item.data.weeks : 0;
+                                const pyNwSale = item.data.previousWeeks > 0 ? item.data.previous * n / item.data.previousWeeks : 0;
+                                return pyNwSale > 0 ? Math.round(cyNwSale / pyNwSale * 100) : 0;
+                              })()}%
                             </p>
                           </div>
                         </div>
@@ -2281,6 +2311,31 @@ export default function BrandDashboard() {
                                 }`}
                               >
                                 {saleAmount.toLocaleString()}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        {/* 택매출액(N주) - N주 매출 합계 (재고주수 계산 기준) */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                              택매출액({weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주)
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
+                            // N주 매출 합계 (재고주수 계산에 사용되는 값)
+                            const saleAmountNw = item.saleAmount || 0;
+                            return (
+                              <td 
+                                key={item.month} 
+                                className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                  item.isActual === false 
+                                    ? 'bg-blue-50/50 text-teal-700' 
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                {saleAmountNw.toLocaleString()}
                               </td>
                             );
                           })}
