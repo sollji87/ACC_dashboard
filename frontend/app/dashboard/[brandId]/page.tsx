@@ -667,7 +667,7 @@ export default function BrandDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const brandId = (params?.brandId as string) || '';
-  const monthFromUrl = searchParams.get('month') || '2025-12';
+  const monthFromUrl = searchParams.get('month') || '2026-01';
   const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'monthly';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
   

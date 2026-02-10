@@ -36,7 +36,7 @@ interface WeeklyBrandData {
 
 export default function Home() {
   const [dataSource, setDataSource] = useState<DataSourceType>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState('2025-12');
+  const [selectedMonth, setSelectedMonth] = useState('2026-01');
   const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekValue());
   const [dashboardData, setDashboardData] = useState<BrandDashboardData[]>([]);
   const [weeklyDashboardData, setWeeklyDashboardData] = useState<WeeklyBrandData[]>([]); // 주차별 데이터

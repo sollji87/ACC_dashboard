@@ -272,15 +272,15 @@ export function getSampleData(month: string = '2025-11'): BrandDashboardData[] {
 }
 
 /**
- * 월 목록 생성 (2025년 12월까지)
+ * 월 목록 생성 (2026년 1월까지)
  * 월결산 데이터는 요청 시 수동으로 업데이트하므로 최대 월을 고정
  */
 export function getMonthOptions(): { value: string; label: string }[] {
   const months: { value: string; label: string }[] = [];
   
-  // 최대 선택 가능 월: 2025년 12월
-  const maxYear = 2025;
-  const maxMonth = 12;
+  // 최대 선택 가능 월: 2026년 1월
+  const maxYear = 2026;
+  const maxMonth = 1;
   
   // 2025년 12월부터 12개월 전까지
   for (let i = 0; i < 12; i++) {
