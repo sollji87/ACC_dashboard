@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { fetchWeeklyIncomingAmounts, WeeklyIncomingAmountData } from '@/lib/api';
 import { OrderCapacity } from '@/lib/forecast-types';
+import { WEEKLY_FORECAST_CACHE_VERSION, hasCurrentWeeklyForecastCacheVersion } from '@/lib/weekly-forecast-cache';
 
 interface WeeklyItemIncomingAmount {
   weekKey: string;
@@ -68,6 +69,49 @@ function generateForecastWeeks(currentWeek: string, count: number = 12): { weekK
   }
   
   return result;
+}
+
+function getWeeklySalesAmount(row: any, windowSize: number): number {
+  const saleAmount1w = Number(row?.saleAmount1w || 0);
+  if (saleAmount1w > 0) return saleAmount1w;
+
+  const saleAmountNw = Number(row?.saleAmount || 0);
+  if (saleAmountNw > 0 && windowSize > 0) {
+    return Math.round(saleAmountNw / windowSize);
+  }
+
+  return 0;
+}
+
+function getRecentWeeklySalesHistory(actualRows: any[], windowSize: number): number[] {
+  if (!Array.isArray(actualRows) || actualRows.length === 0 || windowSize <= 1) {
+    return [];
+  }
+
+  const requiredCount = windowSize - 1;
+  const weeklySales = actualRows.map((row) => getWeeklySalesAmount(row, windowSize));
+  return weeklySales.slice(-requiredCount);
+}
+
+function applyRollingSalesAmount(
+  forecastRows: any[],
+  windowSize: number,
+  recentWeeklySales: number[] = [],
+): any[] {
+  return forecastRows.map((row, idx, arr) => {
+    const history = [
+      ...recentWeeklySales,
+      ...arr.slice(0, idx + 1).map((item) => Number(item.saleAmount1w || 0)),
+    ];
+    const rollingTotal = history
+      .slice(-windowSize)
+      .reduce((sum, sale) => sum + sale, 0);
+
+    return {
+      ...row,
+      saleAmount: rollingTotal,
+    };
+  });
 }
 
 export default function WeeklyForecastInputPanel({
@@ -139,29 +183,33 @@ export default function WeeklyForecastInputPanel({
       const savedData = localStorage.getItem(storageKey);
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        
-        if (parsed.yoyRateExPurchase) {
-          setYoyRateExPurchase(parsed.yoyRateExPurchase);
-        }
-        if (parsed.yoyRatePurchase) {
-          setYoyRatePurchase(parsed.yoyRatePurchase);
-        }
-        if (parsed.baseStockWeeks) {
-          setBaseStockWeeks(parsed.baseStockWeeks);
-        }
-        if (parsed.incomingAmounts && parsed.incomingAmounts.length > 0) {
-          setIncomingAmounts(parsed.incomingAmounts);
-          setIsForecastReady(true);
-        }
-        // 전년 동주차 데이터 복원 (중분류별)
-        if (parsed.prevYearDataByItem) {
-          setPrevYearDataByItem(parsed.prevYearDataByItem);
-          const totalWeeks = Object.values(parsed.prevYearDataByItem).reduce((sum: number, data: any) => sum + Object.keys(data || {}).length, 0);
-          console.log('✅ 저장된 전년 동주차 데이터 복원 (중분류별):', totalWeeks, '개 주차');
-        } else if (parsed.prevYearData) {
-          // 이전 형식 호환성 (단일 객체인 경우 현재 선택된 중분류에 할당)
-          setPrevYearDataByItem(prev => ({ ...prev, [selectedItem]: parsed.prevYearData }));
-          console.log('✅ 저장된 전년 동주차 데이터 복원 (레거시):', Object.keys(parsed.prevYearData).length, '개 주차');
+        if (!hasCurrentWeeklyForecastCacheVersion(parsed)) {
+          localStorage.removeItem(storageKey);
+          console.log(`🧹 이전 캐시 버전 감지로 삭제: ${storageKey}`);
+        } else {
+          if (parsed.yoyRateExPurchase) {
+            setYoyRateExPurchase(parsed.yoyRateExPurchase);
+          }
+          if (parsed.yoyRatePurchase) {
+            setYoyRatePurchase(parsed.yoyRatePurchase);
+          }
+          if (parsed.baseStockWeeks) {
+            setBaseStockWeeks(parsed.baseStockWeeks);
+          }
+          if (parsed.incomingAmounts && parsed.incomingAmounts.length > 0) {
+            setIncomingAmounts(parsed.incomingAmounts);
+            setIsForecastReady(true);
+          }
+          // 전년 동주차 데이터 복원 (중분류별)
+          if (parsed.prevYearDataByItem) {
+            setPrevYearDataByItem(parsed.prevYearDataByItem);
+            const totalWeeks = Object.values(parsed.prevYearDataByItem).reduce((sum: number, data: any) => sum + Object.keys(data || {}).length, 0);
+            console.log('✅ 저장된 전년 동주차 데이터 복원 (중분류별):', totalWeeks, '개 주차');
+          } else if (parsed.prevYearData) {
+            // 이전 형식 호환성 (단일 객체인 경우 현재 선택된 중분류에 할당)
+            setPrevYearDataByItem(prev => ({ ...prev, [selectedItem]: parsed.prevYearData }));
+            console.log('✅ 저장된 전년 동주차 데이터 복원 (레거시):', Object.keys(parsed.prevYearData).length, '개 주차');
+          }
         }
       }
     } catch (error) {
@@ -218,7 +266,9 @@ export default function WeeklyForecastInputPanel({
         const savedData = localStorage.getItem(storageKey);
         if (savedData) {
           const parsed = JSON.parse(savedData);
-          if (parsed.prevYearDataByItem) {
+          if (!hasCurrentWeeklyForecastCacheVersion(parsed)) {
+            localStorage.removeItem(storageKey);
+          } else if (parsed.prevYearDataByItem) {
             latestPrevYearDataByItem = parsed.prevYearDataByItem;
             console.log('📊 로컬 스토리지에서 최신 전년 데이터 로드:', 
               Object.entries(latestPrevYearDataByItem).map(([k, v]: [string, any]) => `${k}: ${Object.keys(v || {}).length}개`).join(', '));
@@ -270,6 +320,7 @@ export default function WeeklyForecastInputPanel({
           
           const totalStock = (shoes.totalStock || 0) + (hat.totalStock || 0) + (bag.totalStock || 0) + (other.totalStock || 0);
           const previousTotalStock = (shoes.previousTotalStock || 0) + (hat.previousTotalStock || 0) + (bag.previousTotalStock || 0) + (other.previousTotalStock || 0);
+          const saleAmount1w = (shoes.saleAmount1w || 0) + (hat.saleAmount1w || 0) + (bag.saleAmount1w || 0) + (other.saleAmount1w || 0);
           const saleAmount = (shoes.saleAmount || 0) + (hat.saleAmount || 0) + (bag.saleAmount || 0) + (other.saleAmount || 0);
           const prevYearSale = (shoes.prevYearSale || 0) + (hat.prevYearSale || 0) + (bag.prevYearSale || 0) + (other.prevYearSale || 0);
           
@@ -285,19 +336,39 @@ export default function WeeklyForecastInputPanel({
           const previousOldSeasonStock = (shoes.previousOldSeasonStock || 0) + (hat.previousOldSeasonStock || 0) + (bag.previousOldSeasonStock || 0) + (other.previousOldSeasonStock || 0);
           const previousStagnantStock = (shoes.previousStagnantStock || 0) + (hat.previousStagnantStock || 0) + (bag.previousStagnantStock || 0) + (other.previousStagnantStock || 0);
           
-          // 재고주수 합산 (주간평균 매출 기준)
-          const previousStockWeeks = (shoes.previousStockWeeks || 0) + (hat.previousStockWeeks || 0) + (bag.previousStockWeeks || 0) + (other.previousStockWeeks || 0);
-          const avgStockWeeks = (shoes.stockWeeks || 0) + (hat.stockWeeks || 0) + (bag.stockWeeks || 0) + (other.stockWeeks || 0);
-          
           // 시즌별 비율 계산
           const currentSeasonRatio = totalStock > 0 ? (currentSeasonStock / totalStock * 100) : 25;
           const nextSeasonRatio = totalStock > 0 ? (nextSeasonStock / totalStock * 100) : 25;
           const oldSeasonRatio = totalStock > 0 ? (oldSeasonStock / totalStock * 100) : 25;
           const stagnantRatio = totalStock > 0 ? (stagnantStock / totalStock * 100) : 25;
-          
-          // 정상재고 재고주수 합산
-          const stockWeeksNormalSum = (shoes.stockWeeksNormal || 0) + (hat.stockWeeksNormal || 0) + (bag.stockWeeksNormal || 0) + (other.stockWeeksNormal || 0);
-          const previousStockWeeksNormalSum = (shoes.previousStockWeeksNormal || 0) + (hat.previousStockWeeksNormal || 0) + (bag.previousStockWeeksNormal || 0) + (other.previousStockWeeksNormal || 0);
+
+          // 전체(ALL)는 단순 평균이 아니라 합산값 기준으로 주수를 계산해야 급격한 점프를 방지할 수 있음
+          const aggregatedStockWeeks = saleAmount1w > 0 ? (totalStock / saleAmount1w) : 0;
+          const aggregatedPreviousStockWeeks = prevYearSale > 0 ? (previousTotalStock / prevYearSale) : 0;
+
+          const normalStock = totalStock - stagnantStock;
+          const previousNormalStock = previousTotalStock - previousStagnantStock;
+
+          const itemNormalWeeklySales = [shoes, hat, bag, other].reduce((sum, item) => {
+            const itemTotalStock = Number(item.totalStock || 0);
+            const itemStagnantStock = Number(item.stagnantStock || 0);
+            const itemNormalStock = itemTotalStock - itemStagnantStock;
+            const itemStockWeeksNormal = Number(item.stockWeeksNormal || 0);
+            if (itemStockWeeksNormal <= 0) return sum;
+            return sum + (itemNormalStock / itemStockWeeksNormal);
+          }, 0);
+
+          const itemPreviousNormalWeeklySales = [shoes, hat, bag, other].reduce((sum, item) => {
+            const itemPreviousTotalStock = Number(item.previousTotalStock || 0);
+            const itemPreviousStagnantStock = Number(item.previousStagnantStock || 0);
+            const itemPreviousNormalStock = itemPreviousTotalStock - itemPreviousStagnantStock;
+            const itemPreviousStockWeeksNormal = Number(item.previousStockWeeksNormal || 0);
+            if (itemPreviousStockWeeksNormal <= 0) return sum;
+            return sum + (itemPreviousNormalStock / itemPreviousStockWeeksNormal);
+          }, 0);
+
+          const aggregatedStockWeeksNormal = itemNormalWeeklySales > 0 ? (normalStock / itemNormalWeeklySales) : 0;
+          const aggregatedPreviousStockWeeksNormal = itemPreviousNormalWeeklySales > 0 ? (previousNormalStock / itemPreviousNormalWeeklySales) : 0;
           
           allForecastResults.push({
             month: shoes.month,
@@ -305,17 +376,17 @@ export default function WeeklyForecastInputPanel({
             weekLabel: shoes.weekLabel,
             isActual: false,
             totalStock,
-            saleAmount1w: saleAmount,
+            saleAmount1w,
             saleAmount,
             incomingAmount: (shoes.incomingAmount || 0) + (hat.incomingAmount || 0) + (bag.incomingAmount || 0) + (other.incomingAmount || 0),
             previousTotalStock,
             prevYearSale,
-            stockWeeks: avgStockWeeks / 4, // 개별 아이템 재고주수의 평균
-            stockWeeksNormal: stockWeeksNormalSum / 4, // 개별 아이템 정상재고 재고주수의 평균
-            previousStockWeeks: previousStockWeeks / 4, // 개별 아이템 전년 재고주수의 평균
-            previousStockWeeksNormal: previousStockWeeksNormalSum / 4, // 개별 아이템 전년 정상재고 재고주수의 평균
+            stockWeeks: aggregatedStockWeeks,
+            stockWeeksNormal: aggregatedStockWeeksNormal,
+            previousStockWeeks: aggregatedPreviousStockWeeks,
+            previousStockWeeksNormal: aggregatedPreviousStockWeeksNormal,
             stockYOY: previousTotalStock > 0 ? Math.round((totalStock / previousTotalStock) * 100) : 0,
-            saleYOY: prevYearSale > 0 ? Math.round((saleAmount / prevYearSale) * 100) : 0,
+            saleYOY: prevYearSale > 0 ? Math.round((saleAmount1w / prevYearSale) * 100) : 0,
             // 시즌별 재고 (당년)
             currentSeasonStock,
             nextSeasonStock,
@@ -360,6 +431,7 @@ export default function WeeklyForecastInputPanel({
       }
       
       const dataToSave = {
+        cacheVersion: WEEKLY_FORECAST_CACHE_VERSION,
         yoyRateExPurchase,
         yoyRatePurchase,
         baseStockWeeks,
@@ -436,7 +508,7 @@ export default function WeeklyForecastInputPanel({
       // 예측 결과 계산
       let runningStock = currentStock;
       
-      const forecastResults = forecastWeeks.map((week, index) => {
+      let forecastResults = forecastWeeks.map((week, index) => {
         const incomingForWeek = incomingAmounts.find(ia => ia.weekKey === week.weekKey);
         const incomingAmountRaw = incomingForWeek ? (incomingForWeek[targetItem] || 0) : 0;
         const incomingAmount = Math.round(incomingAmountRaw / 1000000);
@@ -519,6 +591,8 @@ export default function WeeklyForecastInputPanel({
           previousStagnantRatio: latestSeasonRatios.stagnantRatio,
         };
       });
+      const recentWeeklySales = getRecentWeeklySalesHistory(itemChartData, nWeeks);
+      forecastResults = applyRollingSalesAmount(forecastResults, nWeeks, recentWeeklySales);
 
       const lastForecastStock = forecastResults.length > 0 
         ? forecastResults[forecastResults.length - 1].totalStock 
@@ -651,7 +725,7 @@ export default function WeeklyForecastInputPanel({
       // 예측 결과 (미래 주차 데이터) - 주차별로 순차 계산
       let runningStock = currentStock; // 누적 재고 계산용
       
-      const forecastResults = forecastWeeks.map((week, index) => {
+      let forecastResults = forecastWeeks.map((week, index) => {
         const incomingForWeek = incomingAmounts.find(ia => ia.weekKey === week.weekKey);
         
         // 입고금액: 원 단위 → 백만원 단위로 변환
@@ -768,6 +842,8 @@ export default function WeeklyForecastInputPanel({
           prevYearSale, // 전년 동주차 매출
         };
       });
+      const recentWeeklySales = getRecentWeeklySalesHistory(actualData, nWeeks);
+      forecastResults = applyRollingSalesAmount(forecastResults, nWeeks, recentWeeklySales);
 
       // 12주차(마지막 예측 주차)의 예상 재고를 사용
       const lastForecastStock = forecastResults.length > 0 
@@ -841,6 +917,12 @@ export default function WeeklyForecastInputPanel({
     if (!isForecastReady || !actualData || actualData.length === 0) {
       return;
     }
+
+    // 전체(all)는 아이템 합산 전용 로직(saveToLocalStorage) 결과를 사용한다.
+    // 여기서 단일 계산 로직을 다시 태우면 예측주수가 비정상적으로 튈 수 있음.
+    if (selectedItem === 'all') {
+      return;
+    }
     
     // 이전과 동일한 데이터면 재계산 스킵 (무한 루프 방지)
     if (prevActualDataLengthRef.current === actualDataLength && actualDataLength > 0) {
@@ -863,9 +945,11 @@ export default function WeeklyForecastInputPanel({
     if (totalWeeks > 0) {
       try {
         const savedData = localStorage.getItem(storageKey);
-        const existing = savedData ? JSON.parse(savedData) : {};
+        const parsed = savedData ? JSON.parse(savedData) : null;
+        const existing = hasCurrentWeeklyForecastCacheVersion(parsed) ? parsed : {};
         const dataToSave = {
           ...existing,
+          cacheVersion: WEEKLY_FORECAST_CACHE_VERSION,
           prevYearDataByItem,
           savedAt: new Date().toISOString(),
         };
@@ -1127,4 +1211,3 @@ export default function WeeklyForecastInputPanel({
     </Card>
   );
 }
-

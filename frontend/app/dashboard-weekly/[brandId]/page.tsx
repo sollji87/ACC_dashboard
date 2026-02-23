@@ -42,6 +42,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 import WeeklyForecastInputPanel from '@/components/WeeklyForecastInputPanel';
 import { combineActualAndForecast } from '@/lib/forecast-service';
 import { OrderCapacity } from '@/lib/forecast-types';
+import { hasCurrentWeeklyForecastCacheVersion } from '@/lib/weekly-forecast-cache';
 
 // 재고주수 추이 차트용 커스텀 범례
 const CustomStockWeeksLegend = ({ payload }: any) => {
@@ -1169,18 +1170,23 @@ export default function BrandDashboard() {
       const savedData = localStorage.getItem(storageKey);
       if (savedData) {
         const parsed = JSON.parse(savedData);
-        if (parsed.incomingAmounts && parsed.incomingAmounts.length > 0) {
-          setForecastIncomingAmounts(parsed.incomingAmounts);
-        }
-        // 아이템별 발주가능금액 불러오기
-        if (parsed.orderCapacityByItem) {
-          setOrderCapacityByItem(parsed.orderCapacityByItem);
-          console.log('📊 로컬 스토리지에서 아이템별 발주가능금액 로드:', Object.keys(parsed.orderCapacityByItem));
-        }
-        // 아이템별 예측결과 불러오기
-        if (parsed.forecastResultsByItem) {
-          setForecastResultsByItem(parsed.forecastResultsByItem);
-          console.log('📊 로컬 스토리지에서 아이템별 예측결과 로드:', Object.keys(parsed.forecastResultsByItem));
+        if (!hasCurrentWeeklyForecastCacheVersion(parsed)) {
+          localStorage.removeItem(storageKey);
+          console.log(`🧹 이전 캐시 버전 감지로 삭제: ${storageKey}`);
+        } else {
+          if (parsed.incomingAmounts && parsed.incomingAmounts.length > 0) {
+            setForecastIncomingAmounts(parsed.incomingAmounts);
+          }
+          // 아이템별 발주가능금액 불러오기
+          if (parsed.orderCapacityByItem) {
+            setOrderCapacityByItem(parsed.orderCapacityByItem);
+            console.log('📊 로컬 스토리지에서 아이템별 발주가능금액 로드:', Object.keys(parsed.orderCapacityByItem));
+          }
+          // 아이템별 예측결과 불러오기
+          if (parsed.forecastResultsByItem) {
+            setForecastResultsByItem(parsed.forecastResultsByItem);
+            console.log('📊 로컬 스토리지에서 아이템별 예측결과 로드:', Object.keys(parsed.forecastResultsByItem));
+          }
         }
       }
     } catch (error) {
@@ -1538,7 +1544,19 @@ export default function BrandDashboard() {
                         {/* 헤더 행 */}
                         <div className="grid grid-cols-[28px_1fr_1fr_1fr_1fr] gap-1 py-2 px-2">
                           <div className="text-xs font-medium text-slate-600"></div>
-                          <div className="text-xs font-medium text-slate-600 text-center">재고주수</div>
+                          <div className="text-xs font-medium text-slate-600 text-center">
+                            {item.key === 'all' ? (
+                              <span className="inline-flex items-center gap-1 relative group cursor-help">
+                                <span>재고주수</span>
+                                <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-600">i</span>
+                                <span className="pointer-events-none absolute left-1/2 bottom-full z-[9999] mb-1 w-max max-w-[260px] -translate-x-1/2 rounded bg-slate-900 px-2 py-1 text-[10px] font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                                  전체ACC 예측 재고주수 = 전체 재고자산 ÷ 전체 택매출액(1주)
+                                </span>
+                              </span>
+                            ) : (
+                              '재고주수'
+                            )}
+                          </div>
                           <div className="text-xs font-medium text-slate-600 text-center">기말재고</div>
                           <div className="text-xs font-medium text-slate-600 text-center">
                             <div>택판매액</div>
@@ -2318,9 +2336,12 @@ export default function BrandDashboard() {
                         {/* 택매출액(N주) - N주 매출 합계 (재고주수 계산 기준) */}
                         <tr className="hover:bg-slate-50 transition-colors">
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
-                            <span className="inline-flex items-center gap-1">
+                            <span className="inline-flex items-center gap-1 relative group z-[60]">
                               <span className="w-2 h-2 rounded-full bg-teal-500"></span>
-                              택매출액({weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주)
+                              <span>택매출액({weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주)</span>
+                              <span className="pointer-events-none absolute left-0 bottom-full mb-1 z-[9999] whitespace-nowrap rounded bg-slate-900 px-2 py-1 text-[10px] font-normal text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                                최근 {weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주차 택매출액 합계
+                              </span>
                             </span>
                           </td>
                           {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
