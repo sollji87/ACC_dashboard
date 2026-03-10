@@ -987,6 +987,11 @@ export default function BrandDashboard() {
     return `${integerPart}.${parts[1]}`;
   };
 
+  const getSaleYoy = (current: number, previous: number) => {
+    if (previous <= 0) return null;
+    return (current / previous) * 100;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {/* 로딩 오버레이 */}
@@ -1915,7 +1920,7 @@ export default function BrandDashboard() {
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                              택매출액(사입제외)
+                              택매출액(1주)
                             </span>
                           </td>
                           {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
@@ -1927,7 +1932,7 @@ export default function BrandDashboard() {
                                   : 'text-slate-700'
                               }`}
                             >
-                              {(item.totalSaleExPurchase || 0).toLocaleString()}
+                              {Math.round((item.totalSale || 0) / 4).toLocaleString()}
                             </td>
                           ))}
                         </tr>
@@ -1936,7 +1941,7 @@ export default function BrandDashboard() {
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1">
                               <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                              택매출액(사입)
+                              YOY(1주)
                             </span>
                           </td>
                           {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
@@ -1948,11 +1953,58 @@ export default function BrandDashboard() {
                                   : 'text-slate-700'
                               }`}
                             >
-                              {(item.totalSalePurchase || 0).toLocaleString()}
+                              <span className={`font-semibold ${Number(item.saleYOY || 0) >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {item.saleYOY ? `${Number(item.saleYOY).toFixed(1)}%` : '-'}
+                              </span>
                             </td>
                           ))}
                         </tr>
                         {/* 재고입고금액 */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                              택매출액(4주)
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => (
+                            <td 
+                              key={item.month} 
+                              className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                item.isActual === false 
+                                  ? 'bg-blue-50/50 text-teal-700' 
+                                  : 'text-slate-700'
+                              }`}
+                            >
+                              {(item.totalSale || 0).toLocaleString()}
+                            </td>
+                          ))}
+                        </tr>
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
+                              YOY(4주)
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
+                            const saleYoy = item.saleYOY || getSaleYoy(item.totalSale || 0, item.previousTotalSale || 0);
+                            return (
+                              <td 
+                                key={item.month} 
+                                className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                  item.isActual === false 
+                                    ? 'bg-blue-50/50' 
+                                    : 'text-slate-700'
+                                }`}
+                              >
+                                <span className={`font-semibold ${saleYoy ? Number(saleYoy) >= 100 ? 'text-emerald-600' : 'text-red-500' : 'text-slate-400'}`}>
+                                  {saleYoy ? `${Number(saleYoy).toFixed(1)}%` : '-'}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
                         <tr className="hover:bg-slate-50 transition-colors">
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1">

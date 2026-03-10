@@ -83,6 +83,18 @@ function getWeeklySalesAmount(row: any, windowSize: number): number {
   return 0;
 }
 
+function getPreviousWeeklySalesAmount(row: any, windowSize: number): number {
+  const prevSaleAmount1w = Number(row?.prevSaleAmount1w || row?.prevYearSale || 0);
+  if (prevSaleAmount1w > 0) return prevSaleAmount1w;
+
+  const prevSaleAmountNw = Number(row?.prevSaleAmount || 0);
+  if (prevSaleAmountNw > 0 && windowSize > 0) {
+    return Math.round(prevSaleAmountNw / windowSize);
+  }
+
+  return 0;
+}
+
 function getRecentWeeklySalesHistory(actualRows: any[], windowSize: number): number[] {
   if (!Array.isArray(actualRows) || actualRows.length === 0 || windowSize <= 1) {
     return [];
@@ -93,23 +105,42 @@ function getRecentWeeklySalesHistory(actualRows: any[], windowSize: number): num
   return weeklySales.slice(-requiredCount);
 }
 
+function getRecentPreviousWeeklySalesHistory(actualRows: any[], windowSize: number): number[] {
+  if (!Array.isArray(actualRows) || actualRows.length === 0 || windowSize <= 1) {
+    return [];
+  }
+
+  const requiredCount = windowSize - 1;
+  const weeklySales = actualRows.map((row) => getPreviousWeeklySalesAmount(row, windowSize));
+  return weeklySales.slice(-requiredCount);
+}
+
 function applyRollingSalesAmount(
   forecastRows: any[],
   windowSize: number,
   recentWeeklySales: number[] = [],
+  recentPreviousWeeklySales: number[] = [],
 ): any[] {
   return forecastRows.map((row, idx, arr) => {
-    const history = [
+    const currentHistory = [
       ...recentWeeklySales,
       ...arr.slice(0, idx + 1).map((item) => Number(item.saleAmount1w || 0)),
     ];
-    const rollingTotal = history
+    const previousHistory = [
+      ...recentPreviousWeeklySales,
+      ...arr.slice(0, idx + 1).map((item) => getPreviousWeeklySalesAmount(item, windowSize)),
+    ];
+    const rollingTotal = currentHistory
+      .slice(-windowSize)
+      .reduce((sum, sale) => sum + sale, 0);
+    const previousRollingTotal = previousHistory
       .slice(-windowSize)
       .reduce((sum, sale) => sum + sale, 0);
 
     return {
       ...row,
       saleAmount: rollingTotal,
+      prevSaleAmount: previousRollingTotal,
     };
   });
 }
@@ -378,6 +409,8 @@ export default function WeeklyForecastInputPanel({
             totalStock,
             saleAmount1w,
             saleAmount,
+            prevSaleAmount1w: (shoes.prevSaleAmount1w || shoes.prevYearSale || 0) + (hat.prevSaleAmount1w || hat.prevYearSale || 0) + (bag.prevSaleAmount1w || bag.prevYearSale || 0) + (other.prevSaleAmount1w || other.prevYearSale || 0),
+            prevSaleAmount: (shoes.prevSaleAmount || 0) + (hat.prevSaleAmount || 0) + (bag.prevSaleAmount || 0) + (other.prevSaleAmount || 0),
             incomingAmount: (shoes.incomingAmount || 0) + (hat.incomingAmount || 0) + (bag.incomingAmount || 0) + (other.incomingAmount || 0),
             previousTotalStock,
             prevYearSale,
@@ -559,6 +592,7 @@ export default function WeeklyForecastInputPanel({
           stockWeeksNormal: Math.max(0, stockWeeksNormal),
           previousStockWeeksNormal: Math.max(0, previousStockWeeksNormal),
           saleAmount1w: weekSale,
+          prevSaleAmount1w: prevYearSale,
           saleAmount: weekSale,
           prevSaleAmount: prevYearSale,
           incomingAmount,
@@ -592,7 +626,8 @@ export default function WeeklyForecastInputPanel({
         };
       });
       const recentWeeklySales = getRecentWeeklySalesHistory(itemChartData, nWeeks);
-      forecastResults = applyRollingSalesAmount(forecastResults, nWeeks, recentWeeklySales);
+      const recentPreviousWeeklySales = getRecentPreviousWeeklySalesHistory(itemChartData, nWeeks);
+      forecastResults = applyRollingSalesAmount(forecastResults, nWeeks, recentWeeklySales, recentPreviousWeeklySales);
 
       const lastForecastStock = forecastResults.length > 0 
         ? forecastResults[forecastResults.length - 1].totalStock 
@@ -797,6 +832,7 @@ export default function WeeklyForecastInputPanel({
           stockWeeks: Math.max(0, expectedWeeks),
           stockWeeksNormal: Math.max(0, stockWeeksNormal), // 정상재고 재고주수
           saleAmount1w: weekSale, // 해당 주차 예상 매출 (YOY 적용된 주간평균)
+          prevSaleAmount1w: prevYearSale,
           saleAmount: weekSale, // 차트용
           prevSaleAmount: prevYearSale, // 차트용
           incomingAmount, // 백만원 단위 (입고예정금액)
@@ -843,7 +879,8 @@ export default function WeeklyForecastInputPanel({
         };
       });
       const recentWeeklySales = getRecentWeeklySalesHistory(actualData, nWeeks);
-      forecastResults = applyRollingSalesAmount(forecastResults, nWeeks, recentWeeklySales);
+      const recentPreviousWeeklySales = getRecentPreviousWeeklySalesHistory(actualData, nWeeks);
+      forecastResults = applyRollingSalesAmount(forecastResults, nWeeks, recentWeeklySales, recentPreviousWeeklySales);
 
       // 12주차(마지막 예측 주차)의 예상 재고를 사용
       const lastForecastStock = forecastResults.length > 0 

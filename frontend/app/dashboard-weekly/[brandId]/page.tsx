@@ -1276,6 +1276,30 @@ export default function BrandDashboard() {
     return `${integerPart}.${parts[1]}`;
   };
 
+  const getSaleYoy = (current: number, previous: number) => {
+    if (previous <= 0) return null;
+    return (current / previous) * 100;
+  };
+
+  const getPreviousWeeklySaleAmount = (item: any, windowSize: number) => {
+    const prevSale1w = Number(item?.prevSaleAmount1w ?? item?.prevYearSale ?? 0);
+    if (prevSale1w > 0) return prevSale1w;
+
+    const prevSaleNw = Number(item?.prevSaleAmount || 0);
+    if (prevSaleNw > 0 && windowSize > 0) {
+      return Math.round(prevSaleNw / windowSize);
+    }
+
+    return 0;
+  };
+
+  const getRollingPreviousWeeklySale = (rows: any[], endIndex: number, windowSize: number) => {
+    const startIndex = Math.max(0, endIndex - windowSize + 1);
+    return rows.slice(startIndex, endIndex + 1).reduce((sum, row) => {
+      return sum + getPreviousWeeklySaleAmount(row, windowSize);
+    }, 0);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {/* 로딩 오버레이 */}
@@ -2336,6 +2360,32 @@ export default function BrandDashboard() {
                         {/* 택매출액(N주) - N주 매출 합계 (재고주수 계산 기준) */}
                         <tr className="hover:bg-slate-50 transition-colors">
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-lime-500"></span>
+                              YOY(1주)
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any) => {
+                            const saleAmount = item.saleAmount1w || 0;
+                            const actualYoy = getSaleYoy(saleAmount, item.prevSaleAmount1w || 0);
+                            const forecastYoy = Number(item.saleYOY || 0);
+                            const saleYoy = item.isActual === false ? (forecastYoy > 0 ? forecastYoy : actualYoy) : actualYoy;
+                            return (
+                              <td 
+                                key={item.month}
+                                className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                  item.isActual === false ? 'bg-blue-50/50' : 'text-slate-700'
+                                }`}
+                              >
+                                <span className={`font-semibold ${saleYoy === null ? 'text-slate-400' : saleYoy >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                  {saleYoy === null ? '-' : `${saleYoy.toFixed(1)}%`}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1 relative group z-[60]">
                               <span className="w-2 h-2 rounded-full bg-teal-500"></span>
                               <span>택매출액({weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주)</span>
@@ -2362,6 +2412,34 @@ export default function BrandDashboard() {
                           })}
                         </tr>
                         {/* 재고입고금액 */}
+                        <tr className="hover:bg-slate-50 transition-colors">
+                          <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
+                            <span className="inline-flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full bg-cyan-500"></span>
+                              YOY({weeksType === '4weeks' ? '4' : weeksType === '8weeks' ? '8' : '12'}주)
+                            </span>
+                          </td>
+                          {(combinedChartData.length > 0 ? combinedChartData : chartData).map((item: any, idx: number, arr: any[]) => {
+                            const windowSize = weeksType === '4weeks' ? 4 : weeksType === '8weeks' ? 8 : 12;
+                            const saleAmountNw = item.saleAmount || 0;
+                            const previousSaleNw = Number(item.prevSaleAmount || 0) > 0
+                              ? Number(item.prevSaleAmount || 0)
+                              : getRollingPreviousWeeklySale(arr, idx, windowSize);
+                            const saleYoy = getSaleYoy(saleAmountNw, previousSaleNw);
+                            return (
+                              <td 
+                                key={item.month}
+                                className={`px-2 py-2 text-center border-b border-slate-100 font-medium ${
+                                  item.isActual === false ? 'bg-blue-50/50' : 'text-slate-700'
+                                }`}
+                              >
+                                <span className={`font-semibold ${saleYoy === null ? 'text-slate-400' : saleYoy >= 100 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                  {saleYoy === null ? '-' : `${saleYoy.toFixed(1)}%`}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
                         <tr className="hover:bg-slate-50 transition-colors">
                           <td className="px-2 py-2 font-medium text-slate-700 border-b border-slate-100 sticky left-0 bg-white">
                             <span className="inline-flex items-center gap-1">

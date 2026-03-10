@@ -1,4 +1,4 @@
-export const WEEKLY_FORECAST_CACHE_VERSION = 3;
+export const WEEKLY_FORECAST_CACHE_VERSION = 5;
 
 export function hasCurrentWeeklyForecastCacheVersion(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
