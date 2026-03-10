@@ -194,6 +194,7 @@ export interface CombinedChartData {
   // 주차별 대시보드용 추가 필드
   saleAmount1w?: number; // 1주 매출액 (백만원)
   saleAmount?: number; // 주간 매출 (차트용)
+  prevSaleAmount1w?: number; // 전년 동주차 1주 매출
   prevSaleAmount?: number; // 전년 동주차 매출 (차트용)
   incomingAmount?: number; // 입고예정금액 (백만원)
   currentSeasonSale1w?: number; // 당시즌 1주 매출
