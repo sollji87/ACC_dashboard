@@ -298,3 +298,22 @@ AI 기반 “월간 ACC 인사이트” 자동 생성
 
 본 README는 악세사리(ACC) 카테고리의 회전특성과 FP&A 요구사항을 기반으로
 TAG 금액 기준 재고주수 분석을 수행하기 위해 설계되었습니다.
+---
+
+# 10. 2026-03 Update Notes
+
+## Dashboard Table Update
+
+- Monthly dashboard and weekly dashboard `재고,판매,입고 추이` table were aligned to a 6-row structure:
+  `재고자산 / 택매출액(1주) / YOY(1주) / 택매출액(4주 또는 선택 주수) / YOY(4주 또는 선택 주수) / 입고금액`
+- Monthly page now shows separate rows for `택매출액(1주)`, `YOY(1주)`, `택매출액(4주)`, `YOY(4주)`.
+- Weekly page now shows separate rows for `택매출액(1주)`, `YOY(1주)`, `택매출액(4주|8주|12주)`, `YOY(4주|8주|12주)`.
+
+## Weekly Forecast YOY Rule
+
+- Weekly forecast `YOY(1주)` is based on:
+  `당년 1주 택매출액 / 전년 동주차 1주 택매출액`
+- Weekly forecast `YOY(4주)` is based on:
+  `당년 최근 4주 택매출액 합계 / 전년 동주차 기준 최근 4주 택매출액 합계`
+- For forecast rows, previous-year 1-week and rolling N-week sales are now carried as explicit fields so the `all / shoes / hat / bag / other` views use the same logic.
+- Weekly forecast cache version was bumped to invalidate older cached results after the YOY calculation fix.
