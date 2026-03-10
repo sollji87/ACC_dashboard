@@ -448,7 +448,14 @@ export default function WeeklyForecastInputPanel({
         // 전체 발주가능금액도 합산
         const allOrderCapacity = {
           targetMonth: orderCapacityByItem['shoes']?.targetMonth || '',
-          baseStockWeeks: 0,
+          baseStockWeeks: (
+            ((orderCapacityByItem['shoes']?.weeklyAvgSales || 0) + (orderCapacityByItem['hat']?.weeklyAvgSales || 0) + (orderCapacityByItem['bag']?.weeklyAvgSales || 0) + (orderCapacityByItem['other']?.weeklyAvgSales || 0)) > 0
+              ? Math.round(
+                  (((orderCapacityByItem['shoes']?.targetStock || 0) + (orderCapacityByItem['hat']?.targetStock || 0) + (orderCapacityByItem['bag']?.targetStock || 0) + (orderCapacityByItem['other']?.targetStock || 0)) /
+                    ((orderCapacityByItem['shoes']?.weeklyAvgSales || 0) + (orderCapacityByItem['hat']?.weeklyAvgSales || 0) + (orderCapacityByItem['bag']?.weeklyAvgSales || 0) + (orderCapacityByItem['other']?.weeklyAvgSales || 0))) * 10
+                ) / 10
+              : 0
+          ),
           weeklyAvgSales: (orderCapacityByItem['shoes']?.weeklyAvgSales || 0) + (orderCapacityByItem['hat']?.weeklyAvgSales || 0) + (orderCapacityByItem['bag']?.weeklyAvgSales || 0) + (orderCapacityByItem['other']?.weeklyAvgSales || 0),
           nWeeksTotal: (orderCapacityByItem['shoes']?.nWeeksTotal || 0) + (orderCapacityByItem['hat']?.nWeeksTotal || 0) + (orderCapacityByItem['bag']?.nWeeksTotal || 0) + (orderCapacityByItem['other']?.nWeeksTotal || 0),
           targetStock: (orderCapacityByItem['shoes']?.targetStock || 0) + (orderCapacityByItem['hat']?.targetStock || 0) + (orderCapacityByItem['bag']?.targetStock || 0) + (orderCapacityByItem['other']?.targetStock || 0),

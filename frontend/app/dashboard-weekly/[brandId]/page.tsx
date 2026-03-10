@@ -1735,7 +1735,7 @@ export default function BrandDashboard() {
                           </div>
                         </div>
                         <div className="bg-white p-3 rounded-lg shadow-sm">
-                          <div className="text-slate-500 text-xs mb-1">목표재고 ({orderCapacity.baseStockWeeks}주 × {orderCapacity.weeklyAvgSales.toLocaleString()}백만원)</div>
+                          <div className="text-slate-500 text-xs mb-1">목표재고 ({orderCapacity.baseStockWeeks.toFixed(1)}주 × {orderCapacity.weeklyAvgSales.toLocaleString()}백만원)</div>
                           <div className="font-bold text-blue-600 text-lg">
                             {orderCapacity.targetStock.toLocaleString()}백만원
                           </div>
