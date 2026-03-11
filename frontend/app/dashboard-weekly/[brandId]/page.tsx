@@ -687,7 +687,7 @@ export default function BrandDashboard() {
   const brandId = (params?.brandId as string) || '';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
   const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'weekly';
-  const monthFromUrl = searchParams.get('month') || '2025-11';
+  const monthFromUrl = searchParams.get('month') || '2026-02';
   
   const [brand, setBrand] = useState(getBrandById(brandId));
   const [dataSource, setDataSource] = useState<DataSourceType>(dataSourceFromUrl);
@@ -1446,13 +1446,10 @@ export default function BrandDashboard() {
                 const totalPrevious = shoes.previous + hat.previous + bag.previous + other.previous;
                 const totalSalesCurrent = shoes.salesCurrent + hat.salesCurrent + bag.salesCurrent + other.salesCurrent;
                 const totalSalesPrevious = shoes.salesPrevious + hat.salesPrevious + bag.salesPrevious + other.salesPrevious;
-                // 재고주수는 가중평균으로 계산 (재고금액 기준)
-                const totalWeeks = totalCurrent > 0 
-                  ? (shoes.current * shoes.weeks + hat.current * hat.weeks + bag.current * bag.weeks + other.current * other.weeks) / totalCurrent
-                  : 0;
-                const totalPreviousWeeks = totalPrevious > 0
-                  ? (shoes.previous * shoes.previousWeeks + hat.previous * hat.previousWeeks + bag.previous * bag.previousWeeks + other.previous * other.previousWeeks) / totalPrevious
-                  : 0;
+                const overallCurrent = weeklyData?.totalCurrent ?? totalCurrent;
+                const overallPrevious = weeklyData?.totalPrevious ?? totalPrevious;
+                const overallWeeks = weeklyData?.totalWeeks ?? 0;
+                const overallPreviousWeeks = weeklyData?.totalPreviousWeeks ?? 0;
                 
                 const items = [
                   { 
@@ -1460,10 +1457,10 @@ export default function BrandDashboard() {
                     name: '전체ACC', 
                     emoji: '📦',
                     data: { 
-                      current: totalCurrent, 
-                      previous: totalPrevious, 
-                      weeks: totalWeeks, 
-                      previousWeeks: totalPreviousWeeks, 
+                      current: overallCurrent, 
+                      previous: overallPrevious, 
+                      weeks: overallWeeks, 
+                      previousWeeks: overallPreviousWeeks, 
                       salesCurrent: totalSalesCurrent, 
                       salesPrevious: totalSalesPrevious 
                     },

@@ -900,8 +900,8 @@ export function formatProductDetailData(
 
   // 시즌 기준 그룹핑을 위한 헬퍼 함수
   // 당시즌/차기시즌/정체재고/과시즌 4가지 분류
-  // - FW 시즌 (9월~2월): 당시즌=25N,25F / 차기시즌=26N,26S,26F 이후 / 과시즌=그 외
-  // - SS 시즌 (3월~8월): 당시즌=25N,25S / 차기시즌=25F,26N,26S 이후 / 과시즌=그 외
+  // - FW 시즌 (9월~2월): 예) 2025-09~2026-02 = 25FW, 당시즌=25N/25F, 차기시즌=26S/26N/26F~
+  // - SS 시즌 (3월~8월): 예) 2026-03~2026-08 = 26SS, 당시즌=26N/26S, 차기시즌=26F/27N/27S~
   // - 정체재고: 과시즌 중 판매금액이 기준금액(0.01%) 미만인 품목
   const getSeasonCategory = (
     prdtCd: string, 
@@ -910,36 +910,25 @@ export function formatProductDetailData(
     thresholdAmt: number
   ): 'current' | 'next' | 'stagnant' | 'old' => {
     const sesnUpper = (sesn || '').toUpperCase();
+    const isFWSeason = currentMonth >= 9 || currentMonth <= 2;
+    const fwBaseYear = currentMonth <= 2 ? currentYear - 1 : currentYear;
+    const currentSeasonCodes = isFWSeason
+      ? [`${fwBaseYear}N`, `${fwBaseYear}F`]
+      : [`${currentYear}N`, `${currentYear}S`];
+    const nextSeasonCodes = isFWSeason
+      ? [`${fwBaseYear + 1}S`, `${fwBaseYear + 1}N`, `${fwBaseYear + 1}F`, `${fwBaseYear + 2}N`, `${fwBaseYear + 2}S`, `${fwBaseYear + 2}F`]
+      : [`${currentYear}F`, `${currentYear + 1}N`, `${currentYear + 1}S`, `${currentYear + 1}F`, `${currentYear + 2}N`, `${currentYear + 2}S`, `${currentYear + 2}F`];
+    const matchesSeasonCodes = (seasonCodes: string[]): boolean =>
+      seasonCodes.some((seasonCode) => sesnUpper.includes(seasonCode));
     
     // 당시즌 조건
     const isCurrentSeason = (): boolean => {
-      if (currentMonth >= 9 || currentMonth <= 2) {
-        // FW 시즌: 당시즌 = 25N, 25F
-        return sesnUpper.includes(`${currentYear}N`) || sesnUpper.includes(`${currentYear}F`);
-      } else {
-        // SS 시즌: 당시즌 = 25N, 25S
-        return sesnUpper.includes(`${currentYear}N`) || sesnUpper.includes(`${currentYear}S`);
-      }
+      return matchesSeasonCodes(currentSeasonCodes);
     };
     
     // 차기시즌 조건
     const isNextSeason = (): boolean => {
-      if (currentMonth >= 9 || currentMonth <= 2) {
-        // FW 시즌: 차기시즌 = 26N, 26S, 26F, 27N, 27S...
-        return sesnUpper.includes(`${currentYear + 1}N`) || 
-               sesnUpper.includes(`${currentYear + 1}S`) || 
-               sesnUpper.includes(`${currentYear + 1}F`) ||
-               sesnUpper.includes(`${currentYear + 2}N`) ||
-               sesnUpper.includes(`${currentYear + 2}S`);
-      } else {
-        // SS 시즌: 차기시즌 = 25F, 26N, 26S, 26F, 27N, 27S...
-        return sesnUpper.includes(`${currentYear}F`) || 
-               sesnUpper.includes(`${currentYear + 1}N`) || 
-               sesnUpper.includes(`${currentYear + 1}S`) ||
-               sesnUpper.includes(`${currentYear + 1}F`) ||
-               sesnUpper.includes(`${currentYear + 2}N`) ||
-               sesnUpper.includes(`${currentYear + 2}S`);
-      }
+      return matchesSeasonCodes(nextSeasonCodes);
     };
     
     // 당시즌인지 확인
@@ -1081,5 +1070,4 @@ export function formatProductDetailData(
     thresholdAmt: thresholdAmt,
   };
 }
-
 

@@ -87,7 +87,7 @@ import { BRANDS } from './brands';
 /**
  * 실제 Snowflake 데이터 조회
  */
-export async function getRealData(month: string = '2025-11'): Promise<BrandDashboardData[]> {
+export async function getRealData(month: string = '2026-02'): Promise<BrandDashboardData[]> {
   try {
     const apiData = await fetchAllBrandsInventory(month);
     console.log('📊 API에서 받은 원본 데이터:', apiData);
@@ -186,7 +186,7 @@ export async function getRealData(month: string = '2025-11'): Promise<BrandDashb
 /**
  * 샘플 데이터 (백업용)
  */
-export function getSampleData(month: string = '2025-11'): BrandDashboardData[] {
+export function getSampleData(month: string = '2026-02'): BrandDashboardData[] {
   return [
     {
       brandId: 'mlb',
@@ -272,15 +272,15 @@ export function getSampleData(month: string = '2025-11'): BrandDashboardData[] {
 }
 
 /**
- * 월 목록 생성 (2026년 1월까지)
+ * 월 목록 생성 (2026년 2월까지)
  * 월결산 데이터는 요청 시 수동으로 업데이트하므로 최대 월을 고정
  */
 export function getMonthOptions(): { value: string; label: string }[] {
   const months: { value: string; label: string }[] = [];
   
-  // 최대 선택 가능 월: 2026년 1월
+  // 최대 선택 가능 월: 2026년 2월
   const maxYear = 2026;
-  const maxMonth = 1;
+  const maxMonth = 2;
   
   // 2025년 12월부터 12개월 전까지
   for (let i = 0; i < 12; i++) {
@@ -295,4 +295,3 @@ export function getMonthOptions(): { value: string; label: string }[] {
   
   return months;
 }
-
