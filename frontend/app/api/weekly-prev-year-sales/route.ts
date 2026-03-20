@@ -1,24 +1,19 @@
 import { NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/snowflake';
+import { ensureBrandCode, ensureWeekCsv } from '@/lib/request-validation';
 
 // 전년 동주차 매출 및 재고 조회 API (최적화: 하나의 쿼리로 모든 주차 조회)
 // 예측 주차(52주차, 1주차...)에 해당하는 전년 매출, 재고, 재고주수를 반환
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const brandCode = searchParams.get('brandCode');
-  const weeks = searchParams.get('weeks'); // 쉼표로 구분된 주차 목록 (예: "2025-W52,2026-W01,2026-W02")
-  const selectedItem = searchParams.get('selectedItem') || 'all';
-  
-  if (!brandCode || !weeks) {
-    return NextResponse.json({ error: 'brandCode and weeks are required' }, { status: 400 });
-  }
-  
   try {
-    const weekList = weeks.split(',');
+    const { searchParams } = new URL(request.url);
+    const brandCode = ensureBrandCode(searchParams.get('brandCode'));
+    const weekList = ensureWeekCsv(searchParams.get('weeks')); // 쉼표로 구분된 주차 목록 (예: "2025-W52,2026-W01,2026-W02")
+    const selectedItem = searchParams.get('selectedItem') || 'all';
     const results: Record<string, { sale: number; stock: number; weeks: number }> = {};
     
-    console.log(`📊 [weekly-prev-year-sales] 전년 데이터 조회 시작: brandCode=${brandCode}, weeks=${weeks}, item=${selectedItem}`);
+    console.log(`📊 [weekly-prev-year-sales] 전년 데이터 조회 시작: brandCode=${brandCode}, weeks=${weekList.join(',')}, item=${selectedItem}`);
     
     // 주차 파싱하여 전년 주차 목록 생성
     const weekParams: { weekKey: string; prevYear: number; weekNum: number }[] = [];
@@ -38,17 +33,25 @@ export async function GET(request: Request) {
     }
     
     // 중분류 필터 조건
+    const validSelectedItems = new Set(['all', 'shoes', 'hat', 'bag', 'other']);
+    if (!validSelectedItems.has(selectedItem)) {
+      return NextResponse.json({ error: 'Invalid selectedItem' }, { status: 400 });
+    }
+
     const itemFilterValue = selectedItem === 'shoes' ? 'Shoes' 
       : selectedItem === 'hat' ? 'Headwear' 
       : selectedItem === 'bag' ? 'Bag' 
       : selectedItem === 'all' ? null : 'Acc_etc';
     
-    const itemFilter = itemFilterValue ? `AND p.prdt_hrrc2_nm = '${itemFilterValue}'` : '';
+    const itemFilter = itemFilterValue ? 'AND p.prdt_hrrc2_nm = :2' : '';
+    const weekBindStartIndex = itemFilterValue ? 3 : 2;
     
     // 주차 조건 생성 (전년 주차 필터)
-    const weekConditions = weekParams.map(({ prevYear, weekNum }) => 
-      `(YEAR(s.end_dt) = ${prevYear} AND WEEKOFYEAR(s.end_dt) = ${weekNum})`
-    ).join(' OR ');
+    const weekConditions = weekParams.map((_, index) => {
+      const yearBindIndex = weekBindStartIndex + index * 2;
+      const weekBindIndex = yearBindIndex + 1;
+      return `(YEAR(s.end_dt) = :${yearBindIndex} AND WEEKOFYEAR(s.end_dt) = :${weekBindIndex})`;
+    }).join(' OR ');
     
     // 더 간단하고 빠른 쿼리 - sale_data에서 end_dt를 얻어 stock 조회
     const query = `
@@ -64,7 +67,7 @@ export async function GET(request: Request) {
           s.end_dt,
           YEAR(s.end_dt) + 1 || '-W' || LPAD(WEEKOFYEAR(s.end_dt)::STRING, 2, '0') AS week_key
         FROM fnf.prcs.db_scs_w s
-        WHERE s.brd_cd = '${brandCode}'
+        WHERE s.brd_cd = :1
           AND (${weekConditions})
       ),
       -- 전년 1주 매출 (필요한 주차만 필터)
@@ -76,7 +79,7 @@ export async function GET(request: Request) {
         FROM week_dates wd
         INNER JOIN fnf.prcs.db_scs_w s ON s.end_dt = wd.end_dt
         INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-        WHERE s.brd_cd = '${brandCode}'
+        WHERE s.brd_cd = :1
           ${itemFilter}
         GROUP BY wd.week_key, wd.end_dt
       ),
@@ -88,7 +91,7 @@ export async function GET(request: Request) {
         FROM sale_1w_data sd
         INNER JOIN fnf.prcs.db_scs_w s ON s.end_dt <= sd.end_dt AND s.end_dt > DATEADD(WEEK, -4, sd.end_dt)
         INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-        WHERE s.brd_cd = '${brandCode}'
+        WHERE s.brd_cd = :1
           ${itemFilter}
         GROUP BY sd.week_key
       ),
@@ -100,7 +103,7 @@ export async function GET(request: Request) {
         FROM sale_1w_data sd
         INNER JOIN prcs.dw_scs_dacum a ON sd.end_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
         INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-        WHERE a.brd_cd = '${brandCode}'
+        WHERE a.brd_cd = :1
           ${itemFilter}
         GROUP BY sd.week_key
       )
@@ -121,7 +124,11 @@ export async function GET(request: Request) {
     
     console.log(`📊 [weekly-prev-year-sales] 최적화된 단일 쿼리 실행 (${weekParams.length}주차)`);
     
-    const rows = await executeQuery(query);
+    const binds = [
+      ...(itemFilterValue ? [brandCode, itemFilterValue] : [brandCode]),
+      ...weekParams.flatMap(({ prevYear, weekNum }) => [prevYear, weekNum]),
+    ];
+    const rows = await executeQuery(query, undefined, 0, binds);
     
     // 결과를 weekKey별로 매핑
     for (const row of rows) {
@@ -145,7 +152,10 @@ export async function GET(request: Request) {
     return NextResponse.json({ success: true, data: results });
   } catch (error) {
     console.error('Error fetching prev year sales:', error);
-    return NextResponse.json({ error: 'Failed to fetch prev year sales' }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Failed to fetch prev year sales' },
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
+    );
   }
 }
 

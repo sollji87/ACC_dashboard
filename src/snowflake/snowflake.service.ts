@@ -39,7 +39,7 @@ export class SnowflakeService {
   /**
    * SQL 쿼리 실행
    */
-  async executeQuery<T = any>(sqlText: string): Promise<T[]> {
+  async executeQuery<T = any>(sqlText: string, binds?: snowflake.Binds): Promise<T[]> {
     return new Promise((resolve, reject) => {
       if (!this.connection) {
         reject(new Error('Snowflake 연결이 없습니다. 먼저 connect()를 호출하세요.'));
@@ -48,6 +48,7 @@ export class SnowflakeService {
 
       this.connection.execute({
         sqlText,
+        binds,
         complete: (err, stmt, rows) => {
           if (err) {
             this.logger.error('쿼리 실행 실패:', err);
@@ -105,7 +106,7 @@ with base as (
       on a.prdt_cd = d.prdt_cd
     where 1 = 1
       -- 브랜드 필터
-      and a.brd_cd = '${brandCode}'
+      and a.brd_cd = :1
       -- 중분류 필터 (ACC만)
       and d.vtext2 in ('Acc_etc', 'Bag', 'Headwear', 'Shoes')
       -- PO_CLS_NM 필터
@@ -117,7 +118,7 @@ with base as (
       -- 합의납기일 존재
       and a.indc_dt_cnfm is not null
       -- 합의납기연월이 범위 내에 있는 경우만
-      and to_char(a.indc_dt_cnfm, 'YYYYMM') between '${startYyyymm}' and '${endYyyymm}'
+      and to_char(a.indc_dt_cnfm, 'YYYYMM') between :2 and :3
 )
 select  brd_cd                                as "브랜드"
       , case 
@@ -135,7 +136,7 @@ order by brd_cd, indc_yyyymm, mid_cat
 ;
     `;
 
-    return this.executeQuery(sqlText);
+    return this.executeQuery(sqlText, [brandCode, startYyyymm, endYyyymm]);
   }
 
   /**

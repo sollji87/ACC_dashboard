@@ -13,6 +13,12 @@ interface SnowflakeConnection {
   schema: string;
 }
 
+export type SnowflakeBind = string | number | boolean | null;
+export interface SnowflakeStatement {
+  sqlText: string;
+  binds?: SnowflakeBind[];
+}
+
 let connection: snowflake.Connection | null = null;
 
 /**
@@ -74,7 +80,8 @@ export async function connectToSnowflake(): Promise<snowflake.Connection> {
 export async function executeQuery<T = any>(
   sqlText: string,
   conn?: snowflake.Connection,
-  retryCount: number = 0
+  retryCount: number = 0,
+  binds?: snowflake.Binds
 ): Promise<T[]> {
   const MAX_RETRIES = 2;
   let connectionToUse = conn || connection;
@@ -89,6 +96,7 @@ export async function executeQuery<T = any>(
     try {
       connectionToUse!.execute({
         sqlText,
+        binds,
         complete: async (err, stmt, rows) => {
           if (err) {
             console.error('쿼리 실행 실패:', err);
@@ -105,7 +113,7 @@ export async function executeQuery<T = any>(
               
               try {
                 // 재연결 후 재시도
-                const result = await executeQuery<T>(sqlText, undefined, retryCount + 1);
+                const result = await executeQuery<T>(sqlText, undefined, retryCount + 1, binds);
                 resolve(result);
               } catch (retryError) {
                 reject(retryError);
@@ -131,7 +139,7 @@ export async function executeQuery<T = any>(
         console.log(`연결 종료 감지 (catch). 재시도 ${retryCount + 1}/${MAX_RETRIES}`);
         connection = null;
         
-        executeQuery<T>(sqlText, undefined, retryCount + 1)
+        executeQuery<T>(sqlText, undefined, retryCount + 1, binds)
           .then(resolve)
           .catch(reject);
       } else {

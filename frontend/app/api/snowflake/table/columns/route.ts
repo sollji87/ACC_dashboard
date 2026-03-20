@@ -5,23 +5,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureSnowflakeIdentifier } from '@/lib/request-validation';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const database = searchParams.get('database');
-    const schema = searchParams.get('schema');
-    const table = searchParams.get('table');
-
-    if (!database || !schema || !table) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'database, schema, table 파라미터가 필요합니다.',
-        },
-        { status: 400 }
-      );
-    }
+    const database = ensureSnowflakeIdentifier(searchParams.get('database'), 'database');
+    const schema = ensureSnowflakeIdentifier(searchParams.get('schema'), 'schema');
+    const table = ensureSnowflakeIdentifier(searchParams.get('table'), 'table');
 
     console.log(`🔍 테이블 컬럼 정보 조회 시작 (${database}.${schema}.${table})...`);
     
@@ -42,13 +33,13 @@ export async function GET(request: NextRequest) {
           column_default,
           comment
         FROM information_schema.columns
-        WHERE table_catalog = '${database}'
-          AND table_schema = '${schema}'
-          AND table_name = '${table}'
+        WHERE table_catalog = :1
+          AND table_schema = :2
+          AND table_name = :3
         ORDER BY ordinal_position
       `;
 
-      const columns = await executeQuery(query, connection);
+      const columns = await executeQuery(query, connection, 0, [database, schema, table]);
       
       console.log(`✅ 컬럼 정보 조회 성공: ${columns.length}개 컬럼`);
 
@@ -73,7 +64,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

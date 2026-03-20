@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureYyyymm } from '@/lib/request-validation';
 
 /**
  * 정체재고 상세 조회 API (검증용)
@@ -8,15 +9,8 @@ import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode');
-    const yyyymm = searchParams.get('yyyymm');
-
-    if (!brandCode || !yyyymm) {
-      return NextResponse.json(
-        { success: false, error: 'brandCode, yyyymm 파라미터가 필요합니다.' },
-        { status: 400 }
-      );
-    }
+    const brandCode = ensureBrandCode(searchParams.get('brandCode'));
+    const yyyymm = ensureYyyymm(searchParams.get('yyyymm'));
 
     const { year, month } = {
       year: parseInt(yyyymm.substring(0, 4)),
@@ -50,7 +44,7 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = :1
     and prdt_hrrc1_nm = 'ACC'
 )
 -- 최근 1개월 판매 이력이 있는 품번
@@ -60,8 +54,8 @@ with item as (
      left join sap_fnf.mst_shop c
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
-    where a.brd_cd = '${brandCode}'
-    and a.pst_yyyymm >= '${months[0]}'
+    where a.brd_cd = :1
+    and a.pst_yyyymm >= :3
     and a.tag_sale_amt > 0
     and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
 )
@@ -75,8 +69,8 @@ with item as (
     from sap_fnf.dw_ivtr_shop_prdt_m a
      join item b on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = :1
+        and a.yyyymm = :2
     group by a.prdt_cd, b.item_std, b.sesn
 )
 -- 정체재고 (판매 이력이 없는 품번)
@@ -92,7 +86,7 @@ where sp.prdt_cd is null -- 판매 이력이 없는 품번만
 order by s.end_stock_tag_amt desc
       `;
 
-      const rows = await executeQuery(query, connection);
+      const rows = await executeQuery(query, connection, 0, [brandCode, yyyymm, months[0]]);
 
       // 집계 데이터
       const totalStagnantStock = rows.reduce((sum: number, row: any) => sum + (Number(row.END_STOCK_TAG_AMT) || 0), 0);
@@ -143,8 +137,7 @@ order by s.end_stock_tag_amt desc
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }
-

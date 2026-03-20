@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureWeekKey } from '@/lib/request-validation';
 
 /**
  * 주차별 입고예정금액 조회 API (Snowflake 직접 연결)
@@ -12,20 +13,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode');
-    const startWeek = searchParams.get('startWeek'); // 형식: 2025-W48
-    const endWeek = searchParams.get('endWeek');     // 형식: 2026-W10
-
-    // 파라미터 검증
-    if (!brandCode || !startWeek || !endWeek) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'brandCode, startWeek, endWeek 파라미터가 필요합니다.',
-        },
-        { status: 400 }
-      );
-    }
+    const brandCode = ensureBrandCode(searchParams.get('brandCode'));
+    const startWeek = ensureWeekKey(searchParams.get('startWeek'), 'startWeek');
+    const endWeek = ensureWeekKey(searchParams.get('endWeek'), 'endWeek');
 
     // 주차 파싱
     const parseWeek = (weekStr: string) => {
@@ -40,10 +30,7 @@ export async function GET(request: NextRequest) {
     const end = parseWeek(endWeek);
 
     if (!start || !end) {
-      return NextResponse.json(
-        { success: false, error: '주차 형식이 올바르지 않습니다. (예: 2025-W48)' },
-        { status: 400 }
-      );
+      throw new Error('유효하지 않은 주차 형식입니다. (YYYY-WNN 형식 필요)');
     }
 
     while (retries <= MAX_RETRIES) {
@@ -67,7 +54,7 @@ WITH base AS (
     LEFT JOIN sap_fnf.mst_prdt d
       ON a.prdt_cd = d.prdt_cd
     WHERE 1 = 1
-      AND a.brd_cd = '${brandCode}'
+      AND a.brd_cd = :1
       AND d.vtext2 IN ('Acc_etc', 'Bag', 'Headwear', 'Shoes')
       AND a.PO_CLS_NM IN (
             '내수/원화/세금계산서/DDP',
@@ -76,9 +63,9 @@ WITH base AS (
       )
       AND a.indc_dt_cnfm IS NOT NULL
       AND (
-        (YEAR(a.indc_dt_cnfm) = ${start.year} AND WEEKOFYEAR(a.indc_dt_cnfm) >= ${start.week})
-        OR (YEAR(a.indc_dt_cnfm) > ${start.year} AND YEAR(a.indc_dt_cnfm) < ${end.year})
-        OR (YEAR(a.indc_dt_cnfm) = ${end.year} AND WEEKOFYEAR(a.indc_dt_cnfm) <= ${end.week})
+        (YEAR(a.indc_dt_cnfm) = :2 AND WEEKOFYEAR(a.indc_dt_cnfm) >= :3)
+        OR (YEAR(a.indc_dt_cnfm) > :2 AND YEAR(a.indc_dt_cnfm) < :4)
+        OR (YEAR(a.indc_dt_cnfm) = :4 AND WEEKOFYEAR(a.indc_dt_cnfm) <= :5)
       )
 )
 SELECT  
@@ -99,7 +86,13 @@ GROUP BY brd_cd, mid_cat, indc_week, year_num, week_num
 ORDER BY year_num, week_num, mid_cat
 `;
 
-        const rows = await executeQuery(sqlText, connection);
+        const rows = await executeQuery(sqlText, connection, 0, [
+          brandCode,
+          start.year,
+          start.week,
+          end.year,
+          end.week,
+        ]);
         
         // 주차별 중분류별로 집계
         const weeklyData = aggregateIncomingAmountsByWeek(rows);
@@ -138,7 +131,7 @@ ORDER BY year_num, week_num, mid_cat
         success: false,
         error: error instanceof Error ? error.message : '서버 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

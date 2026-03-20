@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureItemStd, ensureYyyymm } from '@/lib/request-validation';
 
 /**
  * MLB 10월 신발 사입제외 기준 4주 재고주수 계산용 택매출액 확인 API
@@ -8,9 +9,9 @@ import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode') || 'M';
-    const yyyymm = searchParams.get('yyyymm') || '202510';
-    const itemStd = searchParams.get('itemStd') || '신발';
+    const brandCode = ensureBrandCode(searchParams.get('brandCode') || 'M');
+    const yyyymm = ensureYyyymm(searchParams.get('yyyymm') || '202510');
+    const itemStd = ensureItemStd(searchParams.get('itemStd') || '신발');
     const excludePurchaseParam = searchParams.get('excludePurchase');
     const excludePurchase = excludePurchaseParam === 'true';
 
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
                     when prdt_hrrc1_nm='ACC' and prdt_hrrc2_nm='Headwear' then '모자'
                     when prdt_hrrc1_nm='ACC' and prdt_hrrc2_nm='Bag' then '가방'
                     when prdt_hrrc1_nm='ACC' and prdt_hrrc2_nm='Acc_etc' then '기타ACC'
-              end = '${itemStd}'`;
+              end = :3`;
 
       const query = `
 with item as (
@@ -37,7 +38,7 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = :1
     ${itemFilter}
 ),
 -- 당년 10월 매출 (사입제외)
@@ -54,8 +55,8 @@ monthly_sale_cy as (
     where 1=1
         and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm = '${yyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm = :2
 ),
 -- 채널별 매출 상세 (디버깅용)
 channel_detail as (
@@ -72,8 +73,8 @@ channel_detail as (
     where 1=1
         and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
         ${excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : ''}
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm = '${yyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm = :2
     group by c.chnl_cd, c.chnl_nm
     order by tag_sale_amt desc
 )
@@ -97,7 +98,8 @@ from channel_detail cd
 order by type, tag_sale_amount desc
       `;
 
-      const rows = await executeQuery(query, connection);
+      const binds = itemStd === 'all' ? [brandCode, yyyymm] : [brandCode, yyyymm, itemStd];
+      const rows = await executeQuery(query, connection, 0, binds);
 
       console.log('✅ 택매출액 조회 성공:', rows);
 
@@ -133,8 +135,7 @@ order by type, tag_sale_amount desc
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }
-

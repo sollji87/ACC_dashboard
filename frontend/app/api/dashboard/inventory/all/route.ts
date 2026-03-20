@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
 import { buildInventoryQuery, formatInventoryData } from '@/lib/dashboard-service';
+import { ensureYyyymm } from '@/lib/request-validation';
 
 const BRAND_CODES = ['M', 'I', 'X', 'V', 'ST'];
 
@@ -23,7 +24,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month');
-    const yyyymm = month || getCurrentYearMonth();
+    const yyyymm = month ? ensureYyyymm(month, 'month') : getCurrentYearMonth();
 
     console.log(`📊 모든 브랜드 재고주수 조회 시작 (${yyyymm})`);
 
@@ -36,8 +37,8 @@ export async function GET(request: NextRequest) {
         BRAND_CODES.map(async (brandCode) => {
           try {
             console.log(`브랜드 ${brandCode} 조회 시작`);
-            const query = buildInventoryQuery(brandCode, yyyymm);
-            const rows = await executeQuery(query, connection);
+            const statement = buildInventoryQuery(brandCode, yyyymm);
+            const rows = await executeQuery(statement.sqlText, connection, 0, statement.binds);
             const formattedData = formatInventoryData(rows, brandCode, yyyymm);
             console.log(`브랜드 ${brandCode} 조회 성공`);
             return formattedData;
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

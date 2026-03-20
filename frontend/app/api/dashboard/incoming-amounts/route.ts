@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureYearMonth } from '@/lib/request-validation';
 
 /**
  * 입고예정금액 조회 API (Snowflake 직접 연결)
@@ -12,22 +13,11 @@ export async function GET(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode');
-    const startMonth = searchParams.get('startMonth');
-    const endMonth = searchParams.get('endMonth');
+    const brandCode = ensureBrandCode(searchParams.get('brandCode'));
+    const startMonth = ensureYearMonth(searchParams.get('startMonth'), 'startMonth');
+    const endMonth = ensureYearMonth(searchParams.get('endMonth'), 'endMonth');
 
     // 파라미터 검증
-    if (!brandCode || !startMonth || !endMonth) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'brandCode, startMonth, endMonth 파라미터가 필요합니다.',
-        },
-        { status: 400 }
-      );
-    }
-
-    // YYYY-MM 형식을 YYYYMM으로 변환
     const startYyyymm = startMonth.replace(/-/g, '');
     const endYyyymm = endMonth.replace(/-/g, '');
 
@@ -47,7 +37,7 @@ with base as (
     left join sap_fnf.mst_prdt d
       on a.prdt_cd = d.prdt_cd
     where 1 = 1
-      and a.brd_cd = '${brandCode}'
+      and a.brd_cd = :1
       and d.vtext2 in ('Acc_etc', 'Bag', 'Headwear', 'Shoes')
       and a.PO_CLS_NM in (
             '내수/원화/세금계산서/DDP',
@@ -55,7 +45,7 @@ with base as (
             '한국수입/외화/FOB'
       )
       and a.indc_dt_cnfm is not null
-      and to_char(a.indc_dt_cnfm, 'YYYYMM') between '${startYyyymm}' and '${endYyyymm}'
+      and to_char(a.indc_dt_cnfm, 'YYYYMM') between :2 and :3
 )
 select  brd_cd                                as "브랜드"
       , case 
@@ -72,7 +62,7 @@ group by brd_cd, mid_cat, indc_yyyymm
 order by brd_cd, indc_yyyymm, mid_cat
 `;
 
-        const rows = await executeQuery(sqlText, connection);
+        const rows = await executeQuery(sqlText, connection, 0, [brandCode, startYyyymm, endYyyymm]);
         
         // 월별 중분류별로 집계
         const monthlyData = aggregateIncomingAmountsByMonth(rows);
@@ -111,7 +101,7 @@ order by brd_cd, indc_yyyymm, mid_cat
         success: false,
         error: error instanceof Error ? error.message : '서버 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

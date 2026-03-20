@@ -3,6 +3,7 @@
  * 월결산 데이터와 분리하여 별도 관리
  */
 
+import type { SnowflakeStatement } from './snowflake';
 import { parseWeekValue, getWeekStart, getWeekEnd } from './week-utils';
 
 // 주차별 재고 데이터 인터페이스
@@ -87,7 +88,7 @@ export function mapItemCategory(prdt_hrrc2_nm: string): 'shoes' | 'hat' | 'bag' 
  * @param brandCode 브랜드 코드 (M, I, X, V, ST)
  * @param weekKey 주차 키 (예: 2025-51)
  */
-export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): string {
+export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): SnowflakeStatement {
   // weekKey 형식: "2025-51" -> 연도와 주차 추출
   const { year, week } = parseWeekValue(weekKey);
   const prevYear = year - 1;
@@ -96,7 +97,10 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
   const weekKeyFormatted = `${year}-W${String(week).padStart(2, '0')}`;
   const prevWeekKeyFormatted = `${prevYear}-W${String(week).padStart(2, '0')}`;
   
-  return `
+  const startDate = `${prevYear}-01-01`;
+  const endDate = `${year}-12-31`;
+
+  const sqlText = `
     WITH sunday AS (
       SELECT
         d::date AS asof_dt,
@@ -104,10 +108,10 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
         LPAD(WEEKOFYEAR(d::date)::STRING, 2, '0') AS ww,
         TO_CHAR(d::date, 'YYYY') || '-W' || LPAD(WEEKOFYEAR(d::date)::STRING, 2, '0') AS week_key
       FROM (
-        SELECT DATEADD(DAY, seq4(), DATE '${prevYear}-01-01') AS d
+        SELECT DATEADD(DAY, seq4(), TO_DATE(:1)) AS d
         FROM TABLE(GENERATOR(ROWCOUNT => 800))
       )
-      WHERE d::date BETWEEN DATE '${prevYear}-01-01' AND DATE '${year}-12-31'
+      WHERE d::date BETWEEN TO_DATE(:1) AND TO_DATE(:2)
         AND DAYOFWEEKISO(d::date) = 7
     ),
     prdt AS (
@@ -130,8 +134,8 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
         ON s.asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p  -- INNER JOIN으로 변경하여 악세사리만 조회
         ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
-        AND s.week_key = '${weekKeyFormatted}'
+      WHERE a.brd_cd = :3
+        AND s.week_key = :4
       GROUP BY
         s.asof_dt,
         s.week_key,
@@ -153,8 +157,8 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
         ON s.asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p  -- INNER JOIN으로 변경하여 악세사리만 조회
         ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
-        AND s.week_key = '${prevWeekKeyFormatted}'
+      WHERE a.brd_cd = :3
+        AND s.week_key = :5
       GROUP BY
         s.asof_dt,
         s.week_key,
@@ -163,9 +167,9 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
       HAVING SUM(a.stock_tag_amt) <> 0
     )
     SELECT
-      COALESCE(cy.week_key, '${weekKeyFormatted}') AS week_key,
+      COALESCE(cy.week_key, :4) AS week_key,
       COALESCE(cy.asof_dt, NULL) AS asof_dt,
-      '${brandCode}' AS brd_cd,
+      :3 AS brd_cd,
       COALESCE(cy.prdt_hrrc2_nm, py.prdt_hrrc2_nm) AS prdt_hrrc2_nm,
       COALESCE(cy.stock_tag_amt, 0) AS cy_stock_tag_amt,
       COALESCE(cy.stock_qty, 0) AS cy_stock_qty,
@@ -176,6 +180,11 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
       ON cy.prdt_hrrc2_nm = py.prdt_hrrc2_nm
     ORDER BY prdt_hrrc2_nm
   `;
+
+  return {
+    sqlText,
+    binds: [startDate, endDate, brandCode, weekKeyFormatted, prevWeekKeyFormatted],
+  };
 }
 
 /**
@@ -183,11 +192,11 @@ export function buildWeeklyInventoryQuery(brandCode: string, weekKey: string): s
  * @param brandCode 브랜드 코드 (M, I, X, V, ST)
  * @param weekKey 주차 키 (예: 2025-51)
  */
-export function buildWeeklySalesQuery(brandCode: string, weekKey: string): string {
+export function buildWeeklySalesQuery(brandCode: string, weekKey: string): SnowflakeStatement {
   // weekKey 형식: "2025-51" -> 연도와 주차 추출
   const { year, week } = parseWeekValue(weekKey);
   
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd
       FROM sap_fnf.mst_prdt
@@ -198,8 +207,8 @@ export function buildWeeklySalesQuery(brandCode: string, weekKey: string): strin
     week_info AS (
       SELECT DISTINCT end_dt
       FROM fnf.prcs.db_sh_s_w
-      WHERE YEAR(end_dt) = ${year}
-        AND WEEKOFYEAR(end_dt) = ${week}
+      WHERE YEAR(end_dt) = :1
+        AND WEEKOFYEAR(end_dt) = :2
     ),
     -- 당년 매출 (악세사리만)
     curr AS (
@@ -213,7 +222,7 @@ export function buildWeeklySalesQuery(brandCode: string, weekKey: string): strin
         ON s.end_dt = w.end_dt
       INNER JOIN prdt p  -- 악세사리만
         ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :3
       GROUP BY s.brd_cd, w.end_dt, p.prdt_cd
       HAVING SUM(COALESCE(s.sale_nml_tag_amt_cns, 0) + COALESCE(s.sale_ret_tag_amt_cns, 0)) <> 0
     ),
@@ -229,12 +238,12 @@ export function buildWeeklySalesQuery(brandCode: string, weekKey: string): strin
         ON s.end_dt = (DATE_TRUNC('week', DATEADD(YEAR, -1, w.end_dt)) + 6)
       INNER JOIN prdt p  -- 악세사리만
         ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :3
       GROUP BY s.brd_cd, w.end_dt, p.prdt_cd
       HAVING SUM(COALESCE(s.sale_nml_tag_amt_cns, 0) + COALESCE(s.sale_ret_tag_amt_cns, 0)) <> 0
     )
     SELECT
-      COALESCE(c.brd_cd, p.brd_cd, '${brandCode}') AS brd_cd,
+      COALESCE(c.brd_cd, p.brd_cd, :3) AS brd_cd,
       COALESCE(c.end_dt, p.cy_end_dt) AS end_dt,
       COALESCE(c.prdt_cd, p.prdt_cd) AS prdt_cd,
       COALESCE(c.tag_sale_amt, 0) AS cy_tag_sale_amt,
@@ -244,17 +253,22 @@ export function buildWeeklySalesQuery(brandCode: string, weekKey: string): strin
       ON c.prdt_cd = p.prdt_cd
     ORDER BY prdt_cd
   `;
+
+  return {
+    sqlText,
+    binds: [year, week, brandCode],
+  };
 }
 
 /**
  * 주차별 매출+재고 통합 데이터 조회 쿼리 생성
  * 재고주수 계산을 위해 재고와 매출을 함께 조회
  */
-export function buildWeeklyDashboardQuery(brandCode: string, weekKey: string): string {
+export function buildWeeklyDashboardQuery(brandCode: string, weekKey: string): SnowflakeStatement {
   const { year, week } = parseWeekValue(weekKey);
   
   // 초간단 테스트 쿼리 - 재고만 조회
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd, vtext2 AS prdt_hrrc2_nm
       FROM sap_fnf.mst_prdt
@@ -269,12 +283,17 @@ export function buildWeeklyDashboardQuery(brandCode: string, weekKey: string): s
       0 AS py_tag_sale_amt
     FROM prcs.dw_scs_dacum a
     INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND TO_DATE(a.start_dt) <= CURRENT_DATE
       AND TO_DATE(a.end_dt) >= CURRENT_DATE
     GROUP BY p.prdt_hrrc2_nm
     ORDER BY p.prdt_hrrc2_nm
   `;
+
+  return {
+    sqlText,
+    binds: [brandCode],
+  };
 }
 
 /**
@@ -561,9 +580,11 @@ export function buildWeeklyChartQuery(
   brandCode: string, 
   weeksForSale: number = 4,
   selectedItem: 'all' | 'shoes' | 'hat' | 'bag' | 'other' = 'all'
-): string {
+): SnowflakeStatement {
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
+  const startDate = `${prevYear}-01-01`;
+  const lookbackWeeks = weeksForSale + 12;
   
   // 아이템 필터 조건 생성
   let itemFilter = '';
@@ -593,7 +614,7 @@ export function buildWeeklyChartQuery(
     }
   }
   
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd, vtext2 AS prdt_hrrc2_nm
       FROM sap_fnf.mst_prdt
@@ -609,10 +630,10 @@ export function buildWeeklyChartQuery(
         YEAR(d::date) AS year_num,
         ROW_NUMBER() OVER (ORDER BY d::date DESC) AS week_rank
       FROM (
-        SELECT DATEADD(DAY, seq4(), DATE '${prevYear}-01-01') AS d
+        SELECT DATEADD(DAY, seq4(), TO_DATE(:1)) AS d
         FROM TABLE(GENERATOR(ROWCOUNT => 800))
       )
-      WHERE d::date BETWEEN DATE '${prevYear}-01-01' AND CURRENT_DATE()
+      WHERE d::date BETWEEN TO_DATE(:1) AND CURRENT_DATE()
         AND DAYOFWEEKISO(d::date) = 7
       QUALIFY week_rank <= 12
     ),
@@ -639,7 +660,7 @@ export function buildWeeklyChartQuery(
       JOIN prcs.dw_scs_dacum a
         ON s.asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :2
       GROUP BY s.week_key, s.asof_dt, s.week_num, p.prdt_hrrc2_nm
     ),
     -- 전년 재고 (중분류별)
@@ -654,20 +675,20 @@ export function buildWeeklyChartQuery(
       JOIN prcs.dw_scs_dacum a
         ON pys.py_asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :2
       GROUP BY pys.cy_week_key, pys.cy_asof_dt, pys.week_num, p.prdt_hrrc2_nm
     ),
     -- 매출 종료일 목록 (최근 N주 매출 계산용 - 당년)
     sale_weeks_cy AS (
       SELECT DISTINCT end_dt
       FROM fnf.prcs.db_sh_s_w
-      WHERE end_dt BETWEEN DATEADD(WEEK, -${weeksForSale + 12}, CURRENT_DATE()) AND CURRENT_DATE()
+      WHERE end_dt BETWEEN DATEADD(WEEK, -:3, CURRENT_DATE()) AND CURRENT_DATE()
     ),
     -- 매출 종료일 목록 (최근 N주 매출 계산용 - 전년)
     sale_weeks_py AS (
       SELECT DISTINCT end_dt
       FROM fnf.prcs.db_sh_s_w
-      WHERE end_dt BETWEEN DATEADD(WEEK, -${weeksForSale + 12}, DATEADD(YEAR, -1, CURRENT_DATE())) 
+      WHERE end_dt BETWEEN DATEADD(WEEK, -:3, DATEADD(YEAR, -1, CURRENT_DATE())) 
         AND DATEADD(YEAR, -1, CURRENT_DATE())
     ),
     -- 당년 N주 매출 합계 (중분류별)
@@ -681,9 +702,9 @@ export function buildWeeklyChartQuery(
       CROSS JOIN sale_weeks_cy sw
       JOIN fnf.prcs.db_scs_w s ON s.end_dt = sw.end_dt
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :2
         AND sw.end_dt <= rs.asof_dt
-        AND sw.end_dt > DATEADD(WEEK, -${weeksForSale}, rs.asof_dt)
+        AND sw.end_dt > DATEADD(WEEK, -:4, rs.asof_dt)
       GROUP BY rs.week_key, rs.asof_dt, p.prdt_hrrc2_nm
     ),
     -- 전년 N주 매출 합계 (중분류별)
@@ -697,9 +718,9 @@ export function buildWeeklyChartQuery(
       CROSS JOIN sale_weeks_py sw
       JOIN fnf.prcs.db_scs_w s ON s.end_dt = sw.end_dt
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :2
         AND sw.end_dt <= pys.py_asof_dt
-        AND sw.end_dt > DATEADD(WEEK, -${weeksForSale}, pys.py_asof_dt)
+        AND sw.end_dt > DATEADD(WEEK, -:4, pys.py_asof_dt)
       GROUP BY pys.cy_week_key, pys.cy_asof_dt, p.prdt_hrrc2_nm
     )
     SELECT
@@ -722,6 +743,11 @@ export function buildWeeklyChartQuery(
       AND COALESCE(cy.prdt_hrrc2_nm, py.prdt_hrrc2_nm) = pys.prdt_hrrc2_nm
     ORDER BY COALESCE(cy.asof_dt, py.asof_dt) ASC, COALESCE(cy.prdt_hrrc2_nm, py.prdt_hrrc2_nm)
   `;
+
+  return {
+    sqlText,
+    binds: [startDate, brandCode, lookbackWeeks, weeksForSale],
+  };
 }
 
 /**
@@ -735,12 +761,17 @@ export function buildWeeklyChartQuery(
  */
 export function buildWeeklySeasonChartQuery(
   brandCode: string
-): string {
+): SnowflakeStatement {
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
   const yy = currentYear % 100;
+  const startDate = `${prevYear}-01-01`;
+  const yyMinus2 = yy - 2;
+  const yyMinus1 = yy - 1;
+  const yyPlus1 = yy + 1;
+  const yyPlus2 = yy + 2;
   
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd, vtext2 AS prdt_hrrc2_nm, sesn
       FROM sap_fnf.mst_prdt
@@ -757,10 +788,10 @@ export function buildWeeklySeasonChartQuery(
         MONTH(d::date) AS month_num,
         ROW_NUMBER() OVER (ORDER BY d::date DESC) AS week_rank
       FROM (
-        SELECT DATEADD(DAY, seq4(), DATE '${prevYear}-01-01') AS d
+        SELECT DATEADD(DAY, seq4(), TO_DATE(:1)) AS d
         FROM TABLE(GENERATOR(ROWCOUNT => 800))
       )
-      WHERE d::date BETWEEN DATE '${prevYear}-01-01' AND CURRENT_DATE()
+      WHERE d::date BETWEEN TO_DATE(:1) AND CURRENT_DATE()
         AND DAYOFWEEKISO(d::date) = 7
       QUALIFY week_rank <= 12
     ),
@@ -786,7 +817,7 @@ export function buildWeeklySeasonChartQuery(
       JOIN prcs.dw_scs_dacum a
         ON s.asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :2
       GROUP BY s.week_key, s.asof_dt
     ),
     -- 기준금액 (0.01%)
@@ -809,7 +840,7 @@ export function buildWeeklySeasonChartQuery(
       JOIN fnf.prcs.db_scs_w s 
         ON s.end_dt <= rs.asof_dt AND s.end_dt > DATEADD(WEEK, -4, rs.asof_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :2
       GROUP BY rs.week_key, rs.asof_dt, s.prdt_cd, s.color_cd
     ),
     -- 당년 품번+컬러별 재고
@@ -828,7 +859,7 @@ export function buildWeeklySeasonChartQuery(
       JOIN prcs.dw_scs_dacum a
         ON s.asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :2
       GROUP BY s.week_key, s.asof_dt, s.week_num, s.month_num, a.prdt_cd, a.color_cd, p.sesn, p.prdt_hrrc2_nm
     ),
     -- 당년 시즌 분류
@@ -848,35 +879,35 @@ export function buildWeeklySeasonChartQuery(
           WHEN (
             CASE WHEN c.month_num >= 9 OR c.month_num <= 2 THEN
               CASE WHEN c.month_num <= 2 THEN
-                c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'F%'
+                c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'F%'
               ELSE
-                c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'F%'
+                c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'F%'
               END
             ELSE
-              c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'N%'
-              OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'S%'
+              c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'N%'
+              OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'S%'
             END
           ) THEN '당시즌'
           -- 2. 차기시즌
           WHEN (
             CASE WHEN c.month_num >= 9 OR c.month_num <= 2 THEN
               CASE WHEN c.month_num <= 2 THEN
-                c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'S%'
-                OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'F%'
-                OR c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || '%'
+                c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'S%'
+                OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'F%'
+                OR c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || '%'
               ELSE
-                c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || 'S%'
-                OR c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || 'F%'
-                OR c.sesn LIKE '%' || CAST(${yy} + 2 AS VARCHAR) || '%'
+                c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || 'S%'
+                OR c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || 'F%'
+                OR c.sesn LIKE '%' || LPAD(:7::VARCHAR, 2, '0') || '%'
               END
             ELSE
-              c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'F%'
-              OR c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || '%'
-              OR c.sesn LIKE '%' || CAST(${yy} + 2 AS VARCHAR) || '%'
+              c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'F%'
+              OR c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || '%'
+              OR c.sesn LIKE '%' || LPAD(:7::VARCHAR, 2, '0') || '%'
             END
           ) THEN '차기시즌'
           -- 3. 정체재고 (품번+컬러별 판매 < 기준금액)
@@ -919,7 +950,7 @@ export function buildWeeklySeasonChartQuery(
       JOIN prcs.dw_scs_dacum a
         ON pys.py_asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :2
       GROUP BY pys.cy_week_key, pys.cy_asof_dt, pys.week_num, pys.month_num, a.prdt_cd, a.color_cd, p.sesn, p.prdt_hrrc2_nm
     ),
     -- 전년 최근 4주 품번+컬러별 판매금액
@@ -934,7 +965,7 @@ export function buildWeeklySeasonChartQuery(
       JOIN fnf.prcs.db_scs_w s 
         ON s.end_dt <= pys.py_asof_dt AND s.end_dt > DATEADD(WEEK, -4, pys.py_asof_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :2
       GROUP BY pys.cy_week_key, pys.cy_asof_dt, s.prdt_cd, s.color_cd
     ),
     -- 전년 전체 재고 (정체재고 기준금액 산출용)
@@ -947,7 +978,7 @@ export function buildWeeklySeasonChartQuery(
       JOIN prcs.dw_scs_dacum a
         ON pys.py_asof_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :2
       GROUP BY pys.cy_week_key, pys.cy_asof_dt
     ),
     py_threshold AS (
@@ -974,34 +1005,34 @@ export function buildWeeklySeasonChartQuery(
           WHEN (
             CASE WHEN c.month_num >= 9 OR c.month_num <= 2 THEN
               CASE WHEN c.month_num <= 2 THEN
-                c.sesn LIKE '%' || CAST(${yy} - 2 AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} - 2 AS VARCHAR) || 'F%'
+                c.sesn LIKE '%' || LPAD(:3::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:3::VARCHAR, 2, '0') || 'F%'
               ELSE
-                c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'F%'
+                c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'F%'
               END
             ELSE
-              c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'N%'
-              OR c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'S%'
+              c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'N%'
+              OR c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'S%'
             END
           ) THEN '당시즌'
           WHEN (
             CASE WHEN c.month_num >= 9 OR c.month_num <= 2 THEN
               CASE WHEN c.month_num <= 2 THEN
-                c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'S%'
-                OR c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'F%'
-                OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || '%'
+                c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'S%'
+                OR c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'F%'
+                OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || '%'
               ELSE
-                c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'N%'
-                OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'S%'
-                OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || 'F%'
-                OR c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || '%'
+                c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'N%'
+                OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'S%'
+                OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || 'F%'
+                OR c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || '%'
               END
             ELSE
-              c.sesn LIKE '%' || CAST(${yy} - 1 AS VARCHAR) || 'F%'
-              OR c.sesn LIKE '%' || CAST(${yy} AS VARCHAR) || '%'
-              OR c.sesn LIKE '%' || CAST(${yy} + 1 AS VARCHAR) || '%'
+              c.sesn LIKE '%' || LPAD(:4::VARCHAR, 2, '0') || 'F%'
+              OR c.sesn LIKE '%' || LPAD(:5::VARCHAR, 2, '0') || '%'
+              OR c.sesn LIKE '%' || LPAD(:6::VARCHAR, 2, '0') || '%'
             END
           ) THEN '차기시즌'
           WHEN COALESCE(sl.sale_amt, 0) < COALESCE(t.threshold_amt, 0) THEN '정체재고'
@@ -1047,6 +1078,11 @@ export function buildWeeklySeasonChartQuery(
       ON cy.week_key = py.week_key
     ORDER BY COALESCE(cy.asof_dt, py.asof_dt) ASC
   `;
+
+  return {
+    sqlText,
+    binds: [startDate, brandCode, yyMinus2, yyMinus1, yy, yyPlus1, yyPlus2],
+  };
 }
 
 /**

@@ -19,6 +19,8 @@
  * 과시즌: 당시즌/차기시즌/정체재고 제외한 나머지
  */
 
+import type { SnowflakeStatement } from './snowflake';
+
 /**
  * YYYYMM 형식에서 년월 추출
  */
@@ -80,7 +82,7 @@ export function buildChartDataQuery(
   itemStd: string = 'all',
   excludePurchase: boolean = false,
   base: 'amount' | 'quantity' = 'amount'
-): string {
+): SnowflakeStatement {
   const { year, month } = parseYearMonth(yyyymm);
   
   // 최근 13개월 목록 생성 (입고금액 계산을 위해 한 달 더 이전 포함)
@@ -108,7 +110,16 @@ export function buildChartDataQuery(
   const stockColumn = base === 'quantity' ? 'end_stock_qty' : 'end_stock_tag_amt';
   const saleColumn = base === 'quantity' ? 'sale_qty' : 'tag_sale_amt';
   
-  return `
+  const itemFilter = itemStd !== 'all'
+    ? `AND CASE 
+            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
+            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
+            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
+            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
+        END = :2`
+    : '';
+
+  const sqlText = `
 -- item: ACC 아이템 기준
 WITH item AS (
     SELECT prdt_cd, sesn,
@@ -119,14 +130,9 @@ WITH item AS (
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = :1
       AND prdt_hrrc1_nm = 'ACC'
-      ${itemStd !== 'all' ? `AND CASE 
-            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Headwear' THEN '모자'
-            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Shoes' THEN '신발'
-            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Bag' THEN '가방'
-            WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
-        END = '${itemStd}'` : ''}
+      ${itemFilter}
 ),
 
 -- 월별 기준금액 계산 (전체 ACC 재고 * 0.01%)
@@ -137,7 +143,7 @@ monthly_threshold AS (
         SUM(a.${stockColumn}) * 0.0001 as threshold_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND a.yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
     GROUP BY a.yyyymm
@@ -158,7 +164,7 @@ monthly_sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.cust_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
       AND c.chnl_cd NOT IN ('9', '99')
@@ -175,7 +181,7 @@ monthly_sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
       AND c.chnl_cd NOT IN ('9', '99')
@@ -193,7 +199,7 @@ monthly_stock_by_product AS (
         SUM(a.end_stock_qty) as end_stock_qty
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND a.yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND b.item_std IS NOT NULL
     GROUP BY a.yyyymm, a.prdt_cd, b.sesn
@@ -316,7 +322,7 @@ monthly_sale AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.cust_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND TO_CHAR(a.pst_dt, 'YYYYMM') IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND c.chnl_cd NOT IN ('9', '99')
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
@@ -329,7 +335,7 @@ monthly_sale AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
+    WHERE a.brd_cd = :1
       AND a.pst_yyyymm IN (${[...months, ...pyMonths].map(m => `'${m}'`).join(',')})
       AND c.chnl_cd NOT IN ('9', '99')
       ${excludePurchase ? "AND c.chnl_cd <> '8'" : ''}
@@ -431,6 +437,11 @@ LEFT JOIN monthly_normal_stock_weeks ns ON ss.yyyymm = ns.yyyymm
 LEFT JOIN monthly_season_sale_summary sss ON ss.yyyymm = sss.yyyymm
 ORDER BY ss.yyyymm
   `;
+
+  return {
+    sqlText,
+    binds: itemStd === 'all' ? [brandCode] : [brandCode, itemStd],
+  };
 }
 
 /**

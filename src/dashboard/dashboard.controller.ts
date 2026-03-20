@@ -1,5 +1,6 @@
 import { Controller, Get, Query, Logger } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
+import { ensureBrandCode, ensureYearMonth, ensureYyyymm } from '../common/request-validation';
 
 @Controller('api/dashboard')
 export class DashboardController {
@@ -26,11 +27,11 @@ export class DashboardController {
     @Query('brandCode') brandCode: string = 'M',
     @Query('month') month: string,
   ) {
+    const safeBrandCode = ensureBrandCode(brandCode);
+    const yyyymm = month ? ensureYyyymm(month, 'month') : this.getCurrentYearMonth();
+
     try {
-      // month 파라미터 검증 및 기본값 설정
-      const yyyymm = month || this.getCurrentYearMonth();
-      
-      const data = await this.dashboardService.getInventoryWeeks(brandCode, yyyymm);
+      const data = await this.dashboardService.getInventoryWeeks(safeBrandCode, yyyymm);
       
       return {
         success: true,
@@ -50,8 +51,9 @@ export class DashboardController {
    */
   @Get('inventory/all')
   async getAllBrandsInventory(@Query('month') month: string) {
+    const yyyymm = month ? ensureYyyymm(month, 'month') : this.getCurrentYearMonth();
+
     try {
-      const yyyymm = month || this.getCurrentYearMonth();
       const brandCodes = ['M', 'I', 'X', 'V', 'ST'];
       
       const results = await Promise.all(
@@ -94,18 +96,15 @@ export class DashboardController {
     @Query('startMonth') startMonth: string,
     @Query('endMonth') endMonth: string,
   ) {
-    try {
-      if (!brandCode || !startMonth || !endMonth) {
-        return {
-          success: false,
-          error: 'brandCode, startMonth, endMonth 파라미터가 필요합니다.',
-        };
-      }
+    const safeBrandCode = ensureBrandCode(brandCode);
+    const safeStartMonth = ensureYearMonth(startMonth, 'startMonth');
+    const safeEndMonth = ensureYearMonth(endMonth, 'endMonth');
 
+    try {
       const data = await this.dashboardService.getIncomingAmounts(
-        brandCode,
-        startMonth,
-        endMonth,
+        safeBrandCode,
+        safeStartMonth,
+        safeEndMonth,
       );
 
       return {

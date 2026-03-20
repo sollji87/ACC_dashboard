@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
 import { buildProductDetailQuery, formatProductDetailData } from '@/lib/dashboard-service';
+import { ensureBrandCode, ensureItemStd, ensureYyyymm } from '@/lib/request-validation';
 
 /**
  * 현재 년월 반환 (YYYYMM 형식)
@@ -20,36 +21,14 @@ function getCurrentYearMonth(): string {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode') || 'M';
-    const itemStd = searchParams.get('itemStd') || '신발';
+    const rawBrandCode = searchParams.get('brandCode') || 'M';
+    const rawItemStd = searchParams.get('itemStd') || '신발';
     const month = searchParams.get('month');
-    const yyyymm = month || getCurrentYearMonth();
+    const rawYyyymm = month || getCurrentYearMonth();
     const excludePurchase = searchParams.get('excludePurchase') === 'true';
-
-    // SQL 인젝션 방지: brandCode 검증
-    if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 브랜드 코드입니다.' },
-        { status: 400 }
-      );
-    }
-    
-    // itemStd 검증 (한글 또는 영어만 허용)
-    const validItemStd = ['신발', '모자', '가방', '기타ACC', 'all'];
-    if (!validItemStd.includes(itemStd)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 아이템 분류입니다.' },
-        { status: 400 }
-      );
-    }
-    
-    // yyyymm 검증 (YYYYMM 형식)
-    if (!/^\d{6}$/.test(yyyymm)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 월 형식입니다. (YYYYMM 형식 필요)' },
-        { status: 400 }
-      );
-    }
+    const brandCode = ensureBrandCode(rawBrandCode);
+    const itemStd = ensureItemStd(rawItemStd);
+    const yyyymm = ensureYyyymm(rawYyyymm);
 
     console.log(`📊 브랜드 ${brandCode} ${itemStd} 품번별 재고주수 조회 시작 (${yyyymm}, 사입제외: ${excludePurchase})`);
 
@@ -63,8 +42,8 @@ export async function GET(request: NextRequest) {
         connection = await connectToSnowflake();
 
         // 쿼리 생성 및 실행
-        const query = buildProductDetailQuery(brandCode, itemStd, yyyymm, excludePurchase);
-        const rows = await executeQuery(query, connection);
+        const statement = buildProductDetailQuery(brandCode, itemStd, yyyymm, excludePurchase);
+        const rows = await executeQuery(statement.sqlText, connection, 0, statement.binds);
         
         // 데이터 포맷팅 (시즌 정보를 위해 yyyymm 전달)
         const formattedData = formatProductDetailData(rows, itemStd, yyyymm);
@@ -106,12 +85,13 @@ export async function GET(request: NextRequest) {
     throw new Error('최대 재시도 횟수 초과');
   } catch (error) {
     console.error('❌ 품번별 재고주수 조회 실패:', error);
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : '알 수 없는 오류',
+        error: errorMessage,
       },
-      { status: 500 }
+      { status: errorMessage.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

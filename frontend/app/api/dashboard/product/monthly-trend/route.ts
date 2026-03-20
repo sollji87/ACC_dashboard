@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureProductCode, ensureYyyymm } from '@/lib/request-validation';
 
 /**
  * 특정 품번의 월별 재고/판매 추이 조회 API
@@ -8,41 +9,9 @@ import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode') || 'M';
-    const productCode = searchParams.get('productCode');
-    const endMonth = searchParams.get('endMonth') || '202510';
-
-    if (!productCode) {
-      return NextResponse.json(
-        { success: false, error: '품번(productCode)이 필요합니다.' },
-        { status: 400 }
-      );
-    }
-
-    // SQL 인젝션 방지: brandCode와 productCode 검증
-    // brandCode는 알파벳 1-2자리만 허용
-    if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 브랜드 코드입니다.' },
-        { status: 400 }
-      );
-    }
-    
-    // productCode는 알파벳, 숫자, 하이픈, 언더스코어만 허용 (최대 50자)
-    if (!/^[A-Za-z0-9_-]{1,50}$/.test(productCode)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 품번 코드입니다.' },
-        { status: 400 }
-      );
-    }
-    
-    // endMonth는 YYYYMM 형식만 허용
-    if (!/^\d{6}$/.test(endMonth)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 월 형식입니다. (YYYYMM 형식 필요)' },
-        { status: 400 }
-      );
-    }
+    const brandCode = ensureBrandCode(searchParams.get('brandCode') || 'M');
+    const productCode = ensureProductCode(searchParams.get('productCode'));
+    const endMonth = ensureYyyymm(searchParams.get('endMonth') || '202510', 'endMonth');
 
     console.log(`📊 품번 월별 추이 조회: ${brandCode}, ${productCode}, ${endMonth}`);
 
@@ -72,8 +41,8 @@ export async function GET(request: NextRequest) {
             a.yyyymm,
             SUM(a.end_stock_tag_amt) as end_stock_tag_amt
           FROM sap_fnf.dw_ivtr_shop_prdt_m a
-          WHERE a.brd_cd = '${brandCode}'
-            AND a.prdt_cd = '${productCode}'
+          WHERE a.brd_cd = :1
+            AND a.prdt_cd = :2
             AND a.yyyymm IN (${monthsCondition})
           GROUP BY a.yyyymm
         ),
@@ -86,8 +55,8 @@ export async function GET(request: NextRequest) {
           LEFT JOIN sap_fnf.mst_shop c
             ON a.brd_cd = c.brd_cd
             AND a.shop_cd = c.sap_shop_cd
-          WHERE a.brd_cd = '${brandCode}'
-            AND a.prdt_cd = '${productCode}'
+          WHERE a.brd_cd = :1
+            AND a.prdt_cd = :2
             AND a.pst_yyyymm IN (${monthsCondition})
             AND c.chnl_cd NOT IN ('9', '99')
           GROUP BY a.pst_yyyymm
@@ -102,7 +71,7 @@ export async function GET(request: NextRequest) {
         ORDER BY s.yyyymm
       `;
 
-      const rows = await executeQuery(query, connection);
+      const rows = await executeQuery(query, connection, 0, [brandCode, productCode]);
 
       // 데이터 포맷팅
       const formattedData = rows.map((row: any) => {
@@ -148,8 +117,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }
-

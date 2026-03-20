@@ -10,6 +10,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import type { SnowflakeStatement } from '@/lib/snowflake';
+import { ensureBrandCode, ensureItemStd, ensureWeekKey } from '@/lib/request-validation';
 import { parseWeekValue } from '@/lib/week-utils';
 
 // 아이템 필터 매핑 (prdt CTE에서 vtext2를 prdt_hrrc2_nm으로 alias함)
@@ -24,13 +26,20 @@ const ITEM_FILTER_MAP: Record<string, string> = {
 /**
  * 주차별 품번별 재고 쿼리 생성 (스타일&컬러 기준, 월별과 동일한 시즌 분류)
  */
-function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekKey: string): string {
+function buildWeeklyProductDetailQuery(
+  brandCode: string,
+  itemStd: string,
+  weekKey: string
+): SnowflakeStatement {
   const { year, week } = parseWeekValue(weekKey);
   const prevYear = year - 1;
   const itemFilter = ITEM_FILTER_MAP[itemStd] || '';
   const currentYearYY = year % 100; // 2025 -> 25
+  const previousSeasonYY = currentYearYY - 1;
+  const nextSeasonYY = currentYearYY + 1;
+  const nextNextSeasonYY = currentYearYY + 2;
   
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd, prdt_nm, vtext2 AS prdt_hrrc2_nm, sesn, zzsellpr AS tag_price
       FROM sap_fnf.mst_prdt
@@ -40,11 +49,11 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
     -- 주차 종료일 찾기
     week_dates AS (
       SELECT 
-        MAX(CASE WHEN YEAR(end_dt) = ${year} AND WEEKOFYEAR(end_dt) = ${week} THEN end_dt END) AS cy_end_dt,
-        MAX(CASE WHEN YEAR(end_dt) = ${prevYear} AND WEEKOFYEAR(end_dt) = ${week} THEN end_dt END) AS py_end_dt
+        MAX(CASE WHEN YEAR(end_dt) = :1 AND WEEKOFYEAR(end_dt) = :2 THEN end_dt END) AS cy_end_dt,
+        MAX(CASE WHEN YEAR(end_dt) = :3 AND WEEKOFYEAR(end_dt) = :2 THEN end_dt END) AS py_end_dt
       FROM fnf.prcs.db_sh_s_w
-      WHERE (YEAR(end_dt) = ${year} OR YEAR(end_dt) = ${prevYear})
-        AND WEEKOFYEAR(end_dt) = ${week}
+      WHERE (YEAR(end_dt) = :1 OR YEAR(end_dt) = :3)
+        AND WEEKOFYEAR(end_dt) = :2
     ),
     -- 당년 재고 (품번+컬러별)
     cy_stock AS (
@@ -61,7 +70,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
       JOIN prcs.dw_scs_dacum a
         ON wd.cy_end_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :4
         AND wd.cy_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY a.prdt_cd, a.color_cd, p.prdt_nm, p.sesn, p.tag_price, wd.cy_end_dt
@@ -78,7 +87,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
       JOIN prcs.dw_scs_dacum a
         ON wd.py_end_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :4
         AND wd.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY a.prdt_cd, a.color_cd, wd.py_end_dt
@@ -95,7 +104,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         ON s.end_dt <= wd.cy_end_dt
         AND s.end_dt > DATEADD(WEEK, -4, wd.cy_end_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :4
         AND wd.cy_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY s.prdt_cd, s.color_cd
@@ -112,7 +121,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
         ON s.end_dt <= wd.py_end_dt
         AND s.end_dt > DATEADD(WEEK, -4, wd.py_end_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :4
         AND wd.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY s.prdt_cd, s.color_cd
@@ -128,7 +137,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
       JOIN fnf.prcs.db_scs_w s
         ON s.end_dt = wd.cy_end_dt  -- 해당 주차만 (1주)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :4
         AND wd.cy_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY s.prdt_cd, s.color_cd
@@ -144,7 +153,7 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
       JOIN fnf.prcs.db_scs_w s
         ON s.end_dt = wd.py_end_dt  -- 전년 해당 주차만 (1주)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :4
         AND wd.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY s.prdt_cd, s.color_cd
@@ -184,33 +193,33 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
           WHEN cs.cy_month <= 2 THEN
             CASE 
               -- 당시즌: (YY-1)N, (YY-1)F (예: 2026년 1월 → 25N, 25F)
-              WHEN cs.sesn LIKE '${currentYearYY - 1}N%' OR cs.sesn LIKE '${currentYearYY - 1}F%' THEN 'current'
+              WHEN cs.sesn LIKE LPAD(:5::VARCHAR, 2, '0') || 'N%' OR cs.sesn LIKE LPAD(:5::VARCHAR, 2, '0') || 'F%' THEN 'current'
               -- 차기시즌: YYN, YYS, YYF~ (예: 2026년 1월 → 26N, 26S, 26F~)
-              WHEN cs.sesn LIKE '${currentYearYY}N%' OR cs.sesn LIKE '${currentYearYY}S%' 
-                OR cs.sesn LIKE '${currentYearYY}F%' OR cs.sesn LIKE '${currentYearYY + 1}N%' 
-                OR cs.sesn LIKE '${currentYearYY + 1}S%' THEN 'next'
+              WHEN cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'N%' OR cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'S%' 
+                OR cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'F%' OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'N%' 
+                OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'S%' THEN 'next'
               ELSE 'old'
             END
           -- FW 시즌 전반부 (9-12월): 당년도 시즌 기준
           WHEN cs.cy_month >= 9 THEN
             CASE 
               -- 당시즌: YYN, YYF
-              WHEN cs.sesn LIKE '${currentYearYY}N%' OR cs.sesn LIKE '${currentYearYY}F%' THEN 'current'
+              WHEN cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'N%' OR cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'F%' THEN 'current'
               -- 차기시즌: (YY+1)N, (YY+1)S, (YY+1)F, (YY+2)N, (YY+2)S
-              WHEN cs.sesn LIKE '${currentYearYY + 1}N%' OR cs.sesn LIKE '${currentYearYY + 1}S%' 
-                OR cs.sesn LIKE '${currentYearYY + 1}F%' OR cs.sesn LIKE '${currentYearYY + 2}N%' 
-                OR cs.sesn LIKE '${currentYearYY + 2}S%' THEN 'next'
+              WHEN cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'N%' OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'S%' 
+                OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'F%' OR cs.sesn LIKE LPAD(:8::VARCHAR, 2, '0') || 'N%' 
+                OR cs.sesn LIKE LPAD(:8::VARCHAR, 2, '0') || 'S%' THEN 'next'
               ELSE 'old'
             END
           -- SS 시즌 (3월~8월)
           ELSE
             CASE 
               -- 당시즌: YYN, YYS
-              WHEN cs.sesn LIKE '${currentYearYY}N%' OR cs.sesn LIKE '${currentYearYY}S%' THEN 'current'
+              WHEN cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'N%' OR cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'S%' THEN 'current'
               -- 차기시즌: YYF, (YY+1)N, (YY+1)S, (YY+1)F, (YY+2)N, (YY+2)S
-              WHEN cs.sesn LIKE '${currentYearYY}F%' OR cs.sesn LIKE '${currentYearYY + 1}N%' 
-                OR cs.sesn LIKE '${currentYearYY + 1}S%' OR cs.sesn LIKE '${currentYearYY + 1}F%' 
-                OR cs.sesn LIKE '${currentYearYY + 2}N%' OR cs.sesn LIKE '${currentYearYY + 2}S%' THEN 'next'
+              WHEN cs.sesn LIKE LPAD(:6::VARCHAR, 2, '0') || 'F%' OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'N%' 
+                OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'S%' OR cs.sesn LIKE LPAD(:7::VARCHAR, 2, '0') || 'F%' 
+                OR cs.sesn LIKE LPAD(:8::VARCHAR, 2, '0') || 'N%' OR cs.sesn LIKE LPAD(:8::VARCHAR, 2, '0') || 'S%' THEN 'next'
               ELSE 'old'
             END
         END AS season_class
@@ -289,41 +298,19 @@ function buildWeeklyProductDetailQuery(brandCode: string, itemStd: string, weekK
     WHERE cy_stock_tag_amt > 0 OR cy_sale_4w_tag_amt > 0
     ORDER BY final_season_class, cy_stock_tag_amt DESC
   `;
+
+  return {
+    sqlText,
+    binds: [year, week, prevYear, brandCode, previousSeasonYY, currentYearYY, nextSeasonYY, nextNextSeasonYY],
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const brandCode = searchParams.get('brandCode') || 'M';
-    const itemStd = searchParams.get('itemStd') || '신발';
-    const week = searchParams.get('week') || '';
-
-    // 파라미터 검증
-    if (!/^[A-Za-z]{1,2}$/.test(brandCode)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 브랜드 코드입니다.' },
-        { status: 400 }
-      );
-    }
-    
-    const validItemStd = ['신발', '모자', '가방', '기타ACC', 'all'];
-    if (!validItemStd.includes(itemStd)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 아이템 분류입니다.' },
-        { status: 400 }
-      );
-    }
-    
-    // 주차 형식 검증 (YYYY-NN 또는 YYYY-WNN)
-    if (!/^\d{4}-W?\d{2}$/.test(week)) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않은 주차 형식입니다. (YYYY-NN 또는 YYYY-WNN 형식 필요)' },
-        { status: 400 }
-      );
-    }
-    
-    // YYYY-WNN 형식을 YYYY-NN으로 정규화
-    const normalizedWeek = week.replace('-W', '-');
+    const brandCode = ensureBrandCode(searchParams.get('brandCode') || 'M');
+    const itemStd = ensureItemStd(searchParams.get('itemStd') || '신발');
+    const normalizedWeek = ensureWeekKey(searchParams.get('week') || '').replace('-W', '-');
 
     console.log(`📊 브랜드 ${brandCode} ${itemStd} 주차별 품번별 재고주수 조회 시작 (${normalizedWeek})`);
 
@@ -335,8 +322,8 @@ export async function GET(request: NextRequest) {
       try {
         connection = await connectToSnowflake();
 
-        const query = buildWeeklyProductDetailQuery(brandCode, itemStd, normalizedWeek);
-        const rows = await executeQuery(query, connection);
+        const statement = buildWeeklyProductDetailQuery(brandCode, itemStd, normalizedWeek);
+        const rows = await executeQuery(statement.sqlText, connection, 0, statement.binds);
         
         // 데이터 포맷팅
         const formattedData = formatWeeklyProductDetailData(rows);
@@ -373,12 +360,13 @@ export async function GET(request: NextRequest) {
     throw new Error('최대 재시도 횟수 초과');
   } catch (error) {
     console.error('❌ 주차별 품번별 재고주수 조회 실패:', error);
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : '알 수 없는 오류',
+        error: errorMessage,
       },
-      { status: 500 }
+      { status: errorMessage.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }
@@ -434,4 +422,3 @@ function formatWeeklyProductDetailData(rows: any[]): {
     thresholdAmt,
   };
 }
-

@@ -46,7 +46,7 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
+    and brd_cd = :1
 )
 -- item_seq: 아이템 정렬 순서
 , item_seq as (
@@ -65,8 +65,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = :1
+        and a.yyyymm = :2
     group by b.item_std
     union all
     -- 전년
@@ -77,8 +77,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = :1
+        and a.yyyymm = :3
     group by b.item_std
 )
 -- c6m_sale: 최근 1개월 TAG 매출 (재고주수 계산용)
@@ -95,8 +95,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}' -- 최근 1개월 기준 
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :2 and :2 -- 최근 1개월 기준 
     group by b.item_std
     union all
     -- 전년
@@ -111,8 +111,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'  -- 최근 1개월 기준
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :3 and :3  -- 최근 1개월 기준
     group by b.item_std
 )
 -- act_sale: 실판매출 (ACC 판매액 표시용)
@@ -129,8 +129,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :2 and :2
     group by b.item_std
     union all
     -- 전년
@@ -145,8 +145,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd <> '9' -- 수출제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :3 and :3
     group by b.item_std
 )
 select '전체' as item_std
@@ -199,7 +199,11 @@ order by seq
       `;
 
       this.logger.log(`쿼리 실행 시작`);
-      const rows = await this.snowflakeService.executeQuery<InventoryWeeksData>(query);
+      const rows = await this.snowflakeService.executeQuery<InventoryWeeksData>(query, [
+        brandCode,
+        yyyymm,
+        pyYyyymm,
+      ]);
       this.logger.log(`쿼리 실행 완료: ${rows.length}개 행 반환`);
       
       await this.snowflakeService.disconnect();
@@ -377,4 +381,3 @@ order by seq
     return result;
   }
 }
-

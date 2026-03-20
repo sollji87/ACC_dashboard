@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureYyyymm } from '@/lib/request-validation';
 
 /**
  * 활성 시즌 목록 반환 (패션회사 SS/FW 기준)
@@ -40,11 +41,11 @@ function getActiveSeasons(yyyymm: string): string[] {
 }
 
 export async function GET(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams;
-  const brandCode = searchParams.get('brandCode') || 'M';
-  const yyyymm = searchParams.get('yyyymm') || '202510';
-
   try {
+    const searchParams = request.nextUrl.searchParams;
+    const brandCode = ensureBrandCode(searchParams.get('brandCode') || 'M');
+    const yyyymm = ensureYyyymm(searchParams.get('yyyymm') || '202510');
+
     console.log(`📊 정체재고 V2 조회: ${brandCode}, ${yyyymm}`);
     
     const connection = await connectToSnowflake();
@@ -73,7 +74,7 @@ WITH item AS (
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = :1
 ),
 
 -- 2. 기준금액 계산: 브랜드별 ACC 전체 재고 택금액 * 0.01%
@@ -83,8 +84,8 @@ total_stock AS (
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.yyyymm = :2
       AND b.item_std IS NOT NULL
 ),
 
@@ -97,8 +98,8 @@ stock_by_product AS (
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.yyyymm = :2
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
@@ -112,8 +113,8 @@ sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.pst_yyyymm = :2
       AND c.chnl_cd NOT IN ('9', '99')  -- 수출, 기타채널 제외
     GROUP BY a.prdt_cd
 ),
@@ -139,8 +140,8 @@ stagnant_products AS (
 
 -- 6. 결과 집계
 SELECT 
-    '${brandCode}' as brand_code,
-    '${yyyymm}' as yyyymm,
+    :1 as brand_code,
+    :2 as yyyymm,
     (SELECT total_stock_amt FROM total_stock) as total_stock_amt,
     (SELECT threshold_amt FROM total_stock) as threshold_amt,
     SUM(CASE WHEN stock_status = '정체재고' THEN end_stock_tag_amt ELSE 0 END) as stagnant_stock_amt,
@@ -151,7 +152,7 @@ FROM stagnant_products
 `;
 
       console.log('📊 쿼리 실행 중...');
-      const summaryResult = await executeQuery(query, connection);
+      const summaryResult = await executeQuery(query, connection, 0, [brandCode, yyyymm]);
       
       // 상세 품번 목록 조회 (상위 20개)
       const detailQuery = `
@@ -166,15 +167,15 @@ WITH item AS (
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = :1
 ),
 total_stock AS (
     SELECT 
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.yyyymm = :2
       AND b.item_std IS NOT NULL
 ),
 stock_by_product AS (
@@ -185,8 +186,8 @@ stock_by_product AS (
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.yyyymm = :2
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
@@ -198,8 +199,8 @@ sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.pst_yyyymm = :2
       AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY a.prdt_cd
 )
@@ -219,7 +220,7 @@ ORDER BY s.end_stock_tag_amt DESC
 LIMIT 20
 `;
 
-      const detailResult = await executeQuery(detailQuery, connection);
+      const detailResult = await executeQuery(detailQuery, connection, 0, [brandCode, yyyymm]);
 
       // 아이템별 집계 조회
       const itemSummaryQuery = `
@@ -234,15 +235,15 @@ WITH item AS (
             WHEN prdt_hrrc1_nm = 'ACC' AND prdt_hrrc2_nm = 'Acc_etc' THEN '기타ACC'
         END AS item_std
     FROM sap_fnf.mst_prdt
-    WHERE brd_cd = '${brandCode}'
+    WHERE brd_cd = :1
 ),
 total_stock AS (
     SELECT 
         SUM(a.end_stock_tag_amt) * 0.0001 as threshold_amt  -- 0.01%
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.yyyymm = :2
       AND b.item_std IS NOT NULL
 ),
 stock_by_product AS (
@@ -253,8 +254,8 @@ stock_by_product AS (
         SUM(a.end_stock_tag_amt) as end_stock_tag_amt
     FROM sap_fnf.dw_ivtr_shop_prdt_m a
     JOIN item b ON a.prdt_cd = b.prdt_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.yyyymm = :2
       AND b.item_std IS NOT NULL
     GROUP BY a.prdt_cd, b.sesn, b.item_std
 ),
@@ -266,8 +267,8 @@ sale_by_product AS (
     LEFT JOIN sap_fnf.mst_shop c
         ON a.brd_cd = c.brd_cd
         AND a.shop_cd = c.sap_shop_cd
-    WHERE a.brd_cd = '${brandCode}'
-      AND a.pst_yyyymm = '${yyyymm}'
+    WHERE a.brd_cd = :1
+      AND a.pst_yyyymm = :2
       AND c.chnl_cd NOT IN ('9', '99')
     GROUP BY a.prdt_cd
 )
@@ -284,7 +285,7 @@ GROUP BY s.item_std
 ORDER BY stagnant_stock_amt DESC
 `;
 
-      const itemSummaryResult = await executeQuery(itemSummaryQuery, connection);
+      const itemSummaryResult = await executeQuery(itemSummaryQuery, connection, 0, [brandCode, yyyymm]);
 
       const summary = summaryResult[0] || {};
       
@@ -343,8 +344,7 @@ ORDER BY stagnant_stock_amt DESC
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }
-

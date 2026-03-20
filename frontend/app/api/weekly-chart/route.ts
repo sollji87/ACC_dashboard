@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/snowflake';
-import { parseWeekValue } from '@/lib/week-utils';
+import type { SnowflakeStatement } from '@/lib/snowflake';
 
 // 브랜드 코드 매핑
 const BRAND_CODE_MAP: Record<string, string> = {
@@ -22,10 +22,14 @@ const ITEM_FILTER_MAP: Record<string, string> = {
 };
 
 // 최적화된 차트 쿼리 - 최근 12주 재고주수 추이 + 시즌별 분류
-function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selectedItem: string = 'all'): string {
+function buildOptimizedChartQuery(
+  brandCode: string,
+  weeksForSale: number,
+  selectedItem: string = 'all'
+): SnowflakeStatement {
   const itemFilter = ITEM_FILTER_MAP[selectedItem] || '';
   
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd, vtext2 AS prdt_hrrc2_nm, sesn
       FROM sap_fnf.mst_prdt
@@ -80,7 +84,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       JOIN prcs.dw_scs_dacum a
         ON wm.cy_end_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :1
         ${itemFilter}
       GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.week_num, wm.cy_month, a.prdt_cd, a.color_cd, p.sesn
     ),
@@ -96,7 +100,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         ON s.end_dt <= wm.cy_end_dt
         AND s.end_dt > DATEADD(WEEK, -4, wm.cy_end_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :1
         ${itemFilter}
       GROUP BY wm.cy_week_key, s.prdt_cd, s.color_cd
     ),
@@ -236,7 +240,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       JOIN prcs.dw_scs_dacum a
         ON wm.py_end_dt BETWEEN TO_DATE(a.start_dt) AND TO_DATE(a.end_dt)
       INNER JOIN prdt p ON a.prdt_cd = p.prdt_cd
-      WHERE a.brd_cd = '${brandCode}'
+      WHERE a.brd_cd = :1
         AND wm.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY wm.cy_week_key, wm.py_end_dt, wm.week_num, a.prdt_cd, a.color_cd, p.sesn
@@ -253,7 +257,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
         ON s.end_dt <= wm.py_end_dt
         AND s.end_dt > DATEADD(WEEK, -4, wm.py_end_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :1
         AND wm.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY wm.cy_week_key, s.prdt_cd, s.color_cd
@@ -404,7 +408,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       JOIN fnf.prcs.db_scs_w s
         ON s.end_dt = wm.cy_end_dt  -- 해당 주차만 (1주)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :1
         ${itemFilter}
       GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.cy_month, p.sesn
     ),
@@ -472,9 +476,9 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       FROM week_mapping wm
       JOIN fnf.prcs.db_scs_w s
         ON s.end_dt <= wm.cy_end_dt
-        AND s.end_dt > DATEADD(WEEK, -${weeksForSale}, wm.cy_end_dt)
+        AND s.end_dt > DATEADD(WEEK, -:2, wm.cy_end_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :1
         ${itemFilter}
       GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.cy_month, p.sesn
     ),
@@ -529,7 +533,7 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       JOIN fnf.prcs.db_scs_w s
         ON s.end_dt = wm.py_end_dt  -- 전년 해당 주차만 (1주)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :1
         AND wm.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.py_end_dt, p.sesn
@@ -598,9 +602,9 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       FROM week_mapping wm
       JOIN fnf.prcs.db_scs_w s
         ON s.end_dt <= wm.py_end_dt
-        AND s.end_dt > DATEADD(WEEK, -${weeksForSale}, wm.py_end_dt)
+        AND s.end_dt > DATEADD(WEEK, -:2, wm.py_end_dt)
       INNER JOIN prdt p ON s.prdt_cd = p.prdt_cd
-      WHERE s.brd_cd = '${brandCode}'
+      WHERE s.brd_cd = :1
         AND wm.py_end_dt IS NOT NULL
         ${itemFilter}
       GROUP BY wm.cy_week_key, wm.cy_end_dt, wm.py_end_dt, p.sesn
@@ -674,17 +678,17 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
       ROUND(COALESCE(psa1w.old_season_sale_1w, 0) / 1000000, 0) AS py_old_season_sale_1w,
       -- 재고주수 (금액기준)
       CASE WHEN COALESCE(csa.sale_amt, 0) > 0 
-        THEN ROUND(cs.total_stock / (csa.sale_amt / ${weeksForSale}), 1)
+        THEN ROUND(cs.total_stock / (csa.sale_amt / :2), 1)
         ELSE 0 END AS cy_weeks,
       CASE WHEN COALESCE(psa.sale_amt, 0) > 0 
-        THEN ROUND(COALESCE(ps.total_stock, 0) / (psa.sale_amt / ${weeksForSale}), 1)
+        THEN ROUND(COALESCE(ps.total_stock, 0) / (psa.sale_amt / :2), 1)
         ELSE 0 END AS py_weeks,
       -- 재고주수 (수량기준)
       CASE WHEN COALESCE(csa.sale_qty, 0) > 0 
-        THEN ROUND(cs.total_qty / (csa.sale_qty / ${weeksForSale}), 1)
+        THEN ROUND(cs.total_qty / (csa.sale_qty / :2), 1)
         ELSE 0 END AS cy_weeks_qty,
       CASE WHEN COALESCE(psa.sale_qty, 0) > 0 
-        THEN ROUND(COALESCE(ps.total_qty, 0) / (psa.sale_qty / ${weeksForSale}), 1)
+        THEN ROUND(COALESCE(ps.total_qty, 0) / (psa.sale_qty / :2), 1)
         ELSE 0 END AS py_weeks_qty
     FROM cy_season_agg cs
     LEFT JOIN py_season_agg ps ON cs.week_key = ps.week_key
@@ -694,6 +698,11 @@ function buildOptimizedChartQuery(brandCode: string, weeksForSale: number, selec
     LEFT JOIN py_sale_1w psa1w ON cs.week_key = psa1w.week_key
     ORDER BY cs.asof_dt ASC
   `;
+
+  return {
+    sqlText,
+    binds: [brandCode, weeksForSale],
+  };
 }
 
 export async function GET(request: NextRequest) {
@@ -720,8 +729,22 @@ export async function GET(request: NextRequest) {
   try {
     console.log('[weekly-chart] Executing optimized query for brand:', brandCode, 'weeksForSale:', weeksForSale, 'selectedItem:', selectedItem);
     
-    const query = buildOptimizedChartQuery(brandCode, weeksForSale, selectedItem);
-    const rows = await executeQuery(query);
+    if (!Number.isInteger(weeksForSale) || weeksForSale < 1 || weeksForSale > 52) {
+      return NextResponse.json(
+        { error: 'weeksForSale must be an integer between 1 and 52' },
+        { status: 400 }
+      );
+    }
+
+    if (!Object.hasOwn(ITEM_FILTER_MAP, selectedItem)) {
+      return NextResponse.json(
+        { error: `Unknown item filter: ${selectedItem}` },
+        { status: 400 }
+      );
+    }
+
+    const statement = buildOptimizedChartQuery(brandCode, weeksForSale, selectedItem);
+    const rows = await executeQuery(statement.sqlText, undefined, 0, statement.binds);
     
     console.log('[weekly-chart] Query returned', rows.length, 'rows');
     

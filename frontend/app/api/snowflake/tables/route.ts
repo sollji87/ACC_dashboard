@@ -5,12 +5,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureSnowflakeIdentifier } from '@/lib/request-validation';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const database = searchParams.get('database') || process.env.SNOWFLAKE_DATABASE || '';
-    const schema = searchParams.get('schema') || process.env.SNOWFLAKE_SCHEMA || '';
+    const databaseParam = searchParams.get('database');
+    const schemaParam = searchParams.get('schema');
+    const database = databaseParam ? ensureSnowflakeIdentifier(databaseParam, 'database') : process.env.SNOWFLAKE_DATABASE || '';
+    const schema = schemaParam ? ensureSnowflakeIdentifier(schemaParam, 'schema') : process.env.SNOWFLAKE_SCHEMA || '';
 
     console.log(`🔍 테이블 목록 조회 시작 (Database: ${database}, Schema: ${schema})...`);
     
@@ -33,17 +36,20 @@ export async function GET(request: NextRequest) {
         FROM information_schema.tables
         WHERE table_type = 'BASE TABLE'
       `;
+      const binds: Array<string> = [];
 
       if (database) {
-        query += ` AND table_catalog = '${database}'`;
+        binds.push(database);
+        query += ` AND table_catalog = :${binds.length}`;
       }
       if (schema) {
-        query += ` AND table_schema = '${schema}'`;
+        binds.push(schema);
+        query += ` AND table_schema = :${binds.length}`;
       }
 
       query += ` ORDER BY table_catalog, table_schema, table_name`;
 
-      const tables = await executeQuery(query, connection);
+      const tables = await executeQuery(query, connection, 0, binds);
       
       console.log(`✅ 테이블 목록 조회 성공: ${tables.length}개 테이블`);
 
@@ -63,7 +69,7 @@ export async function GET(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

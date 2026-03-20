@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '@/lib/snowflake';
+import type { SnowflakeStatement } from '@/lib/snowflake';
 import { BRANDS } from '@/lib/brands';
 import { 
   WeeklyBrandData, 
   ItemData,
   formatWeeklyDashboardData 
 } from '@/lib/weekly-dashboard-service';
+import { ensureBrandCode, ensureWeekKey } from '@/lib/request-validation';
 import { parseWeekValue } from '@/lib/week-utils';
 
 // 최적화된 쿼리 - 모든 브랜드를 한 번에 조회 (800일 생성 제거)
-function buildOptimizedWeeklyQuery(weekKey: string): string {
+function buildOptimizedWeeklyQuery(weekKey: string): SnowflakeStatement {
   const { year, week } = parseWeekValue(weekKey);
   const prevYear = year - 1;
   
   // 직접 날짜 계산으로 800일 생성 제거
-  return `
+  const sqlText = `
     WITH prdt AS (
       SELECT prdt_cd, vtext2 AS prdt_hrrc2_nm
       FROM sap_fnf.mst_prdt
@@ -24,11 +26,11 @@ function buildOptimizedWeeklyQuery(weekKey: string): string {
     -- 해당 주차 종료일 (매출 테이블에서 직접 조회)
     week_dates AS (
       SELECT 
-        MIN(CASE WHEN YEAR(end_dt) = ${year} AND WEEKOFYEAR(end_dt) = ${week} THEN end_dt END) AS cy_end_dt,
-        MIN(CASE WHEN YEAR(end_dt) = ${prevYear} AND WEEKOFYEAR(end_dt) = ${week} THEN end_dt END) AS py_end_dt
+        MIN(CASE WHEN YEAR(end_dt) = :1 AND WEEKOFYEAR(end_dt) = :2 THEN end_dt END) AS cy_end_dt,
+        MIN(CASE WHEN YEAR(end_dt) = :3 AND WEEKOFYEAR(end_dt) = :2 THEN end_dt END) AS py_end_dt
       FROM fnf.prcs.db_sh_s_w
-      WHERE (YEAR(end_dt) = ${year} OR YEAR(end_dt) = ${prevYear})
-        AND WEEKOFYEAR(end_dt) = ${week}
+      WHERE (YEAR(end_dt) = :1 OR YEAR(end_dt) = :3)
+        AND WEEKOFYEAR(end_dt) = :2
     ),
     -- 당년 재고
     cy_stock AS (
@@ -135,6 +137,11 @@ function buildOptimizedWeeklyQuery(weekKey: string): string {
       AND COALESCE(cs.prdt_hrrc2_nm, ps.prdt_hrrc2_nm, csw.prdt_hrrc2_nm, psw.prdt_hrrc2_nm) = ps4w.prdt_hrrc2_nm
     ORDER BY brd_cd, prdt_hrrc2_nm
   `;
+
+  return {
+    sqlText,
+    binds: [year, week, prevYear],
+  };
 }
 
 // 빈 ItemData 생성
@@ -178,18 +185,15 @@ function createEmptyBrandData(brandId: string, brandCode: string, weekKey: strin
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const weekKey = searchParams.get('week') || '';
-    const brandCode = searchParams.get('brandCode') || '';
-
-    if (!weekKey) {
-      return NextResponse.json({ error: 'week parameter is required' }, { status: 400 });
-    }
+    const weekKey = ensureWeekKey(searchParams.get('week') || '').replace('-W', '-');
+    const rawBrandCode = searchParams.get('brandCode') || '';
+    const brandCode = rawBrandCode ? ensureBrandCode(rawBrandCode) : '';
 
     // 최적화된 쿼리 - 모든 브랜드를 한 번에 조회
-    const query = buildOptimizedWeeklyQuery(weekKey);
+    const statement = buildOptimizedWeeklyQuery(weekKey);
     console.log('[Weekly API] Executing optimized query for week:', weekKey);
     
-    const rows = await executeQuery(query);
+    const rows = await executeQuery(statement.sqlText, undefined, 0, statement.binds);
     console.log('[Weekly API] Query returned', rows.length, 'rows');
     
     // 브랜드별로 데이터 분류
@@ -210,9 +214,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ data: allBrandsData });
   } catch (error) {
     console.error('[Weekly API] Error:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Failed to fetch weekly data', details: String(error) },
-      { status: 500 }
+      { error: 'Failed to fetch weekly data', details: errorMessage },
+      { status: errorMessage.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }

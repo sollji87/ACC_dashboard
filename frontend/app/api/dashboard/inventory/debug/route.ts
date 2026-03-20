@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { connectToSnowflake, executeQuery, disconnectFromSnowflake } from '@/lib/snowflake';
+import { ensureBrandCode, ensureProductCode, ensureYyyymm } from '@/lib/request-validation';
 
 function getCurrentYearMonth(): string {
   const now = new Date();
@@ -16,23 +17,13 @@ function getCurrentYearMonth(): string {
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const productCode = searchParams.get('productCode');
-    const brandCode = searchParams.get('brandCode') || 'M';
+    const productCode = ensureProductCode(searchParams.get('productCode'));
+    const brandCode = ensureBrandCode(searchParams.get('brandCode') || 'M');
     const month = searchParams.get('month');
-    const yyyymm = month || getCurrentYearMonth();
+    const yyyymm = month ? ensureYyyymm(month, 'month') : getCurrentYearMonth();
     const pyYyyymm = yyyymm.substring(0, 4) === '2025' 
       ? `${parseInt(yyyymm.substring(0, 4)) - 1}${yyyymm.substring(4)}`
       : `${parseInt(yyyymm.substring(0, 4)) - 1}${yyyymm.substring(4)}`;
-
-    if (!productCode) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'productCode 파라미터가 필요합니다.',
-        },
-        { status: 400 }
-      );
-    }
 
     console.log(`🔍 품번 ${productCode} 디버깅 데이터 조회 시작 (브랜드: ${brandCode}, 월: ${yyyymm})`);
 
@@ -54,8 +45,8 @@ with item as (
               end as item_std
     from sap_fnf.mst_prdt
     where 1=1
-    and brd_cd = '${brandCode}'
-    and prdt_cd = '${productCode}'
+    and brd_cd = :1
+    and prdt_cd = :2
 )
 -- cm_stock: 당월 재고 (품번별)
 , cm_stock as (
@@ -67,8 +58,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${yyyymm}'
+        and a.brd_cd = :1
+        and a.yyyymm = :3
     group by b.prdt_cd
     union all
     -- 전년
@@ -79,8 +70,8 @@ with item as (
      join item b
         on a.prdt_cd = b.prdt_cd
     where 1=1
-        and a.brd_cd = '${brandCode}'
-        and a.yyyymm = '${pyYyyymm}'
+        and a.brd_cd = :1
+        and a.yyyymm = :4
     group by b.prdt_cd
 )
 -- c6m_sale: 당월 TAG 매출 (재고주수 계산용)
@@ -97,8 +88,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :3 and :3
     group by b.prdt_cd
     union all
     -- 전년
@@ -113,8 +104,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :4 and :4
     group by b.prdt_cd
 )
 -- act_sale: 당월 실판매출
@@ -131,8 +122,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${yyyymm}' and '${yyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :3 and :3
     group by b.prdt_cd
     union all
     -- 전년
@@ -147,8 +138,8 @@ with item as (
         and a.shop_cd = c.sap_shop_cd
     where 1=1
         and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        and a.brd_cd = '${brandCode}'
-        and a.pst_yyyymm between '${pyYyyymm}' and '${pyYyyymm}'
+        and a.brd_cd = :1
+        and a.pst_yyyymm between :4 and :4
     group by b.prdt_cd
 )
 -- 최종 조회: 원본 데이터 + 계산된 재고주수
@@ -186,7 +177,7 @@ group by i.prdt_cd
       `;
 
       console.log(`📝 실행 쿼리:`, query);
-      const rows = await executeQuery(query, connection);
+      const rows = await executeQuery(query, connection, 0, [brandCode, productCode, yyyymm, pyYyyymm]);
 
       console.log(`✅ 품번 ${productCode} 디버깅 데이터 조회 성공:`, rows);
 
@@ -209,8 +200,7 @@ group by i.prdt_cd
         success: false,
         error: error instanceof Error ? error.message : '알 수 없는 오류',
       },
-      { status: 500 }
+      { status: error instanceof Error && error.message.startsWith('유효하지 않은') ? 400 : 500 }
     );
   }
 }
-

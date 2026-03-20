@@ -48,13 +48,13 @@ export async function GET(request: NextRequest) {
 
     console.log('📊 차트 데이터 조회 시작:', { brandCode, yyyymm, weeksType, itemStd, excludePurchase, base });
 
-    const query = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd, excludePurchase, base);
-    console.log('📝 생성된 쿼리 길이:', query.length, '자');
-    console.log('📝 쿼리 시작 부분:', query.substring(0, 300));
+    const statement = buildChartDataQuery(brandCode, yyyymm, weeksType, itemStd, excludePurchase, base);
+    console.log('📝 생성된 쿼리 길이:', statement.sqlText.length, '자');
+    console.log('📝 쿼리 시작 부분:', statement.sqlText.substring(0, 300));
 
     const connection = await connectToSnowflake();
     try {
-      const rows = await executeQuery(query, connection);
+      const rows = await executeQuery(statement.sqlText, connection, 0, statement.binds);
       console.log('✅ 쿼리 실행 성공:', rows.length, '개 행 반환');
       console.log('📊 첫 번째 행 샘플:', rows[0]);
       
@@ -87,4 +87,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-
