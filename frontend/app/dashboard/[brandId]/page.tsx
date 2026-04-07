@@ -36,6 +36,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, L
 import ForecastInputPanel from '@/components/ForecastInputPanel';
 import { combineActualAndForecast } from '@/lib/forecast-service';
 import { OrderCapacity } from '@/lib/forecast-types';
+import { shouldIncludeProductByExcludeSeasonFilter } from '@/lib/season-exclusion';
 
 // 재고주수 추이 차트용 커스텀 범례
 const CustomStockWeeksLegend = ({ payload }: any) => {
@@ -698,6 +699,7 @@ export default function BrandDashboard() {
   const [isLoadingMonthlyTrend, setIsLoadingMonthlyTrend] = useState(false); // 월별 추이 로딩 상태
   const [excludeSeasonFilter, setExcludeSeasonFilter] = useState<'all' | 'excludeS' | 'excludeF'>('all'); // 시즌 제외 필터
   const [dxMasterData, setDxMasterData] = useState<Record<string, string>>({}); // DX MASTER 품번별 서브카테고리 데이터
+  const [dvMasterData, setDvMasterData] = useState<Record<string, string>>({}); // DV MASTER 품번별 서브카테고리 데이터
   
   // 예측 관련 상태
   const [forecastResults, setForecastResults] = useState<any[]>([]); // 예측 결과
@@ -709,21 +711,29 @@ export default function BrandDashboard() {
 
   const monthOptions = getMonthOptions();
 
-  // DX MASTER 데이터 로드 (디스커버리 브랜드용)
+  // 브랜드별 시즌 마스터 데이터 로드
   useEffect(() => {
-    async function loadDxMasterData() {
+    async function loadSeasonMasterData(
+      path: string,
+      label: string,
+      setter: (data: Record<string, string>) => void
+    ) {
       try {
-        const response = await fetch('/dx-master.json');
+        const response = await fetch(path);
         if (response.ok) {
           const data = await response.json();
-          setDxMasterData(data);
-          console.log('📦 DX MASTER 데이터 로드 완료:', Object.keys(data).length, '개 품번');
+          setter(data);
+          console.log(`📦 ${label} MASTER 데이터 로드 완료:`, Object.keys(data).length, '개 품번');
+        } else if (response.status !== 404) {
+          console.warn(`⚠️ ${label} MASTER 데이터 로드 실패: HTTP ${response.status}`);
         }
       } catch (error) {
-        console.error('DX MASTER 데이터 로드 실패:', error);
+        console.error(`${label} MASTER 데이터 로드 실패:`, error);
       }
     }
-    loadDxMasterData();
+
+    loadSeasonMasterData('/dx-master.json', 'DX', setDxMasterData);
+    loadSeasonMasterData('/dv-master.json', 'DV', setDvMasterData);
   }, []);
 
   useEffect(() => {
@@ -878,6 +888,12 @@ export default function BrandDashboard() {
     console.log('✅ 예측 계산 완료:', results.length, '개 월');
     console.log('📊 발주가능 금액:', capacity);
   };
+
+  const matchesExcludeSeasonFilterForProduct = (product: { productCode?: string; season?: string }) =>
+    shouldIncludeProductByExcludeSeasonFilter(product, excludeSeasonFilter, brand?.code, {
+      dxMasterData,
+      dvMasterData,
+    });
 
   // 로컬 스토리지에서 입고예정금액, 아이템별 예측 결과 불러오기
   useEffect(() => {
@@ -2247,28 +2263,7 @@ export default function BrandDashboard() {
                             const matchesSeason = seasonFilter === 'all' ||
                               product.seasonCategory === seasonFilter;
                             
-                            // 시즌 제외 필터 (S시즌/F시즌 제외)
-                            const season = product.season || '';
-                            let matchesExcludeFilter = true;
-                            
-                            // 디스커버리(X) 브랜드인 경우 DX MASTER 서브카테고리도 참조
-                            // 품번에서 DX(성인) 또는 DK(키즈)로 시작하는 부분 추출 (예: X25NDXSH1234 -> DXSH1234, X25NDKSH7535N -> DKSH7535N)
-                            const productCode = product.productCode || '';
-                            const dxCodeMatch = productCode.match(/D[XK][A-Z0-9]+/);
-                            const dxCode = dxCodeMatch ? dxCodeMatch[0] : '';
-                            const dxSubCategory = dxCode ? dxMasterData[dxCode] : null;
-                            
-                            if (excludeSeasonFilter === 'excludeS') {
-                              // S시즌 제외 (예: 24S, 25S 등) + 디스커버리 SUMMER 서브카테고리
-                              const isSSeason = season.includes('S');
-                              const isSummerSubCategory = brand?.code === 'X' && dxSubCategory === 'SUMMER';
-                              matchesExcludeFilter = !isSSeason && !isSummerSubCategory;
-                            } else if (excludeSeasonFilter === 'excludeF') {
-                              // F시즌 제외 (예: 24F, 25F 등) + 디스커버리 WINTER 서브카테고리
-                              const isFSeason = season.includes('F');
-                              const isWinterSubCategory = brand?.code === 'X' && dxSubCategory === 'WINTER';
-                              matchesExcludeFilter = !isFSeason && !isWinterSubCategory;
-                            }
+                            const matchesExcludeFilter = matchesExcludeSeasonFilterForProduct(product);
                             
                             return matchesSearch && matchesSeason && matchesExcludeFilter;
                           });
@@ -2730,15 +2725,7 @@ export default function BrandDashboard() {
                                   // 필터된 품번 계산 (S시즌/F시즌 제외 적용)
                                   const getFilteredProducts = (products: typeof season.allProducts) => {
                                     if (!isSeasonFiltered) return products;
-                                    return products.filter(p => {
-                                      const pSeason = p.season || '';
-                                      if (excludeSeasonFilter === 'excludeS') {
-                                        return !pSeason.includes('S');
-                                      } else if (excludeSeasonFilter === 'excludeF') {
-                                        return !pSeason.includes('F');
-                                      }
-                                      return true;
-                                    });
+                                    return products.filter(matchesExcludeSeasonFilterForProduct);
                                   };
                                   
                                   const filteredSeasonProducts = getFilteredProducts(season.allProducts);
