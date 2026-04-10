@@ -688,7 +688,7 @@ export default function BrandDashboard() {
   const brandId = (params?.brandId as string) || '';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
   const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'weekly';
-  const monthFromUrl = searchParams.get('month') || '2026-02';
+  const monthFromUrl = searchParams.get('month') || '2026-03';
   
   const [brand, setBrand] = useState(getBrandById(brandId));
   const [dataSource, setDataSource] = useState<DataSourceType>(dataSourceFromUrl);
