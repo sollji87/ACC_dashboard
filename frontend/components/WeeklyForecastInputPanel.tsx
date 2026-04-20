@@ -9,6 +9,8 @@ import { fetchWeeklyIncomingAmounts, WeeklyIncomingAmountData } from '@/lib/api'
 import { OrderCapacity } from '@/lib/forecast-types';
 import { WEEKLY_FORECAST_CACHE_VERSION, hasCurrentWeeklyForecastCacheVersion } from '@/lib/weekly-forecast-cache';
 
+const PREV_YEAR_FETCH_TIMEOUT_MS = 20000;
+
 interface WeeklyItemIncomingAmount {
   weekKey: string;
   weekLabel: string;
@@ -143,6 +145,23 @@ function applyRollingSalesAmount(
       prevSaleAmount: previousRollingTotal,
     };
   });
+}
+
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T> {
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs}ms`)), timeoutMs);
+  });
+
+  const response = await Promise.race([
+    fetch(url),
+    timeoutPromise,
+  ]);
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  return await response.json();
 }
 
 export default function WeeklyForecastInputPanel({
@@ -1017,16 +1036,13 @@ export default function WeeklyForecastInputPanel({
       console.log(`📊 전년 동주차 매출 조회 (모든 중분류): ${weekKeys}`);
       
       // 모든 중분류에 대해 병렬 조회
-      const results = await Promise.all(
+      const results = await Promise.allSettled(
         itemTypes.map(async (item) => {
-          try {
-            const response = await fetch(`/api/weekly-prev-year-sales?brandCode=${brandCode}&weeks=${weekKeys}&selectedItem=${item}`);
-            const result = await response.json();
-            return { item, data: result.success ? result.data : {} };
-          } catch (error) {
-            console.error(`❌ ${item} 전년 데이터 조회 실패:`, error);
-            return { item, data: {} };
-          }
+          const result = await fetchJsonWithTimeout<{ success?: boolean; data?: Record<string, { sale: number; stock: number; weeks: number }> }>(
+            `/api/weekly-prev-year-sales?brandCode=${brandCode}&weeks=${weekKeys}&selectedItem=${item}`,
+            PREV_YEAR_FETCH_TIMEOUT_MS
+          );
+          return { item, data: result.success ? (result.data || {}) : {} };
         })
       );
       
@@ -1038,8 +1054,15 @@ export default function WeeklyForecastInputPanel({
         other: {},
       };
       
-      results.forEach(({ item, data }) => {
-        newPrevYearDataByItem[item] = data;
+      results.forEach((result, index) => {
+        const item = itemTypes[index];
+
+        if (result.status === 'fulfilled') {
+          newPrevYearDataByItem[item] = result.value.data;
+        } else {
+          console.error(`❌ ${item} 전년 데이터 조회 실패:`, result.reason);
+          newPrevYearDataByItem[item] = {};
+        }
       });
       
       setPrevYearDataByItem(newPrevYearDataByItem);
@@ -1064,15 +1087,19 @@ export default function WeeklyForecastInputPanel({
 
       console.log(`📦 주차별 입고예정금액 조회: ${startWeek} ~ ${endWeek}`);
       
-      // 입고예정금액과 전년 매출 동시 조회
-      const [data] = await Promise.all([
+      // 입고예정금액과 전년 매출을 함께 조회하되, 전년 데이터 일부 실패가 전체 로딩을 막지 않도록 처리
+      const [data, prevYearResult] = await Promise.allSettled([
         fetchWeeklyIncomingAmounts(brandCode, startWeek, endWeek),
         loadPrevYearSales(), // 전년 동주차 매출도 함께 조회
       ]);
 
+      if (data.status !== 'fulfilled') {
+        throw data.reason;
+      }
+
       // 기존 incomingAmounts 업데이트
       const updated = incomingAmounts.map((item) => {
-        const found = data.find((d: WeeklyIncomingAmountData) => d.weekKey === item.weekKey);
+        const found = data.value.find((d: WeeklyIncomingAmountData) => d.weekKey === item.weekKey);
         if (found) {
           return {
             weekKey: item.weekKey,
@@ -1091,6 +1118,10 @@ export default function WeeklyForecastInputPanel({
       // 콜백 호출
       if (onIncomingAmountsLoaded) {
         onIncomingAmountsLoaded(updated);
+      }
+
+      if (prevYearResult.status === 'rejected') {
+        console.warn('⚠️ 전년 동주차 데이터 조회가 지연되거나 일부 실패했습니다:', prevYearResult.reason);
       }
 
       console.log('✅ 주차별 입고예정금액 조회 성공:', updated);

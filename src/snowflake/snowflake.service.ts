@@ -2,6 +2,20 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as snowflake from 'snowflake-sdk';
 
+interface SnowflakeConnectionConfig {
+  account: string;
+  username: string;
+  warehouse: string;
+  database: string;
+  schema: string;
+  role: string;
+  authMode: string;
+  password?: string;
+  privateKey?: string;
+  privateKeyPath?: string;
+  privateKeyPass?: string;
+}
+
 @Injectable()
 export class SnowflakeService {
   private readonly logger = new Logger(SnowflakeService.name);
@@ -9,19 +23,76 @@ export class SnowflakeService {
 
   constructor(private configService: ConfigService) {}
 
+  private normalizePrivateKey(privateKey: string | undefined): string {
+    return (privateKey || '').replace(/\\n/g, '\n').trim();
+  }
+
+  private buildConnectionOptions(config: SnowflakeConnectionConfig) {
+    const baseOptions = {
+      account: config.account,
+      username: config.username,
+      warehouse: config.warehouse,
+      database: config.database,
+      schema: config.schema,
+      role: config.role || undefined,
+    };
+
+    if (config.authMode === 'SNOWFLAKE_JWT') {
+      const normalizedPrivateKey = this.normalizePrivateKey(config.privateKey);
+
+      if (!normalizedPrivateKey && !config.privateKeyPath) {
+        throw new Error('Snowflake JWT 인증에 필요한 private key 또는 private key 경로가 설정되지 않았습니다.');
+      }
+
+      return {
+        ...baseOptions,
+        authenticator: 'SNOWFLAKE_JWT',
+        privateKey: normalizedPrivateKey || undefined,
+        privateKeyPath: normalizedPrivateKey ? undefined : config.privateKeyPath,
+        privateKeyPass: config.privateKeyPass || undefined,
+      };
+    }
+
+    if (!config.password) {
+      throw new Error('Snowflake 비밀번호 인증에 필요한 password가 설정되지 않았습니다.');
+    }
+
+    return {
+      ...baseOptions,
+      password: config.password,
+    };
+  }
+
   /**
    * Snowflake 연결 생성
    */
   async connect(): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.connection = snowflake.createConnection({
+      const config: SnowflakeConnectionConfig = {
         account: this.configService.get<string>('SNOWFLAKE_ACCOUNT') || '',
         username: this.configService.get<string>('SNOWFLAKE_USERNAME') || '',
-        password: this.configService.get<string>('SNOWFLAKE_PASSWORD') || '',
         warehouse: this.configService.get<string>('SNOWFLAKE_WAREHOUSE') || '',
         database: this.configService.get<string>('SNOWFLAKE_DATABASE') || '',
         schema: this.configService.get<string>('SNOWFLAKE_SCHEMA') || '',
-      });
+        role: this.configService.get<string>('SNOWFLAKE_ROLE') || '',
+        authMode: (this.configService.get<string>('SNOWFLAKE_AUTH_MODE') || 'PASSWORD').toUpperCase(),
+        password: this.configService.get<string>('SNOWFLAKE_PASSWORD') || '',
+        privateKey: this.configService.get<string>('SNOWFLAKE_PRIVATE_KEY') || '',
+        privateKeyPath: this.configService.get<string>('SNOWFLAKE_PRIVATE_KEY_PATH') || '',
+        privateKeyPass: this.configService.get<string>('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE') || '',
+      };
+
+      if (!config.account || !config.username) {
+        reject(new Error('Snowflake 환경 변수가 설정되지 않았습니다.'));
+        return;
+      }
+
+      try {
+        this.connection = snowflake.createConnection(this.buildConnectionOptions(config));
+      } catch (error) {
+        reject(error);
+        return;
+      }
 
       this.connection.connect((err, conn) => {
         if (err) {

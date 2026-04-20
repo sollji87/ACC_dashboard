@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { getBrandById, BRANDS } from '@/lib/brands';
-import { getRealData, getSampleData, BrandDashboardData } from '@/lib/data';
 import { fetchWeeklyProductDetails, WeeklyProductDetailResponse, WeeklyProductDetailData } from '@/lib/api';
 import { getItemNameFromKey } from '@/lib/dashboard-service';
 import { ArrowLeft, BarChart3, AlertTriangle, ChevronDown, ChevronUp, Search, ArrowUp, ArrowDown, Download, Clock } from 'lucide-react';
@@ -705,10 +704,8 @@ export default function BrandDashboard() {
   
   const [selectedWeek, setSelectedWeek] = useState(validatedWeekFromUrl);
   const selectedWeekData = weekOptions.find(w => w.value === selectedWeek);
-  const [brandData, setBrandData] = useState<BrandDashboardData | null>(null);
   const [weeklyData, setWeeklyData] = useState<any>(null); // 주차별 데이터
   const [isLoadingWeekly, setIsLoadingWeekly] = useState(true); // 주차별 데이터 로딩 상태
-  const [isLoading, setIsLoading] = useState(true);
   const [periodType, setPeriodType] = useState<'monthly' | 'accumulated'>('monthly'); // 당월/누적 토글
   const [selectedItem, setSelectedItem] = useState<string | null>(null); // 선택된 아이템 (shoes, hat, bag, other)
   const [productDetails, setProductDetails] = useState<WeeklyProductDetailResponse | null>(null); // 품번별 세부 데이터 (스타일&컬러 기준)
@@ -822,25 +819,6 @@ export default function BrandDashboard() {
       router.push(`/dashboard/${brandId}?month=${selectedMonth}&dataSource=monthly`);
     }
   }, [dataSource, brandId, selectedMonth, router]);
-
-  useEffect(() => {
-    async function loadBrandSpecificData() {
-      setIsLoading(true);
-      try {
-        const allData = await getRealData(selectedWeek);
-        const data = allData.find((d) => d.brandId === brandId);
-        setBrandData(data || null);
-      } catch (error) {
-        console.error(`브랜드 ${brandId} 데이터 로딩 실패, 샘플 데이터 사용:`, error);
-        const allData = getSampleData(selectedWeek);
-        const data = allData.find((d) => d.brandId === brandId);
-        setBrandData(data || null);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadBrandSpecificData();
-  }, [selectedWeek, brandId]);
 
   const matchesExcludeSeasonFilterForProduct = (product: { productCode?: string; season?: string }) =>
     shouldIncludeProductByExcludeSeasonFilter(product, excludeSeasonFilter, brand?.code, {
@@ -1318,16 +1296,6 @@ export default function BrandDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      {/* 로딩 오버레이 */}
-      {isLoading && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center">
-          <div className="bg-white rounded-xl shadow-2xl p-8 flex flex-col items-center gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-            <p className="text-slate-700 font-semibold">데이터 로딩 중...</p>
-          </div>
-        </div>
-      )}
-
       {/* 헤더 */}
       <header className="border-b border-slate-200 bg-white/80 backdrop-blur-md sticky top-0 z-50 shadow-sm">
         <div className="max-w-[1800px] mx-auto px-6 py-5">
@@ -1415,7 +1383,7 @@ export default function BrandDashboard() {
           </div>
         )}
 
-        {brandData ? (
+        {brand ? (
           <div className="space-y-6">
             {/* 아이템별 KPI 카드 (주차별 데이터) */}
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">

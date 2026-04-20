@@ -7,10 +7,15 @@ import * as snowflake from 'snowflake-sdk';
 interface SnowflakeConnection {
   account: string;
   username: string;
-  password: string;
   warehouse: string;
   database: string;
   schema: string;
+  role: string;
+  authMode: string;
+  password?: string;
+  privateKey?: string;
+  privateKeyPath?: string;
+  privateKeyPass?: string;
 }
 
 export type SnowflakeBind = string | number | boolean | null;
@@ -20,6 +25,46 @@ export interface SnowflakeStatement {
 }
 
 let connection: snowflake.Connection | null = null;
+
+function normalizePrivateKey(privateKey: string | undefined): string {
+  return (privateKey || '').replace(/\\n/g, '\n').trim();
+}
+
+function buildSnowflakeConnectionOptions(config: SnowflakeConnection) {
+  const baseOptions = {
+    account: config.account,
+    username: config.username,
+    warehouse: config.warehouse,
+    database: config.database,
+    schema: config.schema,
+    role: config.role || undefined,
+  };
+
+  if (config.authMode === 'SNOWFLAKE_JWT') {
+    const normalizedPrivateKey = normalizePrivateKey(config.privateKey);
+
+    if (!normalizedPrivateKey && !config.privateKeyPath) {
+      throw new Error('Snowflake JWT 인증에 필요한 private key 또는 private key 경로가 설정되지 않았습니다.');
+    }
+
+    return {
+      ...baseOptions,
+      authenticator: 'SNOWFLAKE_JWT',
+      privateKey: normalizedPrivateKey || undefined,
+      privateKeyPath: normalizedPrivateKey ? undefined : config.privateKeyPath,
+      privateKeyPass: config.privateKeyPass || undefined,
+    };
+  }
+
+  if (!config.password) {
+    throw new Error('Snowflake 비밀번호 인증에 필요한 password가 설정되지 않았습니다.');
+  }
+
+  return {
+    ...baseOptions,
+    password: config.password,
+  };
+}
 
 /**
  * Snowflake 연결 생성
@@ -39,26 +84,29 @@ export async function connectToSnowflake(): Promise<snowflake.Connection> {
     const config: SnowflakeConnection = {
       account: process.env.SNOWFLAKE_ACCOUNT || '',
       username: process.env.SNOWFLAKE_USERNAME || '',
-      password: process.env.SNOWFLAKE_PASSWORD || '',
       warehouse: process.env.SNOWFLAKE_WAREHOUSE || '',
       database: process.env.SNOWFLAKE_DATABASE || '',
       schema: process.env.SNOWFLAKE_SCHEMA || '',
+      role: process.env.SNOWFLAKE_ROLE || '',
+      authMode: (process.env.SNOWFLAKE_AUTH_MODE || 'PASSWORD').toUpperCase(),
+      password: process.env.SNOWFLAKE_PASSWORD || '',
+      privateKey: process.env.SNOWFLAKE_PRIVATE_KEY || '',
+      privateKeyPath: process.env.SNOWFLAKE_PRIVATE_KEY_PATH || '',
+      privateKeyPass: process.env.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE || '',
     };
 
     // 환경 변수 검증
-    if (!config.account || !config.username || !config.password) {
+    if (!config.account || !config.username) {
       reject(new Error('Snowflake 환경 변수가 설정되지 않았습니다.'));
       return;
     }
 
-    connection = snowflake.createConnection({
-      account: config.account,
-      username: config.username,
-      password: config.password,
-      warehouse: config.warehouse,
-      database: config.database,
-      schema: config.schema,
-    });
+    try {
+      connection = snowflake.createConnection(buildSnowflakeConnectionOptions(config));
+    } catch (error) {
+      reject(error);
+      return;
+    }
 
     connection.connect((err, conn) => {
       if (err) {
