@@ -24,9 +24,10 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
     const month = searchParams.get('month');
+    const excludePurchase = searchParams.get('excludePurchase') !== 'false';
     const yyyymm = month ? ensureYyyymm(month, 'month') : getCurrentYearMonth();
 
-    console.log(`📊 모든 브랜드 재고주수 조회 시작 (${yyyymm})`);
+    console.log(`📊 모든 브랜드 재고주수 조회 시작 (${yyyymm}, 사입제외: ${excludePurchase})`);
 
     // Snowflake 연결
     const connection = await connectToSnowflake();
@@ -37,7 +38,7 @@ export async function GET(request: NextRequest) {
         BRAND_CODES.map(async (brandCode) => {
           try {
             console.log(`브랜드 ${brandCode} 조회 시작`);
-            const statement = buildInventoryQuery(brandCode, yyyymm);
+            const statement = buildInventoryQuery(brandCode, yyyymm, excludePurchase);
             const rows = await executeQuery(statement.sqlText, connection, 0, statement.binds);
             const formattedData = formatInventoryData(rows, brandCode, yyyymm);
             console.log(`브랜드 ${brandCode} 조회 성공`);

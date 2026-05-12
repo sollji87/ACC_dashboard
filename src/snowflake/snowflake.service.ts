@@ -27,6 +27,18 @@ export class SnowflakeService {
     return (privateKey || '').replace(/\\n/g, '\n').trim();
   }
 
+  private resolveAuthMode(config: Pick<SnowflakeConnectionConfig, 'authMode' | 'privateKey' | 'privateKeyPath'>): string {
+    const explicitAuthMode = (config.authMode || '').trim().toUpperCase();
+
+    if (explicitAuthMode) {
+      return explicitAuthMode;
+    }
+
+    return this.normalizePrivateKey(config.privateKey) || config.privateKeyPath
+      ? 'SNOWFLAKE_JWT'
+      : 'PASSWORD';
+  }
+
   private buildConnectionOptions(config: SnowflakeConnectionConfig) {
     const baseOptions = {
       account: config.account,
@@ -37,7 +49,9 @@ export class SnowflakeService {
       role: config.role || undefined,
     };
 
-    if (config.authMode === 'SNOWFLAKE_JWT') {
+    const authMode = this.resolveAuthMode(config);
+
+    if (authMode === 'SNOWFLAKE_JWT') {
       const normalizedPrivateKey = this.normalizePrivateKey(config.privateKey);
 
       if (!normalizedPrivateKey && !config.privateKeyPath) {
@@ -75,7 +89,7 @@ export class SnowflakeService {
         database: this.configService.get<string>('SNOWFLAKE_DATABASE') || '',
         schema: this.configService.get<string>('SNOWFLAKE_SCHEMA') || '',
         role: this.configService.get<string>('SNOWFLAKE_ROLE') || '',
-        authMode: (this.configService.get<string>('SNOWFLAKE_AUTH_MODE') || 'PASSWORD').toUpperCase(),
+        authMode: this.configService.get<string>('SNOWFLAKE_AUTH_MODE') || '',
         password: this.configService.get<string>('SNOWFLAKE_PASSWORD') || '',
         privateKey: this.configService.get<string>('SNOWFLAKE_PRIVATE_KEY') || '',
         privateKeyPath: this.configService.get<string>('SNOWFLAKE_PRIVATE_KEY_PATH') || '',

@@ -668,7 +668,8 @@ export default function BrandDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const brandId = (params?.brandId as string) || '';
-  const monthFromUrl = searchParams.get('month') || '2026-03';
+  const monthFromUrl = searchParams.get('month') || '2026-04';
+  const excludePurchaseFromUrl = searchParams.get('excludePurchase') !== 'false';
   const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'monthly';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
   
@@ -689,7 +690,7 @@ export default function BrandDashboard() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // 정렬 방향
   const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('4weeks'); // 4주/8주/12주 토글
   const [selectedItemForChart, setSelectedItemForChart] = useState<'all' | 'shoes' | 'hat' | 'bag' | 'other'>('all'); // 차트용 아이템 선택
-  const [excludePurchase, setExcludePurchase] = useState<boolean>(true); // 사입제외 옵션 (기본값: 사입제외)
+  const [excludePurchase, setExcludePurchase] = useState<boolean>(excludePurchaseFromUrl); // 사입제외 옵션 (기본값: 사입제외)
   const [chartBase, setChartBase] = useState<'amount' | 'quantity'>('amount'); // 금액기준/수량기준 토글
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태
@@ -748,15 +749,15 @@ export default function BrandDashboard() {
   // 주차별 모드 선택 시 주차별 대시보드로 이동
   useEffect(() => {
     if (dataSource === 'weekly') {
-      router.push(`/dashboard-weekly/${brandId}?week=${selectedWeek}&dataSource=weekly`);
+      router.push(`/dashboard-weekly/${brandId}?week=${selectedWeek}&month=${selectedMonth}&dataSource=weekly&excludePurchase=${excludePurchase}`);
     }
-  }, [dataSource, brandId, selectedWeek, router]);
+  }, [dataSource, brandId, selectedWeek, selectedMonth, excludePurchase, router]);
 
   useEffect(() => {
     async function loadBrandSpecificData() {
       setIsLoading(true);
       try {
-        const allData = await getRealData(selectedMonth);
+        const allData = await getRealData(selectedMonth, excludePurchase);
         const data = allData.find((d) => d.brandId === brandId);
         setBrandData(data || null);
       } catch (error) {
@@ -769,7 +770,7 @@ export default function BrandDashboard() {
       }
     }
     loadBrandSpecificData();
-  }, [selectedMonth, brandId]);
+  }, [selectedMonth, brandId, excludePurchase]);
 
   // 선택된 아이템 변경 시 품번별 데이터 조회 및 자동 펼치기
   useEffect(() => {

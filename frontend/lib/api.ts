@@ -40,11 +40,11 @@ export interface ApiInventoryData {
 /**
  * 모든 브랜드의 재고주수 데이터 조회
  */
-export async function fetchAllBrandsInventory(month: string): Promise<ApiInventoryData[]> {
+export async function fetchAllBrandsInventory(month: string, excludePurchase: boolean = true): Promise<ApiInventoryData[]> {
   try {
     // YYYY-MM 형식을 YYYYMM 형식으로 변환
     const yyyymm = month.replace(/-/g, '');
-    const apiUrl = `/api/dashboard/inventory/all?month=${yyyymm}`;
+    const apiUrl = `/api/dashboard/inventory/all?month=${yyyymm}&excludePurchase=${excludePurchase}`;
     
     console.log(`🔍 내부 API 호출 시작:`, apiUrl);
     
@@ -87,12 +87,13 @@ export async function fetchAllBrandsInventory(month: string): Promise<ApiInvento
  */
 export async function fetchBrandInventory(
   brandCode: string,
-  month: string
+  month: string,
+  excludePurchase: boolean = true
 ): Promise<ApiInventoryData> {
   try {
     // YYYY-MM 형식을 YYYYMM 형식으로 변환
     const yyyymm = month.replace(/-/g, '');
-    const apiUrl = `/api/dashboard/inventory?brandCode=${brandCode}&month=${yyyymm}`;
+    const apiUrl = `/api/dashboard/inventory?brandCode=${brandCode}&month=${yyyymm}&excludePurchase=${excludePurchase}`;
     
     console.log(`🔍 내부 API 호출 시작 (단일 브랜드):`, apiUrl);
     

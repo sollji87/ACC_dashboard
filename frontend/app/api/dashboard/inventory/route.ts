@@ -23,16 +23,17 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const brandCode = ensureBrandCode(searchParams.get('brandCode') || 'M');
     const month = searchParams.get('month');
+    const excludePurchase = searchParams.get('excludePurchase') !== 'false';
     const yyyymm = month ? ensureYyyymm(month, 'month') : getCurrentYearMonth();
 
-    console.log(`📊 브랜드 ${brandCode} 재고주수 조회 시작 (${yyyymm})`);
+    console.log(`📊 브랜드 ${brandCode} 재고주수 조회 시작 (${yyyymm}, 사입제외: ${excludePurchase})`);
 
     // Snowflake 연결
     const connection = await connectToSnowflake();
 
     try {
       // 쿼리 생성 및 실행
-      const statement = buildInventoryQuery(brandCode, yyyymm);
+      const statement = buildInventoryQuery(brandCode, yyyymm, excludePurchase);
       const rows = await executeQuery(statement.sqlText, connection, 0, statement.binds);
       
       // 데이터 포맷팅

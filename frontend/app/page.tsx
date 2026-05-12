@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { BRANDS } from '@/lib/brands';
-import { getRealData, getSampleData, BrandDashboardData } from '@/lib/data';
+import { getRealData, BrandDashboardData } from '@/lib/data';
 import { BarChart3, AlertTriangle } from 'lucide-react';
 import DataSourceToggle from '@/components/DataSourceToggle';
 import { DataSourceType, getCurrentWeekValue } from '@/lib/week-utils';
@@ -36,8 +36,9 @@ interface WeeklyBrandData {
 
 export default function Home() {
   const [dataSource, setDataSource] = useState<DataSourceType>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState('2026-03');
+  const [selectedMonth, setSelectedMonth] = useState('2026-04');
   const [selectedWeek, setSelectedWeek] = useState(getCurrentWeekValue());
+  const [excludePurchase, setExcludePurchase] = useState<boolean>(true);
   const [dashboardData, setDashboardData] = useState<BrandDashboardData[]>([]);
   const [weeklyDashboardData, setWeeklyDashboardData] = useState<WeeklyBrandData[]>([]); // 주차별 데이터
   const [isLoading, setIsLoading] = useState(true);
@@ -49,24 +50,16 @@ export default function Home() {
     async function loadData() {
       setIsLoading(true);
       try {
-        const data = await getRealData(selectedMonth);
-
-        // 빈 배열이면 샘플 데이터 사용
-        if (!data || data.length === 0) {
-          const sampleData = getSampleData(selectedMonth);
-          setDashboardData(sampleData);
-        } else {
-          setDashboardData(data);
-        }
+        const data = await getRealData(selectedMonth, excludePurchase);
+        setDashboardData(data || []);
       } catch {
-        const data = getSampleData(selectedMonth);
-        setDashboardData(data);
+        setDashboardData([]);
       } finally {
         setIsLoading(false);
       }
     }
     loadData();
-  }, [selectedMonth, dataSource]);
+  }, [selectedMonth, dataSource, excludePurchase]);
 
   // 주차별(실시간) 데이터 로드
   useEffect(() => {
@@ -207,6 +200,32 @@ export default function Home() {
             분석할 브랜드를 클릭하여 상세 대시보드로 이동합니다. 재고주수는 최근 4주 매출 기준입니다.
           </p>
         </div>
+
+        {dataSource === 'monthly' && (
+          <div className="mb-6 flex items-center justify-end">
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-semibold text-slate-600">
+                기본: 사입제외, 4주 기준
+              </span>
+              <button
+                onClick={() => setExcludePurchase((prev) => !prev)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all ${
+                  excludePurchase
+                    ? 'border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100'
+                    : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                }`}
+              >
+                {excludePurchase ? '사입포함 보기' : '사입제외로 돌아가기'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {dataSource === 'monthly' && !isLoading && dashboardData.length === 0 && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-900">
+            월결산 실데이터를 불러오지 못했습니다. 운영에서는 샘플 수치를 표시하지 않도록 변경되어, 배포 환경의 Snowflake 연결 또는 환경 변수를 확인해 주세요.
+          </div>
+        )}
 
         {/* 브랜드 카드 그리드 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
@@ -540,7 +559,7 @@ export default function Home() {
                           재고 {data.inventoryYOY}%
                         </span>
                         <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded whitespace-nowrap">
-                          사입제외, 4주 기준
+                          {excludePurchase ? '사입제외' : '사입포함'}, 4주 기준
                         </span>
                       </div>
                     </div>
@@ -787,10 +806,10 @@ export default function Home() {
                   </div>
 
                   {/* 전체 대시보드 보기 버튼 */}
-                  <Link 
-                    href={`/dashboard/${brand.id}?month=${selectedMonth}`} 
-                    className="mt-auto"
-                  >
+                    <Link 
+                      href={`/dashboard/${brand.id}?month=${selectedMonth}&excludePurchase=${excludePurchase}`} 
+                      className="mt-auto"
+                    >
                     <Button className={`w-full ${brand.logoColor} hover:opacity-90 text-white shadow-md hover:shadow-lg transition-all`} size="sm">
                       전체 대시보드 보기
                     </Button>

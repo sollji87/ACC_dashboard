@@ -30,6 +30,18 @@ function normalizePrivateKey(privateKey: string | undefined): string {
   return (privateKey || '').replace(/\\n/g, '\n').trim();
 }
 
+function resolveAuthMode(config: Pick<SnowflakeConnection, 'authMode' | 'privateKey' | 'privateKeyPath'>): string {
+  const explicitAuthMode = (config.authMode || '').trim().toUpperCase();
+
+  if (explicitAuthMode) {
+    return explicitAuthMode;
+  }
+
+  return normalizePrivateKey(config.privateKey) || config.privateKeyPath
+    ? 'SNOWFLAKE_JWT'
+    : 'PASSWORD';
+}
+
 function buildSnowflakeConnectionOptions(config: SnowflakeConnection) {
   const baseOptions = {
     account: config.account,
@@ -40,7 +52,9 @@ function buildSnowflakeConnectionOptions(config: SnowflakeConnection) {
     role: config.role || undefined,
   };
 
-  if (config.authMode === 'SNOWFLAKE_JWT') {
+  const authMode = resolveAuthMode(config);
+
+  if (authMode === 'SNOWFLAKE_JWT') {
     const normalizedPrivateKey = normalizePrivateKey(config.privateKey);
 
     if (!normalizedPrivateKey && !config.privateKeyPath) {
@@ -88,7 +102,7 @@ export async function connectToSnowflake(): Promise<snowflake.Connection> {
       database: process.env.SNOWFLAKE_DATABASE || '',
       schema: process.env.SNOWFLAKE_SCHEMA || '',
       role: process.env.SNOWFLAKE_ROLE || '',
-      authMode: (process.env.SNOWFLAKE_AUTH_MODE || 'PASSWORD').toUpperCase(),
+      authMode: process.env.SNOWFLAKE_AUTH_MODE || '',
       password: process.env.SNOWFLAKE_PASSWORD || '',
       privateKey: process.env.SNOWFLAKE_PRIVATE_KEY || '',
       privateKeyPath: process.env.SNOWFLAKE_PRIVATE_KEY_PATH || '',

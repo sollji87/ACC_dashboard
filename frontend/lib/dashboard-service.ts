@@ -54,8 +54,11 @@ export function buildInventoryQuery(
   const cyAccumStart = `${year}01`;
   const pyAccumStart = `${pyYear}01`;
   
-  // 사입제외 조건 (chnl_cd = '8' 이 사입)
-  const excludePurchaseCondition = excludePurchase ? "and c.chnl_cd <> '8' -- 사입제외" : '';
+  // 사입제외: 사입(8) + 기타채널(9, 99) 제외
+  // 사입포함: 9채널만 제외
+  const salesChannelCondition = excludePurchase
+    ? "and c.chnl_cd not in ('8', '9', '99') -- 사입/기타채널 제외"
+    : "and c.chnl_cd <> '9' -- 9채널 제외";
 
   const sqlText = `
 -- item: item 기준
@@ -117,8 +120,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :2 and :2 -- 당월 기준 
     group by b.item_std
@@ -134,8 +136,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :3 and :3  -- 당월 기준
     group by b.item_std
@@ -153,8 +154,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :5 and :2 -- 1월부터 해당월까지 누적
     group by b.item_std
@@ -170,8 +170,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :6 and :3  -- 1월부터 해당월까지 누적
     group by b.item_std
@@ -189,8 +188,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :2 and :2 -- 당월
     group by b.item_std
@@ -206,8 +204,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :3 and :3 -- 당월
     group by b.item_std
@@ -225,8 +222,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :5 and :2 -- 1월부터 해당월까지 누적
     group by b.item_std
@@ -242,8 +238,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :6 and :3 -- 1월부터 해당월까지 누적
     group by b.item_std
@@ -573,8 +568,11 @@ export function buildProductDetailQuery(
   const cyAccumStart = `${year}01`;
   const pyAccumStart = `${pyYear}01`;
   
-  // 사입제외 조건 (chnl_cd = '8' 이 사입)
-  const excludePurchaseCondition = excludePurchase ? "AND c.chnl_cd <> '8'" : '';
+  // 사입제외: 사입(8) + 기타채널(9, 99) 제외
+  // 사입포함: 9채널만 제외
+  const salesChannelCondition = excludePurchase
+    ? "AND c.chnl_cd not in ('8', '9', '99')"
+    : "AND c.chnl_cd <> '9'";
 
   const sqlText = `
 -- item: item 기준 (특정 아이템만)
@@ -651,8 +649,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :3 and :3 -- 당월 기준 
     group by b.prdt_cd
@@ -668,8 +665,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :4 and :4  -- 당월 기준
     group by b.prdt_cd
@@ -687,8 +683,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :5 and :3 -- 1월부터 해당월까지 누적
     group by b.prdt_cd
@@ -704,8 +699,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :6 and :4  -- 1월부터 해당월까지 누적
     group by b.prdt_cd
@@ -723,8 +717,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :3 and :3 -- 당월
     group by b.prdt_cd
@@ -740,8 +733,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :4 and :4 -- 당월
     group by b.prdt_cd
@@ -759,8 +751,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :5 and :3 -- 1월부터 해당월까지 누적
     group by b.prdt_cd
@@ -776,8 +767,7 @@ with item as (
         on a.brd_cd = c.brd_cd
         and a.shop_cd = c.sap_shop_cd
     where 1=1
-        and c.chnl_cd not in ('9', '99') -- 수출, 기타채널 제외
-        ${excludePurchaseCondition}
+        ${salesChannelCondition}
         and a.brd_cd = :1
         and a.pst_yyyymm between :6 and :4 -- 1월부터 해당월까지 누적
     group by b.prdt_cd

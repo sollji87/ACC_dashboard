@@ -687,7 +687,8 @@ export default function BrandDashboard() {
   const brandId = (params?.brandId as string) || '';
   const weekFromUrl = searchParams.get('week') || getCurrentWeekValue();
   const dataSourceFromUrl = (searchParams.get('dataSource') as DataSourceType) || 'weekly';
-  const monthFromUrl = searchParams.get('month') || '2026-03';
+  const monthFromUrl = searchParams.get('month') || '2026-04';
+  const excludePurchaseFromUrl = searchParams.get('excludePurchase') !== 'false';
   
   const [brand, setBrand] = useState(getBrandById(brandId));
   const [dataSource, setDataSource] = useState<DataSourceType>(dataSourceFromUrl);
@@ -717,7 +718,7 @@ export default function BrandDashboard() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc'); // 정렬 방향
   const [weeksType, setWeeksType] = useState<'4weeks' | '8weeks' | '12weeks'>('4weeks'); // 4주/8주/12주 토글
   const [selectedItemForChart, setSelectedItemForChart] = useState<'all' | 'shoes' | 'hat' | 'bag' | 'other'>('all'); // 차트용 아이템 선택
-  const [excludePurchase, setExcludePurchase] = useState<boolean>(true); // 사입제외 옵션 (기본값: 사입제외)
+  const [excludePurchase, setExcludePurchase] = useState<boolean>(excludePurchaseFromUrl); // 사입제외 옵션 (기본값: 사입제외)
   const [chartBase, setChartBase] = useState<'amount' | 'quantity'>('amount'); // 금액기준/수량기준 토글
   const [chartData, setChartData] = useState<any>(null); // 차트 데이터
   const [isLoadingChart, setIsLoadingChart] = useState(false); // 차트 데이터 로딩 상태

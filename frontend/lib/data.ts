@@ -84,18 +84,27 @@ export interface BrandDashboardData {
 import { fetchAllBrandsInventory, ApiInventoryData } from './api';
 import { BRANDS } from './brands';
 
+function shouldUseSampleFallback(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
 /**
  * 실제 Snowflake 데이터 조회
  */
-export async function getRealData(month: string = '2026-03'): Promise<BrandDashboardData[]> {
+export async function getRealData(month: string = '2026-04', excludePurchase: boolean = true): Promise<BrandDashboardData[]> {
   try {
-    const apiData = await fetchAllBrandsInventory(month);
+    const apiData = await fetchAllBrandsInventory(month, excludePurchase);
     console.log('📊 API에서 받은 원본 데이터:', apiData);
     
-    // 빈 배열이거나 데이터가 없으면 샘플 데이터 사용
+    // 운영에서는 잘못된 샘플 수치를 노출하지 않도록 실데이터가 없으면 빈 상태를 유지
     if (!apiData || apiData.length === 0) {
-      console.warn('⚠️ API 데이터가 비어있음, 샘플 데이터 사용');
-      return getSampleData(month);
+      if (shouldUseSampleFallback()) {
+        console.warn('⚠️ API 데이터가 비어있음, 개발 환경 샘플 데이터 사용');
+        return getSampleData(month);
+      }
+
+      console.warn('⚠️ API 데이터가 비어있음, 운영 환경에서는 샘플 데이터를 사용하지 않음');
+      return [];
     }
     
     // API 데이터를 프론트엔드 형식으로 변환
@@ -178,15 +187,20 @@ export async function getRealData(month: string = '2026-03'): Promise<BrandDashb
     console.log('📊 최종 변환된 데이터:', mappedData);
     return mappedData;
   } catch (error) {
-    console.error('실제 데이터 조회 실패, 샘플 데이터 사용:', error);
-    return getSampleData(month);
+    if (shouldUseSampleFallback()) {
+      console.error('실제 데이터 조회 실패, 개발 환경 샘플 데이터 사용:', error);
+      return getSampleData(month);
+    }
+
+    console.error('실제 데이터 조회 실패, 운영 환경에서는 샘플 데이터를 사용하지 않음:', error);
+    return [];
   }
 }
 
 /**
  * 샘플 데이터 (백업용)
  */
-export function getSampleData(month: string = '2026-03'): BrandDashboardData[] {
+export function getSampleData(month: string = '2026-04'): BrandDashboardData[] {
   return [
     {
       brandId: 'mlb',
@@ -272,15 +286,15 @@ export function getSampleData(month: string = '2026-03'): BrandDashboardData[] {
 }
 
 /**
- * 월 목록 생성 (2026년 3월까지)
+ * 월 목록 생성 (2026년 4월까지)
  * 월결산 데이터는 요청 시 수동으로 업데이트하므로 최대 월을 고정
  */
 export function getMonthOptions(): { value: string; label: string }[] {
   const months: { value: string; label: string }[] = [];
   
-  // 최대 선택 가능 월: 2026년 3월
+  // 최대 선택 가능 월: 2026년 4월
   const maxYear = 2026;
-  const maxMonth = 3;
+  const maxMonth = 4;
   
   // 2025년 12월부터 12개월 전까지
   for (let i = 0; i < 12; i++) {
